@@ -13,7 +13,7 @@ type ReferenceUpload = { file: File; url: string; name: string }
 type VideoUpload = { file: File; url: string; name: string; duration?: number }
 
 async function compressImageIfNeeded(file: File): Promise<File> {
-  if (!file.type.startsWith('image/') || file.size <= 3_200_000) return file
+  if (!file.type.startsWith('image/') || file.size <= 28_000_000) return file
   const sourceUrl = URL.createObjectURL(file)
   try {
     const image = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -22,7 +22,7 @@ async function compressImageIfNeeded(file: File): Promise<File> {
       img.onerror = () => reject(new Error('IMAGE_DECODE_FAILED'))
       img.src = sourceUrl
     })
-    const maxSide = 2048
+    const maxSide = 5000
     const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight))
     const canvas = document.createElement('canvas')
     canvas.width = Math.max(1, Math.round(image.naturalWidth * scale))
@@ -32,7 +32,7 @@ async function compressImageIfNeeded(file: File): Promise<File> {
     context.drawImage(image, 0, 0, canvas.width, canvas.height)
     for (const quality of [0.9, 0.82, 0.74, 0.66]) {
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality))
-      if (blob && blob.size <= 3_200_000) {
+      if (blob && blob.size <= 28_000_000) {
         const base = file.name.replace(/\.[^.]+$/, '') || 'reference'
         return new File([blob], `${base}.jpg`, { type: 'image/jpeg' })
       }
@@ -197,26 +197,31 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
       video.src = url
     })
     setSourceVideo({ file, url, name: file.name, duration: durationValue })
-    ensurePromptTag('@video1')
+    if (prompt.trim()) ensurePromptTag('@video1')
     setMessage('')
     event.target.value = ''
   }
 
-  async function uploadSourceVideo(initData: string) {
-    if (!sourceVideo) throw new Error('SOURCE_VIDEO_REQUIRED')
+  async function uploadInputFile(file: File, initData: string) {
     const signResponse = await fetch('/api/uploads/sign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData },
-      body: JSON.stringify({ contentType: sourceVideo.file.type, size: sourceVideo.file.size }),
+      body: JSON.stringify({ contentType: file.type, size: file.size }),
     })
     const signed = await signResponse.json().catch(() => ({}))
-    if (!signResponse.ok || !signed?.signedUrl || !signed?.path) throw new Error(String(signed?.details || signed?.error || 'UPLOAD_SIGN_FAILED'))
+    if (!signResponse.ok || !signed?.signedUrl || !signed?.path) {
+      throw new Error(String(signed?.details || signed?.error || 'UPLOAD_SIGN_FAILED'))
+    }
 
     const body = new FormData()
     body.append('cacheControl', '3600')
-    body.append('', sourceVideo.file)
-    const uploadResponse = await fetch(String(signed.signedUrl), { method: 'PUT', headers: { 'x-upsert': 'false' }, body })
-    if (!uploadResponse.ok) throw new Error(`VIDEO_UPLOAD_FAILED_${uploadResponse.status}`)
+    body.append('', file)
+    const uploadResponse = await fetch(String(signed.signedUrl), {
+      method: 'PUT',
+      headers: { 'x-upsert': 'false' },
+      body,
+    })
+    if (!uploadResponse.ok) throw new Error(`INPUT_UPLOAD_FAILED_${uploadResponse.status}`)
     return String(signed.path)
   }
 
@@ -234,20 +239,33 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
     }
 
     setGenerating(true)
-    setMessage(mode === 'edit' ? (locale === 'ru' ? 'Загружаю @video1 и запускаю Video Edit…' : 'Uploading @video1 and starting Video Edit…') : (locale === 'ru' ? 'Запускаю Seedance 2.5…' : 'Starting Seedance 2.5…'))
+    setMessage(mode === 'edit' ? (locale === 'ru' ? 'Загружаю референсы и запускаю Video Edit…' : 'Uploading references and starting Video Edit…') : (locale === 'ru' ? 'Запускаю Seedance 2.5…' : 'Starting Seedance 2.5…'))
 
     try {
-      const sourceVideoPath = mode === 'edit' ? await uploadSourceVideo(initData) : ''
-      const form = new FormData()
-      form.append('mode', mode)
-      form.append('prompt', prompt.trim())
-      form.append('duration', String(duration))
-      form.append('resolution', resolution)
-      form.append('generateAudio', generateAudio ? 'true' : 'false')
-      if (sourceVideoPath) form.append('sourceVideoPath', sourceVideoPath)
-      references.forEach((reference, index) => { if (reference?.file) form.append(`reference${index + 1}`, reference.file, reference.file.name) })
+      const sourceVideoPath = mode === 'edit' && sourceVideo
+        ? await uploadInputFile(sourceVideo.file, initData)
+        : ''
+      const referencePaths = await Promise.all(
+        references.filter((reference): reference is ReferenceUpload => Boolean(reference?.file))
+          .map((reference) => uploadInputFile(reference.file, initData)),
+      )
 
-      const response = await fetch('/api/generate/direct', { method: 'POST', headers: { 'X-Telegram-Init-Data': initData }, body: form })
+      const response = await fetch('/api/generate/direct', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Telegram-Init-Data': initData,
+        },
+        body: JSON.stringify({
+          mode,
+          prompt: prompt.trim(),
+          duration,
+          resolution,
+          generateAudio,
+          sourceVideoPath,
+          referencePaths,
+        }),
+      })
       const data = await response.json().catch(() => ({}))
       if (response.ok && data?.ok && data?.jobId) {
         haptics.success()
@@ -255,7 +273,8 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
         onGenerationStarted?.(String(data.jobId))
         return
       }
-      if (data?.error === 'REFERENCE_IMAGE_TOO_LARGE') setMessage(locale === 'ru' ? 'Одно из фото слишком большое.' : 'One reference image is too large.')
+      if (response.status === 413) setMessage(locale === 'ru' ? 'Файл слишком большой для загрузки.' : 'A file is too large to upload.')
+      else if (data?.error === 'PROMPT_TOO_LONG') setMessage(locale === 'ru' ? 'Промпт слишком длинный.' : 'The prompt is too long.')
       else if (data?.details) setMessage(`${locale === 'ru' ? 'Ошибка' : 'Error'}: ${String(data.details).slice(0, 220)}`)
       else setMessage(locale === 'ru' ? 'Не удалось запустить генерацию.' : 'Could not start generation.')
       await refreshUser()
@@ -271,7 +290,7 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
     <BottomSheet open title="Seedance 2.5" onClose={onClose}>
       <div className="grid grid-cols-2 gap-2 rounded-2xl bg-muted/60 p-1">
         <button type="button" onClick={() => { setMode('generate'); removePromptTag('@video1'); setMessage('') }} className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition ${mode === 'generate' ? 'bg-card text-brand shadow-sm' : 'text-muted-foreground'}`}><Sparkles className="size-4" />{locale === 'ru' ? 'Создать' : 'Generate'}</button>
-        <button type="button" onClick={() => { setMode('edit'); if (sourceVideo) ensurePromptTag('@video1'); setMessage('') }} className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition ${mode === 'edit' ? 'bg-card text-brand shadow-sm' : 'text-muted-foreground'}`}><Clapperboard className="size-4" />Video Edit</button>
+        <button type="button" onClick={() => { setMode('edit'); if (sourceVideo && prompt.trim()) ensurePromptTag('@video1'); setMessage('') }} className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition ${mode === 'edit' ? 'bg-card text-brand shadow-sm' : 'text-muted-foreground'}`}><Clapperboard className="size-4" />Video Edit</button>
       </div>
 
       {mode === 'edit' && (
@@ -380,7 +399,7 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
       )}
 
       <div className="mt-5 grid gap-3">
-        {references.map((reference, index) => <ReferenceSlot key={index} index={index + 1} value={reference} disabled={index > 0 && !references[index - 1]} onChange={(upload) => { setReference(index, upload); ensurePromptTag(`@image${index + 1}`) }} onClear={() => clearReference(index)} />)}
+        {references.map((reference, index) => <ReferenceSlot key={index} index={index + 1} value={reference} disabled={index > 0 && !references[index - 1]} onChange={(upload) => { setReference(index, upload); if (prompt.trim()) ensurePromptTag(`@image${index + 1}`) }} onClear={() => clearReference(index)} />)}
       </div>
 
       <div className={`mt-5 grid gap-3 ${mode === 'edit' ? 'grid-cols-1' : 'grid-cols-2'}`}>

@@ -7,9 +7,19 @@ export const dynamic = 'force-dynamic'
 
 const BUCKET = 'generation-inputs'
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024
+const MAX_IMAGE_BYTES = 30 * 1024 * 1024
+
+const VIDEO_TYPES = new Set(['video/mp4', 'video/quicktime'])
+const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'])
 
 function extensionFor(contentType: string) {
-  return contentType === 'video/quicktime' ? 'mov' : 'mp4'
+  if (contentType === 'video/quicktime') return 'mov'
+  if (contentType === 'video/mp4') return 'mp4'
+  if (contentType === 'image/png') return 'png'
+  if (contentType === 'image/webp') return 'webp'
+  if (contentType === 'image/heic') return 'heic'
+  if (contentType === 'image/heif') return 'heif'
+  return 'jpg'
 }
 
 export async function POST(request: Request) {
@@ -20,15 +30,20 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const contentType = String(body?.contentType || '').toLowerCase()
   const size = Number(body?.size || 0)
+  const isVideo = VIDEO_TYPES.has(contentType)
+  const isImage = IMAGE_TYPES.has(contentType)
 
-  if (!['video/mp4', 'video/quicktime'].includes(contentType)) {
-    return NextResponse.json({ error: 'UNSUPPORTED_VIDEO_TYPE' }, { status: 400 })
-  }
-  if (!Number.isFinite(size) || size <= 0 || size > MAX_VIDEO_BYTES) {
-    return NextResponse.json({ error: 'VIDEO_TOO_LARGE' }, { status: 413 })
+  if (!isVideo && !isImage) {
+    return NextResponse.json({ error: 'UNSUPPORTED_INPUT_TYPE' }, { status: 400 })
   }
 
-  const path = `${user.id}/${Date.now()}-${randomUUID()}.${extensionFor(contentType)}`
+  const maxBytes = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES
+  if (!Number.isFinite(size) || size <= 0 || size > maxBytes) {
+    return NextResponse.json({ error: isVideo ? 'VIDEO_TOO_LARGE' : 'IMAGE_TOO_LARGE' }, { status: 413 })
+  }
+
+  const folder = isVideo ? 'videos' : 'images'
+  const path = `${user.id}/${folder}/${Date.now()}-${randomUUID()}.${extensionFor(contentType)}`
   try {
     const signed = await createStorageSignedUploadUrl(BUCKET, path)
     return NextResponse.json({ ok: true, bucket: BUCKET, path, signedUrl: signed.signedUrl })
