@@ -9,7 +9,7 @@ import { useI18n } from './i18n-provider'
 import { TokenCost } from './tokens'
 import { useUserState } from './user-provider'
 
-type FileUpload = { url: string; isVideo: boolean; isAudio: boolean; name: string; isDefault?: boolean }
+type FileUpload = { url: string; isVideo: boolean; isAudio: boolean; name: string; isDefault?: boolean; file?: File }
 type InputValue = FileUpload | string
 
 export function ToolSheet({ tool, onClose }: { tool: Tool | null; onClose: () => void }) {
@@ -78,6 +78,44 @@ function ratioStyle(ratio?: string) {
   return w > 0 && h > 0 ? { aspectRatio: `${w} / ${h}` } : { aspectRatio: '9 / 16' }
 }
 
+async function compressImageIfNeeded(file: File): Promise<File> {
+  if (!file.type.startsWith('image/') || file.size <= 3_200_000) return file
+
+  const sourceUrl = URL.createObjectURL(file)
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => reject(new Error('IMAGE_DECODE_FAILED'))
+      img.src = sourceUrl
+    })
+
+    const maxSide = 2048
+    const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight))
+    const width = Math.max(1, Math.round(image.naturalWidth * scale))
+    const height = Math.max(1, Math.round(image.naturalHeight * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const context = canvas.getContext('2d')
+    if (!context) return file
+    context.drawImage(image, 0, 0, width, height)
+
+    for (const quality of [0.9, 0.82, 0.74, 0.66]) {
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality))
+      if (blob && blob.size <= 3_200_000) {
+        const base = file.name.replace(/\.[^.]+$/, '') || 'reference'
+        return new File([blob], `${base}.jpg`, { type: 'image/jpeg' })
+      }
+    }
+    return file
+  } catch {
+    return file
+  } finally {
+    URL.revokeObjectURL(sourceUrl)
+  }
+}
+
 function FileInput({
   input,
   value,
@@ -99,14 +137,16 @@ function FileInput({
     if (urlRef.current) URL.revokeObjectURL(urlRef.current)
   }, [])
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const selected = e.target.files?.[0]
+    if (!selected) return
+    const file = input.kind === 'photo' ? await compressImageIfNeeded(selected) : selected
     if (urlRef.current) URL.revokeObjectURL(urlRef.current)
     const url = URL.createObjectURL(file)
     urlRef.current = url
     haptics.impact('light')
-    onChange({ url, isVideo: file.type.startsWith('video/'), isAudio: file.type.startsWith('audio/'), name: file.name })
+    onChange({ url, isVideo: file.type.startsWith('video/'), isAudio: file.type.startsWith('audio/'), name: file.name, file })
+    e.target.value = ''
   }
 
   const label = localize(input.label, locale)
@@ -119,7 +159,7 @@ function FileInput({
         {!input.required && <span className="text-[10px] text-muted-foreground">{t('trend.optional')}</span>}
       </div>
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-      <input ref={inputRef} id={inputId} type="file" accept={acceptFor(input.kind)} onChange={handleFile} className="sr-only" />
+      <input ref={inputRef} id={inputId} type="file" accept={acceptFor(input.kind)} onChange={(event) => void handleFile(event)} className="sr-only" />
 
       {upload ? (
         <div className="mt-2 flex items-center gap-3 rounded-2xl border-2 border-brand/20 bg-brand-tint/70 p-3">
@@ -183,6 +223,26 @@ function TrendFlow({ trend }: { trend: Trend }) {
     setValues((current) => ({ ...current, [id]: value }))
   }
 
+  async function pollGeneration(jobId: string, initData: string) {
+    for (let attempt = 0; attempt < 72; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5000))
+      const response = await fetch(`/api/generate/status?jobId=${encodeURIComponent(jobId)}`, {
+        headers: { 'X-Telegram-Init-Data': initData },
+        cache: 'no-store',
+      })
+      const data = await response.json().catch(() => ({}))
+      if (data?.status === 'completed' && data?.resultUrl) return { ok: true, resultUrl: String(data.resultUrl) }
+      if (data?.status === 'failed') return { ok: false, error: String(data?.error || 'GENERATION_FAILED') }
+      if (typeof data?.progress === 'number') {
+        const percent = Math.max(1, Math.min(99, Math.round(data.progress * 100)))
+        setResultMessage(locale === 'ru' ? `Генерация… ${percent}%` : `Generating… ${percent}%`)
+      } else {
+        setResultMessage(locale === 'ru' ? 'Seedance 2.5 генерирует видео…' : 'Seedance 2.5 is generating your video…')
+      }
+    }
+    return { ok: false, error: 'GENERATION_TIMEOUT' }
+  }
+
   async function generate() {
     const initData = getTelegramInitData()
     if (!initData) {
@@ -194,20 +254,44 @@ function TrendFlow({ trend }: { trend: Trend }) {
     setGenerating(true)
     setSubmitted(false)
     setResultMessage(t('generation.starting'))
+    setResultUrl('')
     try {
+      const form = new FormData()
+      form.append('trendId', trend.id)
+      for (const input of trend.inputs) {
+        const value = values[input.id]
+        if (typeof value === 'string') {
+          form.append(input.id, value)
+        } else if (value?.file) {
+          form.append(input.id, value.file, value.file.name)
+        } else if (value?.url) {
+          form.append(`${input.id}_url`, value.url)
+        }
+      }
+
       const response = await fetch('/api/generate', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Telegram-Init-Data': initData,
-        },
-        body: JSON.stringify({ trendId: trend.id }),
+        headers: { 'X-Telegram-Init-Data': initData },
+        body: form,
       })
-      const data = await response.json()
-      if (response.ok && data?.ok) {
+      const data = await response.json().catch(() => ({}))
+      if (response.ok && data?.ok && data?.status === 'completed') {
         haptics.success()
         setResultMessage(t('generation.success'))
         setResultUrl(typeof data?.resultUrl === 'string' ? data.resultUrl : '')
+      } else if (response.ok && data?.ok && data?.status === 'processing' && data?.jobId) {
+        setResultMessage(locale === 'ru' ? 'Seedance 2.5 генерирует видео…' : 'Seedance 2.5 is generating your video…')
+        await refreshUser()
+        const result = await pollGeneration(String(data.jobId), initData)
+        if (result.ok && result.resultUrl) {
+          haptics.success()
+          setResultMessage(t('generation.success'))
+          setResultUrl(result.resultUrl)
+        } else {
+          haptics.impact('medium')
+          setResultMessage(locale === 'ru' ? 'Генерация не завершилась. Токены возвращены при технической ошибке.' : 'Generation did not complete. Tokens are refunded for technical failures.')
+          setResultUrl('')
+        }
       } else if (data?.error === 'MOCK_PROVIDER_ERROR') {
         haptics.impact('medium')
         setResultMessage(t('generation.failedRefunded'))
@@ -215,8 +299,11 @@ function TrendFlow({ trend }: { trend: Trend }) {
       } else if (data?.error === 'INSUFFICIENT_TOKENS') {
         setResultMessage(t('trend.notEnough'))
         setResultUrl('')
+      } else if (data?.error === 'REFERENCE_IMAGE_TOO_LARGE') {
+        setResultMessage(locale === 'ru' ? 'Фото слишком большое. Выберите другое фото или уменьшите его размер.' : 'The image is too large. Choose another image or reduce its size.')
+        setResultUrl('')
       } else {
-        setResultMessage(t('generation.backendNeeded'))
+        setResultMessage(locale === 'ru' && data?.details ? `Ошибка Runway: ${String(data.details).slice(0, 180)}` : t('generation.backendNeeded'))
         setResultUrl('')
       }
       setSubmitted(true)
@@ -309,17 +396,17 @@ function TrendFlow({ trend }: { trend: Trend }) {
         className="brand-gradient mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-white shadow-[0_10px_24px_-12px_oklch(0.5_0.21_264/0.8)] transition active:scale-[0.98] disabled:opacity-45 disabled:shadow-none"
       >
         <Sparkles className="size-4" aria-hidden="true" />
-        {generating ? t('generation.starting') : canAfford ? t('trend.generate', { count: trend.tokens }) : t('trend.notEnough')}
+        {generating ? (locale === 'ru' ? 'Генерация…' : 'Generating…') : canAfford ? t('trend.generate', { count: trend.tokens }) : t('trend.notEnough')}
       </button>
       <p className="mt-3 text-center text-xs text-muted-foreground" aria-live="polite">
-        {submitted && resultMessage ? resultMessage : t('trend.balance', { count: tokenBalance })}
+        {submitted || generating ? resultMessage : t('trend.balance', { count: tokenBalance })}
       </p>
       {resultUrl && (
         <div className="mt-3 overflow-hidden rounded-2xl border bg-black">
-          {/\.(mp4|webm|mov)(\?|$)/i.test(resultUrl) ? (
+          {/\.(mp4|webm|mov)(\?|$)/i.test(resultUrl) || resultUrl.includes('cloudfront.net') ? (
             <video src={resultUrl} controls playsInline className="w-full object-contain" />
           ) : (
-            // eslint-disable-next-line @next/next/no-img-element -- mock/remote result URL
+            // eslint-disable-next-line @next/next/no-img-element -- remote result URL
             <img src={resultUrl} alt="Generated result" className="w-full object-cover" />
           )}
         </div>
