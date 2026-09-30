@@ -346,7 +346,7 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
                 <span
                   key={index}
                   className={linked
-                    ? 'rounded-md bg-brand-tint text-brand shadow-[0_0_0_2px_rgba(37,99,235,0.12)]'
+                    ? 'rounded-md bg-brand text-white shadow-[0_0_0_1px_rgba(37,99,235,0.28)]'
                     : 'rounded-md bg-amber-50 text-amber-700 shadow-[0_0_0_1px_rgba(217,119,6,0.22)]'}
                 >
                   {part}
@@ -369,7 +369,7 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
             spellCheck={false}
             placeholder={mode === 'edit' ? (locale === 'ru' ? 'Например: Edit @video1. Replace the seated person with @image1 and the vehicle with @image2…' : 'Example: Edit @video1. Replace the seated person with @image1 and the vehicle with @image2…') : (locale === 'ru' ? 'Вставьте промпт. Используйте @image1, @image2…' : 'Paste a prompt. Use @image1, @image2…')}
             className="relative z-10 w-full resize-y border-0 bg-transparent p-4 text-sm leading-relaxed text-transparent outline-none placeholder:text-muted-foreground selection:bg-brand/20"
-            style={{ caretColor: 'var(--foreground)' }}
+            style={{ caretColor: 'var(--foreground)', color: 'transparent', WebkitTextFillColor: 'transparent' }}
           />
         </div>
       </div>
