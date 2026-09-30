@@ -237,12 +237,20 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
       setMessage(locale === 'ru' ? 'Для Video Edit исходный ролик должен быть от 4 до 30 секунд.' : 'Video Edit source must be 4–30 seconds long.')
       return
     }
+    if (mode === 'generate' && sourceVideo?.duration && (sourceVideo.duration < 2 || sourceVideo.duration > 30)) {
+      setMessage(locale === 'ru' ? 'Видео-референс должен быть от 2 до 30 секунд.' : 'Reference video must be 2–30 seconds long.')
+      return
+    }
 
     setGenerating(true)
-    setMessage(mode === 'edit' ? (locale === 'ru' ? 'Загружаю референсы и запускаю Video Edit…' : 'Uploading references and starting Video Edit…') : (locale === 'ru' ? 'Запускаю Seedance 2.5…' : 'Starting Seedance 2.5…'))
+    setMessage(mode === 'edit'
+      ? (locale === 'ru' ? 'Загружаю референсы и запускаю Video Edit…' : 'Uploading references and starting Video Edit…')
+      : sourceVideo
+        ? (locale === 'ru' ? 'Загружаю видео и фото-референсы…' : 'Uploading video and image references…')
+        : (locale === 'ru' ? 'Запускаю Seedance 2.5…' : 'Starting Seedance 2.5…'))
 
     try {
-      const sourceVideoPath = mode === 'edit' && sourceVideo
+      const sourceVideoPath = sourceVideo
         ? await uploadInputFile(sourceVideo.file, initData)
         : ''
       const referencePaths = await Promise.all(
@@ -289,33 +297,35 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
   return (
     <BottomSheet open title="Seedance 2.5" onClose={onClose}>
       <div className="grid grid-cols-2 gap-2 rounded-2xl bg-muted/60 p-1">
-        <button type="button" onClick={() => { setMode('generate'); removePromptTag('@video1'); setMessage('') }} className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition ${mode === 'generate' ? 'bg-card text-brand shadow-sm' : 'text-muted-foreground'}`}><Sparkles className="size-4" />{locale === 'ru' ? 'Создать' : 'Generate'}</button>
+        <button type="button" onClick={() => { setMode('generate'); if (sourceVideo && prompt.trim()) ensurePromptTag('@video1'); setMessage('') }} className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition ${mode === 'generate' ? 'bg-card text-brand shadow-sm' : 'text-muted-foreground'}`}><Sparkles className="size-4" />{locale === 'ru' ? 'Создать' : 'Generate'}</button>
         <button type="button" onClick={() => { setMode('edit'); if (sourceVideo && prompt.trim()) ensurePromptTag('@video1'); setMessage('') }} className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition ${mode === 'edit' ? 'bg-card text-brand shadow-sm' : 'text-muted-foreground'}`}><Clapperboard className="size-4" />Video Edit</button>
       </div>
 
-      {mode === 'edit' && (
-        <div className="mt-4 rounded-2xl border border-brand/20 bg-brand-tint/60 p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div><p className="text-sm font-semibold">@video1 · {locale === 'ru' ? 'Исходное видео' : 'Source video'}</p><p className="mt-0.5 text-xs text-muted-foreground">MP4 / MOV · 4–30 sec</p></div>
-            <Video className="size-5 text-brand" />
+      <div className="mt-4 rounded-2xl border border-brand/20 bg-brand-tint/60 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold">@video1 · {mode === 'edit' ? (locale === 'ru' ? 'Исходное видео' : 'Source video') : (locale === 'ru' ? 'Видео-референс' : 'Reference video')}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{mode === 'edit' ? 'MP4 / MOV · 4–30 sec' : 'MP4 / MOV · 2–30 sec'}</p>
           </div>
-          <input ref={videoInputRef} type="file" accept="video/mp4,video/quicktime,.mp4,.mov" onChange={(event) => void handleVideo(event)} className="sr-only" />
-          {sourceVideo ? (
-            <div className="mt-3 overflow-hidden rounded-xl border bg-black">
-              <video src={sourceVideo.url} controls muted playsInline className="max-h-64 w-full object-contain" />
-              <div className="flex items-center justify-between gap-2 bg-card px-3 py-2"><p className="min-w-0 truncate text-xs text-muted-foreground">{sourceVideo.name}{sourceVideo.duration ? ` · ${sourceVideo.duration.toFixed(1)}s` : ''}</p><button type="button" onClick={() => videoInputRef.current?.click()} className="shrink-0 text-xs font-semibold text-brand">{locale === 'ru' ? 'Заменить' : 'Change'}</button></div>
-            </div>
-          ) : (
-            <button type="button" onClick={() => videoInputRef.current?.click()} className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand/25 bg-card text-sm font-semibold text-brand"><Upload className="size-4" />{locale === 'ru' ? 'Загрузить @video1' : 'Upload @video1'}</button>
-          )}
+          <Video className="size-5 text-brand" />
         </div>
-      )}
+        <input ref={videoInputRef} type="file" accept="video/mp4,video/quicktime,.mp4,.mov" onChange={(event) => void handleVideo(event)} className="sr-only" />
+        {sourceVideo ? (
+          <div className="mt-3 overflow-hidden rounded-xl border bg-black">
+            <video src={sourceVideo.url} controls muted playsInline className="max-h-64 w-full object-contain" />
+            <div className="flex items-center justify-between gap-2 bg-card px-3 py-2"><p className="min-w-0 truncate text-xs text-muted-foreground">{sourceVideo.name}{sourceVideo.duration ? ` · ${sourceVideo.duration.toFixed(1)}s` : ''}</p><button type="button" onClick={() => videoInputRef.current?.click()} className="shrink-0 text-xs font-semibold text-brand">{locale === 'ru' ? 'Заменить' : 'Change'}</button></div>
+          </div>
+        ) : (
+          <button type="button" onClick={() => videoInputRef.current?.click()} className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand/25 bg-card text-sm font-semibold text-brand"><Upload className="size-4" />{locale === 'ru' ? 'Загрузить @video1' : 'Upload @video1'}</button>
+        )}
+        {mode === 'generate' && <p className="mt-2 text-[11px] text-muted-foreground">{locale === 'ru' ? 'В режиме «Создать» видео передаётся как обычный reference_video вместе с фото.' : 'In Generate mode the video is sent as a regular reference_video together with images.'}</p>}
+      </div>
 
       <label htmlFor="seedance-prompt" className="mt-5 block text-sm font-semibold">{locale === 'ru' ? 'Промпт' : 'Prompt'}</label>
       <div className="mt-2 overflow-hidden rounded-2xl border bg-card">
         {(sourceVideo || references.some(Boolean)) && (
           <div className="flex flex-wrap gap-2 border-b bg-muted/35 p-2">
-            {mode === 'edit' && sourceVideo && (
+            {sourceVideo && (
               <button
                 type="button"
                 onClick={() => insertPromptTag('@video1')}
@@ -354,7 +364,7 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
               const normalized = part.toLowerCase()
               const imageMatch = normalized.match(/^@image(\d+)$/)
               const linked = normalized === '@video1'
-                ? mode === 'edit' && Boolean(sourceVideo)
+                ? Boolean(sourceVideo)
                 : imageMatch
                   ? Boolean(references[Number(imageMatch[1]) - 1])
                   : false
@@ -386,7 +396,7 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
               promptBackdropRef.current.scrollLeft = event.currentTarget.scrollLeft
             }}
             spellCheck={false}
-            placeholder={mode === 'edit' ? (locale === 'ru' ? 'Например: Edit @video1. Replace the seated person with @image1 and the vehicle with @image2…' : 'Example: Edit @video1. Replace the seated person with @image1 and the vehicle with @image2…') : (locale === 'ru' ? 'Вставьте промпт. Используйте @image1, @image2…' : 'Paste a prompt. Use @image1, @image2…')}
+            placeholder={mode === 'edit' ? (locale === 'ru' ? 'Например: Edit @video1. Replace the seated person with @image1 and the vehicle with @image2…' : 'Example: Edit @video1. Replace the seated person with @image1 and the vehicle with @image2…') : (locale === 'ru' ? 'Вставьте промпт. Можно использовать @video1, @image1, @image2…' : 'Paste a prompt. You can use @video1, @image1, @image2…')}
             className="relative z-10 w-full resize-y border-0 bg-transparent p-4 text-sm leading-relaxed text-transparent outline-none placeholder:text-muted-foreground selection:bg-brand/20"
             style={{ caretColor: 'var(--foreground)', color: 'transparent', WebkitTextFillColor: 'transparent' }}
           />
@@ -404,7 +414,7 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
 
       <div className={`mt-5 grid gap-3 ${mode === 'edit' ? 'grid-cols-1' : 'grid-cols-2'}`}>
         {mode !== 'edit' && (
-          <label className="rounded-2xl border bg-card p-3 text-xs text-muted-foreground"><span className="block font-medium">{locale === 'ru' ? 'Длительность' : 'Duration'}</span><select value={duration} onChange={(event) => setDuration(Number(event.target.value))} className="mt-2 h-10 w-full rounded-xl border bg-background px-3 text-sm font-semibold text-foreground">{[8, 10, 12, 15, 20, 30].map((seconds) => <option key={seconds} value={seconds}>{seconds} сек</option>)}</select></label>
+          <label className="rounded-2xl border bg-card p-3 text-xs text-muted-foreground"><span className="block font-medium">{locale === 'ru' ? 'Длительность' : 'Duration'}</span><select value={duration} onChange={(event) => setDuration(Number(event.target.value))} className="mt-2 h-10 w-full rounded-xl border bg-background px-3 text-sm font-semibold text-foreground">{Array.from({ length: 27 }, (_, index) => index + 4).map((seconds) => <option key={seconds} value={seconds}>{seconds} сек</option>)}</select></label>
         )}
         <label className="rounded-2xl border bg-card p-3 text-xs text-muted-foreground"><span className="block font-medium">{locale === 'ru' ? 'Качество' : 'Quality'}</span><select value={resolution} onChange={(event) => setResolution((['480p', '720p', '1080p'].includes(event.target.value) ? event.target.value : '480p') as Resolution)} className="mt-2 h-10 w-full rounded-xl border bg-background px-3 text-sm font-semibold text-foreground"><option value="480p">480p · test</option><option value="720p">720p</option><option value="1080p">1080p</option></select></label>
       </div>

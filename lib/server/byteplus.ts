@@ -60,11 +60,17 @@ export async function createBytePlusSeedance25Task(params: {
   duration: number
   ratio: string
   references: string[]
+  videoReferences?: string[]
   resolution?: BytePlusResolution
   generateAudio?: boolean
 }) {
   const content = [
     { type: 'text', text: params.promptText },
+    ...(params.videoReferences || []).map((url) => ({
+      type: 'video_url',
+      video_url: { url },
+      role: 'reference_video',
+    })),
     ...params.references.map((url) => ({
       type: 'image_url',
       image_url: { url },
