@@ -14,6 +14,7 @@ import { ProfileScreen } from './screens/profile-screen'
 import { TrendsScreen } from './screens/trends-screen'
 import { WorksScreen } from './screens/works-screen'
 import { TrendsProvider, useTrends } from './trends-provider'
+import { SeedanceSheet } from './seedance-sheet'
 import { UserProvider } from './user-provider'
 
 export function AppShell() {
@@ -37,9 +38,10 @@ function InnerApp() {
   const [category, setCategory] = useState<CategoryId | null>(null)
   const [activeTool, setActiveTool] = useState<Tool | null>(null)
   const [activeTrend, setActiveTrend] = useState<Trend | null>(null)
+  const [seedanceOpen, setSeedanceOpen] = useState(false)
   const deepLinkHandled = useRef(false)
 
-  const sheetOpen = activeTool !== null || activeTrend !== null
+  const sheetOpen = activeTool !== null || activeTrend !== null || seedanceOpen
   const canGoBack = sheetOpen || (tab === 'create' && category !== null)
 
   useEffect(() => {
@@ -58,7 +60,8 @@ function InnerApp() {
   }, [trends])
 
   function goBack() {
-    if (activeTool) setActiveTool(null)
+    if (seedanceOpen) setSeedanceOpen(false)
+    else if (activeTool) setActiveTool(null)
     else if (activeTrend) setActiveTrend(null)
     else if (category) setCategory(null)
   }
@@ -90,6 +93,7 @@ function InnerApp() {
   }
 
   function openWorksAfterGeneration() {
+    setSeedanceOpen(false)
     setActiveTool(null)
     setActiveTrend(null)
     setCategory(null)
@@ -112,7 +116,7 @@ function InnerApp() {
             (category ? (
               <CategoryScreen categoryId={category} onBack={() => setCategory(null)} onOpenTool={openTool} />
             ) : (
-              <CreateScreen onOpenCategory={openCategory} />
+              <CreateScreen onOpenCategory={openCategory} onOpenSeedance={() => { haptics.impact('light'); setSeedanceOpen(true) }} />
             ))}
           {tab === 'works' && <WorksScreen />}
           {tab === 'favorites' && (
@@ -123,6 +127,7 @@ function InnerApp() {
       </div>
 
       <BottomNav active={tab} onChange={changeTab} />
+      <SeedanceSheet open={seedanceOpen} onClose={() => setSeedanceOpen(false)} onGenerationStarted={openWorksAfterGeneration} />
       <ToolSheet tool={activeTool} onClose={() => setActiveTool(null)} />
       <TrendSheet
         trend={activeTrend}
