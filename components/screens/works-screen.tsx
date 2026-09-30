@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, Clock3, Download, ExternalLink, FolderOpen, LoaderCircle, RefreshCw } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Clock3, Download, ExternalLink, FolderOpen, LoaderCircle, RefreshCw, RotateCcw } from 'lucide-react'
 import { getTelegramInitData, haptics } from '@/lib/telegram'
 import { useI18n } from '../i18n-provider'
 import { useUserState, type HistoryItem } from '../user-provider'
@@ -27,6 +27,13 @@ function StatusPill({ item, locale }: { item: HistoryItem; locale: 'en' | 'ru' }
       </span>
     )
   }
+  if (item.status === 'failed') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-1 text-[11px] font-semibold text-destructive">
+        <AlertCircle className="size-3.5" />{locale === 'ru' ? 'Не удалось' : 'Failed'}
+      </span>
+    )
+  }
   if (item.status === 'queued') {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-700">
@@ -41,14 +48,37 @@ function StatusPill({ item, locale }: { item: HistoryItem; locale: 'en' | 'ru' }
   )
 }
 
+function failureCopy(item: HistoryItem, locale: 'en' | 'ru') {
+  if (item.failureType === 'input') {
+    return locale === 'ru'
+      ? 'Сервис не смог обработать один из исходных файлов. Проверьте референсы и попробуйте ещё раз.'
+      : 'The service could not process one of the source files. Check the references and try again.'
+  }
+  if (item.failureType === 'temporary' || item.retryable) {
+    return locale === 'ru'
+      ? 'Произошёл временный сбой сервиса. Можно повторить генерацию.'
+      : 'The service had a temporary issue. You can retry the generation.'
+  }
+  return locale === 'ru'
+    ? 'Сервис не смог завершить генерацию. Можно попробовать повторить.'
+    : 'The service could not finish the generation. You can try again.'
+}
+
 export function WorksScreen() {
   const { locale } = useI18n()
   const { history, refreshUser, markWorksSeen } = useUserState()
   const [refreshing, setRefreshing] = useState(false)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [downloadErrorId, setDownloadErrorId] = useState<string | null>(null)
+  const [retryingId, setRetryingId] = useState<string | null>(null)
+  const [retryErrorId, setRetryErrorId] = useState<string | null>(null)
 
-  const visibleHistory = useMemo(() => history.filter((item) => item.status !== 'failed'), [history])
+  const visibleHistory = useMemo(() => history.filter((item) => {
+    if (item.status !== 'failed') return true
+    const failed = new Date(item.failedAt || item.createdAt).getTime()
+    if (!Number.isFinite(failed)) return false
+    return Date.now() - failed < 24 * 60 * 60 * 1000
+  }), [history])
 
   useEffect(() => {
     markWorksSeen()
@@ -72,6 +102,31 @@ export function WorksScreen() {
       await refreshUser()
     } finally {
       setRefreshing(false)
+    }
+  }
+
+  async function retryGeneration(item: HistoryItem) {
+    const initData = getTelegramInitData()
+    if (!initData) return
+    setRetryingId(item.id)
+    setRetryErrorId(null)
+    try {
+      const response = await fetch('/api/generate/retry', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Telegram-Init-Data': initData,
+        },
+        body: JSON.stringify({ jobId: item.id }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || !data?.ok) throw new Error('RETRY_FAILED')
+      haptics.success()
+      await refreshUser()
+    } catch {
+      setRetryErrorId(item.id)
+    } finally {
+      setRetryingId(null)
     }
   }
 
@@ -125,7 +180,7 @@ export function WorksScreen() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">{locale === 'ru' ? 'Мои работы' : 'My works'}</h1>
           <p className="mt-1 text-xs text-muted-foreground">
-            {locale === 'ru' ? 'Здесь появляются активные и готовые генерации.' : 'Active and completed generations appear here.'}
+            {locale === 'ru' ? 'Здесь появляются активные, готовые и недавние неудачные генерации.' : 'Active, completed, and recent failed generations appear here.'}
           </p>
         </div>
         <button
@@ -184,6 +239,35 @@ export function WorksScreen() {
                       {takingLonger
                         ? (locale === 'ru' ? 'Задача активна. Мы продолжаем проверять её статус.' : 'The job is still active. We are continuing to check its status.')
                         : (locale === 'ru' ? 'Обычно 7–25 минут. Можно перейти в другие разделы — мы сообщим, когда всё будет готово.' : 'Usually 7–25 minutes. You can use other sections — we will let you know when it is ready.')}
+                    </p>
+                  </div>
+                )}
+
+                {item.status === 'failed' && (
+                  <div className="mt-3 rounded-2xl bg-destructive/8 px-4 py-3">
+                    <p className="flex items-center gap-2 text-sm font-semibold text-destructive">
+                      <AlertCircle className="size-4" />
+                      {locale === 'ru' ? 'Не удалось создать видео' : 'Could not create the video'}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">{failureCopy(item, locale)}</p>
+                    <button
+                      type="button"
+                      onClick={() => void retryGeneration(item)}
+                      disabled={retryingId === item.id}
+                      className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-full border bg-card text-sm font-semibold text-brand transition active:scale-[0.98] disabled:opacity-55"
+                    >
+                      {retryingId === item.id ? <LoaderCircle className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
+                      {retryingId === item.id
+                        ? (locale === 'ru' ? 'Повторяю…' : 'Retrying…')
+                        : (locale === 'ru' ? 'Повторить' : 'Retry')}
+                    </button>
+                    {retryErrorId === item.id && (
+                      <p className="mt-2 text-center text-xs text-destructive">
+                        {locale === 'ru' ? 'Не удалось повторить автоматически. Откройте инструмент и запустите ещё раз.' : 'Automatic retry failed. Open the tool and start again.'}
+                      </p>
+                    )}
+                    <p className="mt-2 text-center text-[11px] text-muted-foreground">
+                      {locale === 'ru' ? 'Запись об ошибке хранится здесь 24 часа.' : 'This failed item stays here for 24 hours.'}
                     </p>
                   </div>
                 )}

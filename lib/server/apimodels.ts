@@ -23,6 +23,8 @@ export type ApiModelsTask = {
   state: string
   resultUrls: string[]
   error?: string
+  failureCode?: string
+  retryable?: boolean
   usage?: unknown
   raw?: unknown
 }
@@ -32,11 +34,30 @@ function extractError(value: unknown): string {
   if (typeof value === 'string') return value
   if (typeof value === 'object') {
     const record = value as Record<string, unknown>
-    for (const key of ['message', 'error', 'detail', 'details', 'code']) {
+    for (const key of ['failMsg', 'fail_msg', 'failureMessage', 'failure_message', 'message', 'error', 'detail', 'details', 'code']) {
       if (typeof record[key] === 'string' && record[key]) return String(record[key])
     }
   }
   return String(value)
+}
+
+function firstString(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim()
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  }
+  return ''
+}
+
+function parseRetryable(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') return value !== 0
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (['true', '1', 'yes'].includes(normalized)) return true
+    if (['false', '0', 'no'].includes(normalized)) return false
+  }
+  return undefined
 }
 
 function parseTaskPayload(payload: Record<string, unknown>): ApiModelsTask {
@@ -59,13 +80,39 @@ function parseTaskPayload(payload: Record<string, unknown>): ApiModelsTask {
 
   const state = String(data.state || data.status || payload.status || '').toLowerCase()
   const id = String(data.taskId || data.task_id || data.id || payload.id || '') || undefined
-  const error = extractError(data.error || payload.error || data.message || payload.message)
+  const failureCode = firstString(
+    data.failCode,
+    data.fail_code,
+    data.failureCode,
+    data.failure_code,
+    payload.failCode,
+    payload.fail_code,
+    payload.failureCode,
+    payload.failure_code,
+  ) || undefined
+  const error = extractError(
+    data.failMsg ||
+    data.fail_msg ||
+    data.failureMessage ||
+    data.failure_message ||
+    data.error ||
+    payload.failMsg ||
+    payload.fail_msg ||
+    payload.failureMessage ||
+    payload.failure_message ||
+    payload.error ||
+    data.message ||
+    payload.message,
+  ) || failureCode
+  const retryable = parseRetryable(data.retryable ?? payload.retryable)
 
   return {
     id,
     state,
     resultUrls,
     error: error || undefined,
+    failureCode,
+    retryable,
     usage: data.usage || payload.usage || null,
     raw: payload,
   }
@@ -83,7 +130,7 @@ async function createTask(body: Record<string, unknown>) {
 
   const task = parseTaskPayload(payload)
   if (!response.ok || !task.id) {
-    const message = task.error || `APIMODELS request failed (${response.status})`
+    const message = task.error || task.failureCode || `APIMODELS request failed (${response.status})`
     const error = new Error(message)
     ;(error as Error & { status?: number; details?: unknown }).status = response.status
     ;(error as Error & { status?: number; details?: unknown }).details = payload
@@ -147,7 +194,7 @@ export async function getApiModelsTask(id: string): Promise<ApiModelsTask> {
 
   if (!response.ok) {
     const task = parseTaskPayload(payload)
-    throw new Error(task.error || `APIMODELS task lookup failed (${response.status})`)
+    throw new Error(task.error || task.failureCode || `APIMODELS task lookup failed (${response.status})`)
   }
 
   return parseTaskPayload(payload)

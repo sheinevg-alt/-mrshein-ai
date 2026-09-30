@@ -87,17 +87,20 @@ export async function POST(request: Request) {
     }
 
     if (state === 'failed' || state === 'error' || state === 'canceled' || state === 'cancelled') {
-      const code = String(task.error || `APIMODELS_${state.toUpperCase()}`)
+      const technicalCode = [task.failureCode, task.error].filter(Boolean).join(': ') || `APIMODELS_${state.toUpperCase()}`
       await supabaseFetch(`generation_history?id=eq.${job.id}`, {
         method: 'PATCH',
         body: JSON.stringify({
           status: 'failed',
-          error_code: code.slice(0, 240),
+          error_code: technicalCode.slice(0, 240),
           failed_at: new Date().toISOString(),
           result_metadata: {
             ...(job.result_metadata || {}),
             apimodels_status: state,
             apimodels_error: task.error || null,
+            apimodels_fail_code: task.failureCode || null,
+            apimodels_fail_message: task.error || null,
+            apimodels_retryable: typeof task.retryable === 'boolean' ? task.retryable : null,
             apimodels_usage: task.usage || null,
           },
           updated_at: new Date().toISOString(),

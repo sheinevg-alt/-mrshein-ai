@@ -54,7 +54,7 @@ export async function GET(request: Request) {
   if (!job) return NextResponse.json({ error: 'Generation not found' }, { status: 404 })
 
   if (job.status === 'completed') return NextResponse.json({ ok: true, status: 'completed', jobId: job.id, resultUrl: job.result_url })
-  if (job.status === 'failed') return NextResponse.json({ ok: false, status: 'failed', jobId: job.id, error: job.error_code || 'GENERATION_FAILED' })
+  if (job.status === 'failed') return NextResponse.json({ ok: false, status: 'failed', jobId: job.id, error: 'GENERATION_FAILED' })
 
   const apiModelsTaskId = String(job.result_metadata?.apimodels_task_id || '')
   if (apiModelsTaskId) {
@@ -84,13 +84,16 @@ export async function GET(request: Request) {
       }
 
       if (status === 'failed' || status === 'error' || status === 'canceled' || status === 'cancelled') {
-        const code = String(task.error || `APIMODELS_${status.toUpperCase()}`)
-        const refund = await failAndRefund(job, user.id, code, {
+        const technicalCode = [task.failureCode, task.error].filter(Boolean).join(': ') || `APIMODELS_${status.toUpperCase()}`
+        const refund = await failAndRefund(job, user.id, technicalCode, {
           apimodels_status: status,
           apimodels_error: task.error || null,
+          apimodels_fail_code: task.failureCode || null,
+          apimodels_fail_message: task.error || null,
+          apimodels_retryable: typeof task.retryable === 'boolean' ? task.retryable : null,
           apimodels_usage: task.usage || null,
         })
-        return NextResponse.json({ ok: false, status: 'failed', jobId: job.id, error: code, ...refund })
+        return NextResponse.json({ ok: false, status: 'failed', jobId: job.id, error: 'GENERATION_FAILED', retryable: task.retryable === true, ...refund })
       }
 
       return NextResponse.json({ ok: true, status: 'processing', jobId: job.id, progress: null })
@@ -135,7 +138,7 @@ export async function GET(request: Request) {
           byteplus_error: task.error || null,
           byteplus_usage: task.usage || null,
         })
-        return NextResponse.json({ ok: false, status: 'failed', jobId: job.id, error: code, ...refund })
+        return NextResponse.json({ ok: false, status: 'failed', jobId: job.id, error: 'GENERATION_FAILED', ...refund })
       }
 
       return NextResponse.json({ ok: true, status: 'processing', jobId: job.id, progress: null })
@@ -172,7 +175,7 @@ export async function GET(request: Request) {
     if (status === 'FAILED' || status === 'CANCELED') {
       const code = String(task.failureCode || task.failure || `RUNWAY_${status}`).slice(0, 240)
       const refund = await failAndRefund(job, user.id, code, { runway_status: status })
-      return NextResponse.json({ ok: false, status: 'failed', jobId: job.id, error: code, ...refund })
+      return NextResponse.json({ ok: false, status: 'failed', jobId: job.id, error: 'GENERATION_FAILED', ...refund })
     }
 
     return NextResponse.json({ ok: true, status: 'processing', jobId: job.id, progress: typeof task.progress === 'number' ? task.progress : null })

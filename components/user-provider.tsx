@@ -10,8 +10,11 @@ export type HistoryItem = {
   title: string
   status: 'queued' | 'processing' | 'completed' | 'failed'
   createdAt: string
+  failedAt?: string | null
   resultUrl?: string | null
   error?: string | null
+  failureType?: 'temporary' | 'input' | 'provider' | null
+  retryable?: boolean
   provider?: string | null
   model?: string | null
   sourceId?: string | null
