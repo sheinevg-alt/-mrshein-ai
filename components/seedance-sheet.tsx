@@ -109,6 +109,7 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
   const { refreshUser } = useUserState()
   const videoInputRef = useRef<HTMLInputElement>(null)
   const videoUrlRef = useRef<string | null>(null)
+  const promptRef = useRef<HTMLTextAreaElement>(null)
   const [mode, setMode] = useState<Mode>('generate')
   const [prompt, setPrompt] = useState('')
   const [references, setReferences] = useState<Array<ReferenceUpload | undefined>>([undefined, undefined, undefined])
@@ -124,12 +125,53 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
 
   const ready = prompt.trim().length >= 5 && !generating && (mode !== 'edit' || Boolean(sourceVideo))
 
+  function hasPromptTag(tag: string, value = prompt) {
+    return value.toLowerCase().includes(tag.toLowerCase())
+  }
+
+  function ensurePromptTag(tag: string) {
+    setPrompt((current) => {
+      if (hasPromptTag(tag, current)) return current
+      const clean = current.trimEnd()
+      return clean ? `${clean}\n${tag} ` : `${tag} `
+    })
+  }
+
+  function removePromptTag(tag: string) {
+    const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const expression = new RegExp(`\\s*${escaped}\\b\\s*`, 'gi')
+    setPrompt((current) => current.replace(expression, ' ').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim())
+  }
+
+  function insertPromptTag(tag: string) {
+    if (hasPromptTag(tag)) {
+      promptRef.current?.focus()
+      return
+    }
+    const input = promptRef.current
+    if (!input) { ensurePromptTag(tag); return }
+    const start = input.selectionStart ?? prompt.length
+    const end = input.selectionEnd ?? start
+    const before = prompt.slice(0, start)
+    const after = prompt.slice(end)
+    const leftSpace = before && !/[\s\n]$/.test(before) ? ' ' : ''
+    const rightSpace = after && !/^[\s\n]/.test(after) ? ' ' : ''
+    const next = `${before}${leftSpace}${tag}${rightSpace}${after}`
+    const caret = before.length + leftSpace.length + tag.length + rightSpace.length
+    setPrompt(next)
+    requestAnimationFrame(() => {
+      input.focus()
+      input.setSelectionRange(caret, caret)
+    })
+  }
+
   function setReference(index: number, upload: ReferenceUpload) {
     setReferences((current) => { const next = [...current]; next[index] = upload; return next })
   }
 
   function clearReference(index: number) {
     setReferences((current) => { const next = [...current]; for (let i = index; i < next.length; i += 1) next[i] = undefined; return next })
+    for (let i = index; i < 3; i += 1) removePromptTag(`@image${i + 1}`)
   }
 
   async function handleVideo(event: ChangeEvent<HTMLInputElement>) {
@@ -154,6 +196,7 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
       video.src = url
     })
     setSourceVideo({ file, url, name: file.name, duration: durationValue })
+    ensurePromptTag('@video1')
     setMessage('')
     event.target.value = ''
   }
@@ -226,8 +269,8 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
   return (
     <BottomSheet open title="Seedance 2.5" onClose={onClose}>
       <div className="grid grid-cols-2 gap-2 rounded-2xl bg-muted/60 p-1">
-        <button type="button" onClick={() => { setMode('generate'); setMessage('') }} className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition ${mode === 'generate' ? 'bg-card text-brand shadow-sm' : 'text-muted-foreground'}`}><Sparkles className="size-4" />{locale === 'ru' ? 'Создать' : 'Generate'}</button>
-        <button type="button" onClick={() => { setMode('edit'); setMessage('') }} className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition ${mode === 'edit' ? 'bg-card text-brand shadow-sm' : 'text-muted-foreground'}`}><Clapperboard className="size-4" />Video Edit</button>
+        <button type="button" onClick={() => { setMode('generate'); removePromptTag('@video1'); setMessage('') }} className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition ${mode === 'generate' ? 'bg-card text-brand shadow-sm' : 'text-muted-foreground'}`}><Sparkles className="size-4" />{locale === 'ru' ? 'Создать' : 'Generate'}</button>
+        <button type="button" onClick={() => { setMode('edit'); if (sourceVideo) ensurePromptTag('@video1'); setMessage('') }} className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition ${mode === 'edit' ? 'bg-card text-brand shadow-sm' : 'text-muted-foreground'}`}><Clapperboard className="size-4" />Video Edit</button>
       </div>
 
       {mode === 'edit' && (
@@ -249,10 +292,56 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
       )}
 
       <label htmlFor="seedance-prompt" className="mt-5 block text-sm font-semibold">{locale === 'ru' ? 'Промпт' : 'Prompt'}</label>
-      <textarea id="seedance-prompt" rows={9} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder={mode === 'edit' ? (locale === 'ru' ? 'Например: Edit @video1. Replace the seated person with @image1 and the vehicle with @image2…' : 'Example: Edit @video1. Replace the seated person with @image1 and the vehicle with @image2…') : (locale === 'ru' ? 'Вставьте промпт. Используйте @image1, @image2…' : 'Paste a prompt. Use @image1, @image2…')} className="mt-2 w-full resize-y rounded-2xl border bg-card p-4 text-sm leading-relaxed" />
+      <div className="mt-2 overflow-hidden rounded-2xl border bg-card">
+        {(sourceVideo || references.some(Boolean)) && (
+          <div className="flex flex-wrap gap-2 border-b bg-muted/35 p-2">
+            {mode === 'edit' && sourceVideo && (
+              <button
+                type="button"
+                onClick={() => insertPromptTag('@video1')}
+                className={`flex h-10 max-w-full items-center gap-2 rounded-xl border px-2 text-xs font-semibold transition active:scale-[0.98] ${hasPromptTag('@video1') ? 'border-brand/35 bg-brand-tint text-brand' : 'border-dashed bg-card text-muted-foreground'}`}
+                title={locale === 'ru' ? 'Нажмите, чтобы вставить @video1 в позицию курсора' : 'Tap to insert @video1 at the cursor'}
+              >
+                <span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-black">
+                  <video src={sourceVideo.url} muted playsInline className="size-full object-cover" />
+                </span>
+                <span>@video1</span>
+                {hasPromptTag('@video1') && <Check className="size-3.5" />}
+              </button>
+            )}
+            {references.map((reference, index) => reference ? (
+              <button
+                key={index}
+                type="button"
+                onClick={() => insertPromptTag(`@image${index + 1}`)}
+                className={`flex h-10 max-w-full items-center gap-2 rounded-xl border px-2 text-xs font-semibold transition active:scale-[0.98] ${hasPromptTag(`@image${index + 1}`) ? 'border-brand/35 bg-brand-tint text-brand' : 'border-dashed bg-card text-muted-foreground'}`}
+                title={locale === 'ru' ? `Нажмите, чтобы вставить @image${index + 1} в позицию курсора` : `Tap to insert @image${index + 1} at the cursor`}
+              >
+                <img src={reference.url} alt={`@image${index + 1}`} className="size-7 shrink-0 rounded-lg object-cover" />
+                <span>@image{index + 1}</span>
+                {hasPromptTag(`@image${index + 1}`) && <Check className="size-3.5" />}
+              </button>
+            ) : null)}
+          </div>
+        )}
+        <textarea
+          ref={promptRef}
+          id="seedance-prompt"
+          rows={9}
+          value={prompt}
+          onChange={(event) => setPrompt(event.target.value)}
+          placeholder={mode === 'edit' ? (locale === 'ru' ? 'Например: Edit @video1. Replace the seated person with @image1 and the vehicle with @image2…' : 'Example: Edit @video1. Replace the seated person with @image1 and the vehicle with @image2…') : (locale === 'ru' ? 'Вставьте промпт. Используйте @image1, @image2…' : 'Paste a prompt. Use @image1, @image2…')}
+          className="w-full resize-y border-0 bg-transparent p-4 text-sm leading-relaxed outline-none"
+        />
+      </div>
+      {(sourceVideo || references.some(Boolean)) && (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          {locale === 'ru' ? 'Референсы с ✓ уже связаны с промптом. Нажмите на миниатюру, чтобы вставить отсутствующий тег в позицию курсора.' : 'References with ✓ are linked in the prompt. Tap a thumbnail to insert a missing tag at the cursor.'}
+        </p>
+      )}
 
       <div className="mt-5 grid gap-3">
-        {references.map((reference, index) => <ReferenceSlot key={index} index={index + 1} value={reference} disabled={index > 0 && !references[index - 1]} onChange={(upload) => setReference(index, upload)} onClear={() => clearReference(index)} />)}
+        {references.map((reference, index) => <ReferenceSlot key={index} index={index + 1} value={reference} disabled={index > 0 && !references[index - 1]} onChange={(upload) => { setReference(index, upload); ensurePromptTag(`@image${index + 1}`) }} onClear={() => clearReference(index)} />)}
       </div>
 
       <div className={`mt-5 grid gap-3 ${mode === 'edit' ? 'grid-cols-1' : 'grid-cols-2'}`}>
