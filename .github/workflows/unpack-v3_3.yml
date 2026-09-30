@@ -1,0 +1,45 @@
+name: Unpack Shein AI v3.3
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "Shein_AI_MiniApp_v3_3.zip"
+      - ".github/workflows/unpack-v3_3.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Unpack v3.3
+        run: |
+          if [ ! -f "Shein_AI_MiniApp_v3_3.zip" ]; then
+            echo "Archive already unpacked"
+            exit 0
+          fi
+
+          unzip -o "Shein_AI_MiniApp_v3_3.zip" -d .
+          rm "Shein_AI_MiniApp_v3_3.zip"
+
+      - name: Commit extracted files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+
+          git commit -m "Deploy Shein AI v3.3"
+          git push origin main
