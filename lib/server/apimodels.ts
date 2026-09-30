@@ -101,6 +101,7 @@ export async function createApiModelsSeedance25Task(params: {
   videoReferences?: string[]
   resolution?: ApiModelsResolution
   generateAudio?: boolean
+  callbackUrl?: string
 }) {
   return createTask({
     model: APIMODELS_MODEL,
@@ -113,6 +114,7 @@ export async function createApiModelsSeedance25Task(params: {
     task_type: 'generate',
     reference_image_urls: params.references,
     reference_video_urls: params.videoReferences || [],
+    ...(params.callbackUrl ? { callback_url: params.callbackUrl } : {}),
   })
 }
 
@@ -122,6 +124,7 @@ export async function createApiModelsSeedance25EditTask(params: {
   references: string[]
   resolution?: ApiModelsResolution
   generateAudio?: boolean
+  callbackUrl?: string
 }) {
   return createTask({
     model: APIMODELS_MODEL,
@@ -132,6 +135,7 @@ export async function createApiModelsSeedance25EditTask(params: {
     task_type: 'edit',
     reference_image_urls: params.references,
     reference_video_urls: [params.videoUrl],
+    ...(params.callbackUrl ? { callback_url: params.callbackUrl } : {}),
   })
 }
 

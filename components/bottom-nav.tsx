@@ -14,7 +14,11 @@ const items: { id: TabId; en: string; ru: string; icon: LucideIcon }[] = [
   { id: 'profile', en: 'Profile', ru: 'Профиль', icon: User },
 ]
 
-export function BottomNav({ active, onChange }: { active: TabId; onChange: (tab: TabId) => void }) {
+export function BottomNav({ active, onChange, worksBadge = false }: {
+  active: TabId
+  onChange: (tab: TabId) => void
+  worksBadge?: boolean
+}) {
   const { t, locale } = useI18n()
   return (
     <nav
@@ -32,17 +36,22 @@ export function BottomNav({ active, onChange }: { active: TabId; onChange: (tab:
                 onClick={() => onChange(id)}
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'flex h-full w-full flex-col items-center justify-center gap-0.5 px-0.5 text-[9px] font-medium transition-colors active:scale-95',
+                  'relative flex h-full w-full flex-col items-center justify-center gap-0.5 px-0.5 text-[9px] font-medium transition-colors active:scale-95',
                   isActive ? 'text-brand' : 'text-muted-foreground',
                 )}
               >
-                <Icon
-                  className="size-[21px]"
-                  strokeWidth={isActive ? 2.1 : 1.7}
-                  fill={isActive && (id === 'favorites' || id === 'trends') ? 'currentColor' : 'none'}
-                  fillOpacity={id === 'trends' ? 0.15 : 1}
-                  aria-hidden="true"
-                />
+                <span className="relative">
+                  <Icon
+                    className="size-[21px]"
+                    strokeWidth={isActive ? 2.1 : 1.7}
+                    fill={isActive && (id === 'favorites' || id === 'trends') ? 'currentColor' : 'none'}
+                    fillOpacity={id === 'trends' ? 0.15 : 1}
+                    aria-hidden="true"
+                  />
+                  {id === 'works' && worksBadge && !isActive && (
+                    <span className="absolute -right-1.5 -top-1.5 size-2.5 rounded-full bg-brand ring-2 ring-white" aria-label={locale === 'ru' ? 'Есть новая готовая работа' : 'New completed work'} />
+                  )}
+                </span>
                 <span className="max-w-full truncate">{locale === 'ru' ? ru : en}</span>
               </button>
             </li>

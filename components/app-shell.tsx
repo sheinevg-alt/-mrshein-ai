@@ -1,12 +1,13 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { CheckCircle2, X } from 'lucide-react'
 import type { CategoryId, Tool, Trend } from '@/lib/data'
 import { haptics, useTelegramBackButton, useTelegramInit } from '@/lib/telegram'
 import { BottomNav, type TabId } from './bottom-nav'
 import { ToolSheet, TrendSheet } from './detail-sheets'
 import { FavoritesProvider } from './favorites-provider'
-import { I18nProvider } from './i18n-provider'
+import { I18nProvider, useI18n } from './i18n-provider'
 import { CategoryScreen } from './screens/category-screen'
 import { CreateScreen } from './screens/create-screen'
 import { FavoritesScreen } from './screens/favorites-screen'
@@ -15,7 +16,7 @@ import { TrendsScreen } from './screens/trends-screen'
 import { WorksScreen } from './screens/works-screen'
 import { TrendsProvider, useTrends } from './trends-provider'
 import { SeedanceSheet } from './seedance-sheet'
-import { UserProvider } from './user-provider'
+import { UserProvider, useUserState } from './user-provider'
 
 export function AppShell() {
   useTelegramInit()
@@ -33,7 +34,9 @@ export function AppShell() {
 }
 
 function InnerApp() {
+  const { locale } = useI18n()
   const { trends } = useTrends()
+  const { completionNotice, clearCompletionNotice, unreadWorks, markWorksSeen } = useUserState()
   const [tab, setTab] = useState<TabId>('trends')
   const [category, setCategory] = useState<CategoryId | null>(null)
   const [activeTool, setActiveTool] = useState<Tool | null>(null)
@@ -46,7 +49,16 @@ function InnerApp() {
 
   useEffect(() => {
     if (deepLinkHandled.current || trends.length === 0) return
-    const trendId = new URLSearchParams(window.location.search).get('trend')
+    const params = new URLSearchParams(window.location.search)
+    const workId = params.get('work')
+    if (workId) {
+      setTab('works')
+      markWorksSeen()
+      deepLinkHandled.current = true
+      return
+    }
+
+    const trendId = params.get('trend')
     if (!trendId) {
       deepLinkHandled.current = true
       return
@@ -57,7 +69,7 @@ function InnerApp() {
       setActiveTrend(match)
     }
     deepLinkHandled.current = true
-  }, [trends])
+  }, [markWorksSeen, trends])
 
   function goBack() {
     if (seedanceOpen) setSeedanceOpen(false)
@@ -71,6 +83,7 @@ function InnerApp() {
   function changeTab(next: TabId) {
     haptics.selection()
     if (next === tab && next === 'create') setCategory(null)
+    if (next === 'works') markWorksSeen()
     setTab(next)
     window.scrollTo({ top: 0 })
   }
@@ -93,6 +106,19 @@ function InnerApp() {
   }
 
   function openWorksAfterGeneration() {
+    setSeedanceOpen(false)
+    setActiveTool(null)
+    setActiveTrend(null)
+    setCategory(null)
+    setTab('works')
+    markWorksSeen()
+    window.scrollTo({ top: 0 })
+  }
+
+  function openCompletedWork() {
+    haptics.success()
+    clearCompletionNotice()
+    markWorksSeen()
     setSeedanceOpen(false)
     setActiveTool(null)
     setActiveTrend(null)
@@ -126,7 +152,24 @@ function InnerApp() {
         </main>
       </div>
 
-      <BottomNav active={tab} onChange={changeTab} />
+      {completionNotice && tab !== 'works' && (
+        <div className="fixed inset-x-0 z-50 mx-auto w-full max-w-md px-4" style={{ bottom: 'calc(var(--app-safe-bottom) + var(--nav-height) + 0.75rem)' }}>
+          <div className="glass-strong flex items-center gap-3 rounded-2xl p-3 shadow-xl">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-700">
+              <CheckCircle2 className="size-5" />
+            </span>
+            <button type="button" onClick={openCompletedWork} className="min-w-0 flex-1 text-left">
+              <span className="block text-sm font-semibold">{locale === 'ru' ? 'Ваше видео готово' : 'Your video is ready'}</span>
+              <span className="block truncate text-xs text-muted-foreground">{locale === 'ru' ? 'Нажмите, чтобы посмотреть результат' : 'Tap to view the result'}</span>
+            </button>
+            <button type="button" onClick={clearCompletionNotice} className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground" aria-label={locale === 'ru' ? 'Закрыть' : 'Close'}>
+              <X className="size-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      <BottomNav active={tab} onChange={changeTab} worksBadge={unreadWorks} />
       <SeedanceSheet open={seedanceOpen} onClose={() => setSeedanceOpen(false)} onGenerationStarted={openWorksAfterGeneration} />
       <ToolSheet tool={activeTool} onClose={() => setActiveTool(null)} />
       <TrendSheet

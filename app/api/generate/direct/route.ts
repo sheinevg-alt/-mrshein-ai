@@ -113,6 +113,7 @@ export async function POST(request: Request) {
     const videoReferences = sourceVideoPath
       ? [await createStorageSignedDownloadUrl(INPUT_BUCKET, sourceVideoPath, 7200)]
       : []
+    const callbackUrl = `${new URL(request.url).origin}/api/generate/callback/apimodels?jobId=${encodeURIComponent(job.id)}`
 
     const task = mode === 'edit'
       ? await createApiModelsSeedance25EditTask({
@@ -121,6 +122,7 @@ export async function POST(request: Request) {
           references,
           resolution,
           generateAudio,
+          callbackUrl,
         })
       : await createApiModelsSeedance25Task({
           promptText: prompt,
@@ -130,6 +132,7 @@ export async function POST(request: Request) {
           videoReferences,
           resolution,
           generateAudio,
+          callbackUrl,
         })
 
     await supabaseFetch(`generation_history?id=eq.${job.id}`, {

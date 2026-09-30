@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { APP_CONFIG, STORAGE_KEYS } from '@/lib/app-config'
 import { getTelegramInitData } from '@/lib/telegram'
 
@@ -23,6 +23,10 @@ type UserContextValue = {
   notificationsEnabled: boolean
   setNotificationsEnabled: (value: boolean) => Promise<void>
   refreshUser: () => Promise<void>
+  completionNotice: HistoryItem | null
+  clearCompletionNotice: () => void
+  unreadWorks: boolean
+  markWorksSeen: () => void
 }
 
 const UserContext = createContext<UserContextValue | null>(null)
@@ -31,6 +35,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [tokenBalance, setTokenBalance] = useState(APP_CONFIG.defaultTokenBalance)
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [notificationsEnabled, setNotificationsLocal] = useState(true)
+  const [completionNotice, setCompletionNotice] = useState<HistoryItem | null>(null)
+  const [unreadWorks, setUnreadWorks] = useState(false)
+  const previousStatuses = useRef<Map<string, HistoryItem['status']>>(new Map())
 
   const refreshUser = useCallback(async () => {
     const initData = getTelegramInitData()
@@ -57,7 +64,25 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       })
         .then(async (response) => (response.ok ? response.json() : null))
         .then((data) => {
-          if (Array.isArray(data?.history)) setHistory(data.history)
+          if (!Array.isArray(data?.history)) return
+          const nextHistory = data.history as HistoryItem[]
+          let newlyCompleted: HistoryItem | null = null
+
+          for (const item of nextHistory) {
+            const previous = previousStatuses.current.get(item.id)
+            if ((previous === 'queued' || previous === 'processing') && item.status === 'completed') {
+              newlyCompleted = item
+              break
+            }
+          }
+
+          previousStatuses.current = new Map(nextHistory.map((item) => [item.id, item.status]))
+          setHistory(nextHistory)
+
+          if (newlyCompleted) {
+            setCompletionNotice(newlyCompleted)
+            setUnreadWorks(true)
+          }
         })
         .catch(() => undefined),
     ])
@@ -68,6 +93,47 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     if (stored === '0' || stored === '1') setNotificationsLocal(stored === '1')
     void refreshUser()
   }, [refreshUser])
+
+  const activeIdsKey = useMemo(
+    () => history
+      .filter((item) => item.status === 'queued' || item.status === 'processing')
+      .map((item) => item.id)
+      .join('|'),
+    [history],
+  )
+
+  useEffect(() => {
+    if (!activeIdsKey) return
+    const initData = getTelegramInitData()
+    if (!initData) return
+
+    const ids = activeIdsKey.split('|').filter(Boolean)
+    let cancelled = false
+    let running = false
+
+    async function syncJobs() {
+      if (running || cancelled) return
+      running = true
+      try {
+        await Promise.all(ids.map((jobId) =>
+          fetch(`/api/generate/status?jobId=${encodeURIComponent(jobId)}`, {
+            headers: { 'X-Telegram-Init-Data': initData },
+            cache: 'no-store',
+          }).catch(() => undefined),
+        ))
+        if (!cancelled) await refreshUser()
+      } finally {
+        running = false
+      }
+    }
+
+    void syncJobs()
+    const timer = window.setInterval(() => void syncJobs(), 5000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [activeIdsKey, refreshUser])
 
   const setNotificationsEnabled = useCallback(async (value: boolean) => {
     setNotificationsLocal(value)
@@ -85,13 +151,39 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ enabled: value }),
       })
     } catch {
-      // The local preference still works if backend storage is not connected yet.
+      // Keep the local preference even if backend storage is temporarily unavailable.
     }
   }, [])
 
+  const clearCompletionNotice = useCallback(() => setCompletionNotice(null), [])
+  const markWorksSeen = useCallback(() => {
+    setUnreadWorks(false)
+    setCompletionNotice(null)
+  }, [])
+
   const value = useMemo(
-    () => ({ tokenBalance, history, notificationsEnabled, setNotificationsEnabled, refreshUser }),
-    [tokenBalance, history, notificationsEnabled, setNotificationsEnabled, refreshUser],
+    () => ({
+      tokenBalance,
+      history,
+      notificationsEnabled,
+      setNotificationsEnabled,
+      refreshUser,
+      completionNotice,
+      clearCompletionNotice,
+      unreadWorks,
+      markWorksSeen,
+    }),
+    [
+      tokenBalance,
+      history,
+      notificationsEnabled,
+      setNotificationsEnabled,
+      refreshUser,
+      completionNotice,
+      clearCompletionNotice,
+      unreadWorks,
+      markWorksSeen,
+    ],
   )
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>
