@@ -110,6 +110,7 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
   const videoInputRef = useRef<HTMLInputElement>(null)
   const videoUrlRef = useRef<string | null>(null)
   const promptRef = useRef<HTMLTextAreaElement>(null)
+  const promptBackdropRef = useRef<HTMLDivElement>(null)
   const [mode, setMode] = useState<Mode>('generate')
   const [prompt, setPrompt] = useState('')
   const [references, setReferences] = useState<Array<ReferenceUpload | undefined>>([undefined, undefined, undefined])
@@ -324,15 +325,53 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
             ) : null)}
           </div>
         )}
-        <textarea
-          ref={promptRef}
-          id="seedance-prompt"
-          rows={9}
-          value={prompt}
-          onChange={(event) => setPrompt(event.target.value)}
-          placeholder={mode === 'edit' ? (locale === 'ru' ? 'Например: Edit @video1. Replace the seated person with @image1 and the vehicle with @image2…' : 'Example: Edit @video1. Replace the seated person with @image1 and the vehicle with @image2…') : (locale === 'ru' ? 'Вставьте промпт. Используйте @image1, @image2…' : 'Paste a prompt. Use @image1, @image2…')}
-          className="w-full resize-y border-0 bg-transparent p-4 text-sm leading-relaxed outline-none"
-        />
+        <div className="relative">
+          <div
+            ref={promptBackdropRef}
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words p-4 text-sm leading-relaxed text-foreground"
+          >
+            {prompt.split(/(@(?:video|image)\d+)/gi).map((part, index) => {
+              const normalized = part.toLowerCase()
+              const imageMatch = normalized.match(/^@image(\d+)$/)
+              const linked = normalized === '@video1'
+                ? mode === 'edit' && Boolean(sourceVideo)
+                : imageMatch
+                  ? Boolean(references[Number(imageMatch[1]) - 1])
+                  : false
+
+              if (!/^@(?:video|image)\d+$/i.test(part)) return <span key={index}>{part}</span>
+
+              return (
+                <span
+                  key={index}
+                  className={linked
+                    ? 'rounded-md bg-brand-tint text-brand shadow-[0_0_0_2px_rgba(37,99,235,0.12)]'
+                    : 'rounded-md bg-amber-50 text-amber-700 shadow-[0_0_0_1px_rgba(217,119,6,0.22)]'}
+                >
+                  {part}
+                </span>
+              )
+            })}
+            {prompt.endsWith('\n') ? ' ' : null}
+          </div>
+          <textarea
+            ref={promptRef}
+            id="seedance-prompt"
+            rows={9}
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            onScroll={(event) => {
+              if (!promptBackdropRef.current) return
+              promptBackdropRef.current.scrollTop = event.currentTarget.scrollTop
+              promptBackdropRef.current.scrollLeft = event.currentTarget.scrollLeft
+            }}
+            spellCheck={false}
+            placeholder={mode === 'edit' ? (locale === 'ru' ? 'Например: Edit @video1. Replace the seated person with @image1 and the vehicle with @image2…' : 'Example: Edit @video1. Replace the seated person with @image1 and the vehicle with @image2…') : (locale === 'ru' ? 'Вставьте промпт. Используйте @image1, @image2…' : 'Paste a prompt. Use @image1, @image2…')}
+            className="relative z-10 w-full resize-y border-0 bg-transparent p-4 text-sm leading-relaxed text-transparent outline-none placeholder:text-muted-foreground selection:bg-brand/20"
+            style={{ caretColor: 'var(--foreground)' }}
+          />
+        </div>
       </div>
       {(sourceVideo || references.some(Boolean)) && (
         <p className="mt-2 text-[11px] text-muted-foreground">
