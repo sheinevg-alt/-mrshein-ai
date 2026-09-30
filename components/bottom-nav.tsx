@@ -1,29 +1,29 @@
 'use client'
 
-import { Flame, Heart, Sparkles, User, type LucideIcon } from 'lucide-react'
-import type { MessageKey } from '@/lib/i18n'
+import { Clapperboard, Flame, Heart, Sparkles, User, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useI18n } from './i18n-provider'
 
-export type TabId = 'trends' | 'create' | 'favorites' | 'profile'
+export type TabId = 'trends' | 'create' | 'works' | 'favorites' | 'profile'
 
-const items: { id: TabId; label: MessageKey; icon: LucideIcon }[] = [
-  { id: 'trends', label: 'nav.trends', icon: Flame },
-  { id: 'create', label: 'nav.create', icon: Sparkles },
-  { id: 'favorites', label: 'nav.favorites', icon: Heart },
-  { id: 'profile', label: 'nav.profile', icon: User },
+const items: { id: TabId; en: string; ru: string; icon: LucideIcon }[] = [
+  { id: 'trends', en: 'Trends', ru: 'Тренды', icon: Flame },
+  { id: 'create', en: 'Create', ru: 'Создать', icon: Sparkles },
+  { id: 'works', en: 'My works', ru: 'Мои работы', icon: Clapperboard },
+  { id: 'favorites', en: 'Favorites', ru: 'Избранное', icon: Heart },
+  { id: 'profile', en: 'Profile', ru: 'Профиль', icon: User },
 ]
 
 export function BottomNav({ active, onChange }: { active: TabId; onChange: (tab: TabId) => void }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   return (
     <nav
       aria-label={t('nav.label')}
       className="glass-strong fixed inset-x-0 bottom-0 z-40 border-x-0 border-b-0"
       style={{ paddingBottom: 'var(--app-safe-bottom)' }}
     >
-      <ul className="mx-auto grid h-[var(--nav-height)] w-full max-w-md grid-cols-4">
-        {items.map(({ id, label, icon: Icon }) => {
+      <ul className="mx-auto grid h-[var(--nav-height)] w-full max-w-md grid-cols-5">
+        {items.map(({ id, en, ru, icon: Icon }) => {
           const isActive = active === id
           return (
             <li key={id}>
@@ -32,18 +32,18 @@ export function BottomNav({ active, onChange }: { active: TabId; onChange: (tab:
                 onClick={() => onChange(id)}
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'flex h-full w-full flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors active:scale-95',
+                  'flex h-full w-full flex-col items-center justify-center gap-0.5 px-0.5 text-[9px] font-medium transition-colors active:scale-95',
                   isActive ? 'text-brand' : 'text-muted-foreground',
                 )}
               >
                 <Icon
-                  className="size-[22px]"
+                  className="size-[21px]"
                   strokeWidth={isActive ? 2.1 : 1.7}
                   fill={isActive && (id === 'favorites' || id === 'trends') ? 'currentColor' : 'none'}
                   fillOpacity={id === 'trends' ? 0.15 : 1}
                   aria-hidden="true"
                 />
-                <span>{t(label)}</span>
+                <span className="max-w-full truncate">{locale === 'ru' ? ru : en}</span>
               </button>
             </li>
           )

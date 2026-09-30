@@ -50,10 +50,18 @@ async function readRequest(request: Request) {
   const contentType = request.headers.get('content-type') || ''
   if (contentType.includes('multipart/form-data')) {
     const form = await request.formData()
-    return { form, trendId: String(form.get('trendId') || '') }
+    return {
+      form,
+      trendId: String(form.get('trendId') || ''),
+      generateAudio: String(form.get('generateAudio') ?? 'true') !== 'false',
+    }
   }
   const body = await request.json().catch(() => ({}))
-  return { form: null as FormData | null, trendId: String(body?.trendId || '') }
+  return {
+    form: null as FormData | null,
+    trendId: String(body?.trendId || ''),
+    generateAudio: body?.generateAudio !== false,
+  }
 }
 
 export async function POST(request: Request) {
@@ -61,7 +69,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!hasDatabase()) return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
 
-  const { form, trendId } = await readRequest(request)
+  const { form, trendId, generateAudio } = await readRequest(request)
   if (!trendId) return NextResponse.json({ error: 'trendId is required' }, { status: 400 })
 
   const trendResponse = await supabaseFetch(
@@ -137,6 +145,7 @@ export async function POST(request: Request) {
       input_payload: {
         reference_count: references.length,
         reference_tags: inputSchema.filter((item) => item.kind === 'photo' || !item.kind).map((item) => item.tag).filter(Boolean),
+        generate_audio: generateAudio,
       },
       queued_at: isRunway || isBytePlus ? new Date().toISOString() : null,
     }),
@@ -168,6 +177,7 @@ export async function POST(request: Request) {
         ratio: ratioForBytePlus(trend.aspect_ratio),
         references,
         resolution: '480p',
+        generateAudio,
       })
 
       await supabaseFetch(`generation_history?id=eq.${job.id}`, {
@@ -202,7 +212,7 @@ export async function POST(request: Request) {
         duration: Math.max(4, Math.min(30, Number(trend.duration_seconds || 11))),
         ratio: ratioForRunway(trend.aspect_ratio),
         references,
-        audio: false,
+        audio: generateAudio,
       })
 
       await supabaseFetch(`generation_history?id=eq.${job.id}`, {

@@ -10,6 +10,11 @@ export type HistoryItem = {
   title: string
   status: 'queued' | 'processing' | 'completed' | 'failed'
   createdAt: string
+  resultUrl?: string | null
+  error?: string | null
+  provider?: string | null
+  model?: string | null
+  sourceId?: string | null
 }
 
 type UserContextValue = {

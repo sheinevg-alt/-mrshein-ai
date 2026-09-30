@@ -10,7 +10,7 @@ export async function GET(request: Request) {
   if (!hasDatabase()) return NextResponse.json({ history: [] })
 
   const response = await supabaseFetch(
-    `generation_history?select=id,type,title,status,created_at&telegram_id=eq.${user.id}&order=created_at.desc&limit=50`,
+    `generation_history?select=id,type,title,status,created_at,result_url,error_code,provider,model,source_id&telegram_id=eq.${user.id}&order=created_at.desc&limit=50`,
   )
   if (!response.ok) return NextResponse.json({ history: [] })
   const rows = await response.json()
@@ -21,6 +21,11 @@ export async function GET(request: Request) {
       title: row.title,
       status: row.status,
       createdAt: row.created_at,
+      resultUrl: row.result_url || null,
+      error: row.error_code || null,
+      provider: row.provider || null,
+      model: row.model || null,
+      sourceId: row.source_id || null,
     })),
   })
 }

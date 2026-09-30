@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useId, useRef, useState } from 'react'
-import { Check, FileAudio, ImagePlus, RefreshCw, Sparkles, Trash2, Video } from 'lucide-react'
+import { Check, FileAudio, ImagePlus, RefreshCw, Sparkles, Trash2, Video, Volume2 } from 'lucide-react'
 import { getCategory, getToolTokens, localize, type Tool, type Trend, type TrendInput } from '@/lib/data'
 import { getTelegramInitData, haptics } from '@/lib/telegram'
 import { BottomSheet } from './bottom-sheet'
@@ -50,12 +50,20 @@ export function ToolSheet({ tool, onClose }: { tool: Tool | null; onClose: () =>
   )
 }
 
-export function TrendSheet({ trend, onClose }: { trend: Trend | null; onClose: () => void }) {
+export function TrendSheet({
+  trend,
+  onClose,
+  onGenerationStarted,
+}: {
+  trend: Trend | null
+  onClose: () => void
+  onGenerationStarted?: (jobId: string) => void
+}) {
   const { locale } = useI18n()
   if (!trend) return null
   return (
     <BottomSheet open title={localize(trend.title, locale)} onClose={onClose}>
-      <TrendFlow key={trend.id} trend={trend} />
+      <TrendFlow key={trend.id} trend={trend} onGenerationStarted={onGenerationStarted} />
     </BottomSheet>
   )
 }
@@ -198,7 +206,7 @@ function FileInput({
   )
 }
 
-function TrendFlow({ trend }: { trend: Trend }) {
+function TrendFlow({ trend, onGenerationStarted }: { trend: Trend; onGenerationStarted?: (jobId: string) => void }) {
   const { t, locale } = useI18n()
   const { tokenBalance, refreshUser } = useUserState()
   const [values, setValues] = useState<Record<string, InputValue>>(() => Object.fromEntries(
@@ -207,10 +215,10 @@ function TrendFlow({ trend }: { trend: Trend }) {
       { url: input.defaultAsset!.url, isVideo: false, isAudio: false, name: input.defaultAsset!.name || 'Default', isDefault: true } satisfies FileUpload,
     ]),
   ))
+  const [generateAudio, setGenerateAudio] = useState(true)
   const [submitted, setSubmitted] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [resultMessage, setResultMessage] = useState('')
-  const [resultUrl, setResultUrl] = useState('')
   const title = localize(trend.title, locale)
   const category = localize(getCategory(trend.category).name, locale)
   const canAfford = tokenBalance >= trend.tokens
@@ -219,28 +227,7 @@ function TrendFlow({ trend }: { trend: Trend }) {
   function setValue(id: string, value: InputValue) {
     setSubmitted(false)
     setResultMessage('')
-    setResultUrl('')
     setValues((current) => ({ ...current, [id]: value }))
-  }
-
-  async function pollGeneration(jobId: string, initData: string) {
-    for (let attempt = 0; attempt < 72; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 5000))
-      const response = await fetch(`/api/generate/status?jobId=${encodeURIComponent(jobId)}`, {
-        headers: { 'X-Telegram-Init-Data': initData },
-        cache: 'no-store',
-      })
-      const data = await response.json().catch(() => ({}))
-      if (data?.status === 'completed' && data?.resultUrl) return { ok: true, resultUrl: String(data.resultUrl) }
-      if (data?.status === 'failed') return { ok: false, error: String(data?.error || 'GENERATION_FAILED') }
-      if (typeof data?.progress === 'number') {
-        const percent = Math.max(1, Math.min(99, Math.round(data.progress * 100)))
-        setResultMessage(locale === 'ru' ? `Генерация… ${percent}%` : `Generating… ${percent}%`)
-      } else {
-        setResultMessage(locale === 'ru' ? 'Seedance 2.5 генерирует видео…' : 'Seedance 2.5 is generating your video…')
-      }
-    }
-    return { ok: false, error: 'GENERATION_TIMEOUT' }
   }
 
   async function generate() {
@@ -254,10 +241,10 @@ function TrendFlow({ trend }: { trend: Trend }) {
     setGenerating(true)
     setSubmitted(false)
     setResultMessage(t('generation.starting'))
-    setResultUrl('')
     try {
       const form = new FormData()
       form.append('trendId', trend.id)
+      form.append('generateAudio', generateAudio ? 'true' : 'false')
       for (const input of trend.inputs) {
         const value = values[input.id]
         if (typeof value === 'string') {
@@ -275,43 +262,31 @@ function TrendFlow({ trend }: { trend: Trend }) {
         body: form,
       })
       const data = await response.json().catch(() => ({}))
-      if (response.ok && data?.ok && data?.status === 'completed') {
+
+      if (response.ok && data?.ok && (data?.status === 'processing' || data?.status === 'completed')) {
         haptics.success()
-        setResultMessage(t('generation.success'))
-        setResultUrl(typeof data?.resultUrl === 'string' ? data.resultUrl : '')
-      } else if (response.ok && data?.ok && data?.status === 'processing' && data?.jobId) {
-        setResultMessage(locale === 'ru' ? 'Seedance 2.5 генерирует видео…' : 'Seedance 2.5 is generating your video…')
         await refreshUser()
-        const result = await pollGeneration(String(data.jobId), initData)
-        if (result.ok && result.resultUrl) {
-          haptics.success()
-          setResultMessage(t('generation.success'))
-          setResultUrl(result.resultUrl)
-        } else {
-          haptics.impact('medium')
-          setResultMessage(locale === 'ru' ? 'Генерация не завершилась. Токены возвращены при технической ошибке.' : 'Generation did not complete. Tokens are refunded for technical failures.')
-          setResultUrl('')
-        }
-      } else if (data?.error === 'MOCK_PROVIDER_ERROR') {
+        onGenerationStarted?.(String(data?.jobId || ''))
+        return
+      }
+
+      if (data?.error === 'MOCK_PROVIDER_ERROR') {
         haptics.impact('medium')
         setResultMessage(t('generation.failedRefunded'))
-        setResultUrl('')
       } else if (data?.error === 'INSUFFICIENT_TOKENS') {
         setResultMessage(t('trend.notEnough'))
-        setResultUrl('')
       } else if (data?.error === 'REFERENCE_IMAGE_TOO_LARGE') {
         setResultMessage(locale === 'ru' ? 'Фото слишком большое. Выберите другое фото или уменьшите его размер.' : 'The image is too large. Choose another image or reduce its size.')
-        setResultUrl('')
+      } else if (data?.details) {
+        setResultMessage(locale === 'ru' ? `Ошибка генерации: ${String(data.details).slice(0, 180)}` : `Generation error: ${String(data.details).slice(0, 180)}`)
       } else {
-        setResultMessage(locale === 'ru' && data?.details ? `Ошибка Runway: ${String(data.details).slice(0, 180)}` : t('generation.backendNeeded'))
-        setResultUrl('')
+        setResultMessage(t('generation.backendNeeded'))
       }
       setSubmitted(true)
       await refreshUser()
     } catch {
       setSubmitted(true)
       setResultMessage(t('generation.backendNeeded'))
-      setResultUrl('')
     } finally {
       setGenerating(false)
     }
@@ -378,7 +353,6 @@ function TrendFlow({ trend }: { trend: Trend }) {
                 onClear={input.removable ? () => {
                   setSubmitted(false)
                   setResultMessage('')
-                  setResultUrl('')
                   setValues((current) => { const next = { ...current }; delete next[input.id]; return next })
                 } : undefined}
               />
@@ -389,6 +363,30 @@ function TrendFlow({ trend }: { trend: Trend }) {
         <p className="mt-5 rounded-2xl bg-brand-tint/60 px-4 py-3 text-sm text-muted-foreground">{t('trend.noInputs')}</p>
       )}
 
+      {trend.category === 'video' && (
+        <button
+          type="button"
+          role="switch"
+          aria-checked={generateAudio}
+          onClick={() => {
+            haptics.selection()
+            setGenerateAudio((value) => !value)
+          }}
+          className="mt-5 flex w-full items-center gap-3 rounded-2xl border bg-card px-4 py-3 text-left transition active:scale-[0.99]"
+        >
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-tint text-brand">
+            <Volume2 className="size-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">{locale === 'ru' ? 'Со звуком' : 'Generate with sound'}</span>
+            <span className="block text-xs text-muted-foreground">{locale === 'ru' ? 'Seedance создаст синхронный звук вместе с видео.' : 'Seedance will create synchronized audio with the video.'}</span>
+          </span>
+          <span className={`relative h-7 w-12 shrink-0 rounded-full transition ${generateAudio ? 'bg-brand' : 'bg-muted'}`}>
+            <span className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition ${generateAudio ? 'left-6' : 'left-1'}`} />
+          </span>
+        </button>
+      )}
+
       <button
         type="button"
         onClick={() => void generate()}
@@ -396,21 +394,11 @@ function TrendFlow({ trend }: { trend: Trend }) {
         className="brand-gradient mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-white shadow-[0_10px_24px_-12px_oklch(0.5_0.21_264/0.8)] transition active:scale-[0.98] disabled:opacity-45 disabled:shadow-none"
       >
         <Sparkles className="size-4" aria-hidden="true" />
-        {generating ? (locale === 'ru' ? 'Генерация…' : 'Generating…') : canAfford ? t('trend.generate', { count: trend.tokens }) : t('trend.notEnough')}
+        {generating ? (locale === 'ru' ? 'Запускаю…' : 'Starting…') : canAfford ? t('trend.generate', { count: trend.tokens }) : t('trend.notEnough')}
       </button>
       <p className="mt-3 text-center text-xs text-muted-foreground" aria-live="polite">
-        {submitted || generating ? resultMessage : t('trend.balance', { count: tokenBalance })}
+        {submitted || generating ? resultMessage : (locale === 'ru' ? 'После запуска задача сразу появится в «Мои работы».' : 'After launch, the job will appear in My works immediately.')}
       </p>
-      {resultUrl && (
-        <div className="mt-3 overflow-hidden rounded-2xl border bg-black">
-          {/\.(mp4|webm|mov)(\?|$)/i.test(resultUrl) || resultUrl.includes('cloudfront.net') ? (
-            <video src={resultUrl} controls playsInline className="w-full object-contain" />
-          ) : (
-            // eslint-disable-next-line @next/next/no-img-element -- remote result URL
-            <img src={resultUrl} alt="Generated result" className="w-full object-cover" />
-          )}
-        </div>
-      )}
     </div>
   )
 }

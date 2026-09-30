@@ -33,6 +33,7 @@ export async function createBytePlusSeedance25Task(params: {
   ratio: string
   references: string[]
   resolution?: '480p' | '720p'
+  generateAudio?: boolean
 }) {
   const content = [
     { type: 'text', text: params.promptText },
@@ -48,7 +49,7 @@ export async function createBytePlusSeedance25Task(params: {
     body: JSON.stringify({
       model: BYTEPLUS_MODEL,
       content,
-      generate_audio: false,
+      generate_audio: params.generateAudio !== false,
       resolution: params.resolution || '480p',
       ratio: params.ratio,
       duration: params.duration,

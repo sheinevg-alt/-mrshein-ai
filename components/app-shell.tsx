@@ -12,6 +12,7 @@ import { CreateScreen } from './screens/create-screen'
 import { FavoritesScreen } from './screens/favorites-screen'
 import { ProfileScreen } from './screens/profile-screen'
 import { TrendsScreen } from './screens/trends-screen'
+import { WorksScreen } from './screens/works-screen'
 import { TrendsProvider, useTrends } from './trends-provider'
 import { UserProvider } from './user-provider'
 
@@ -88,6 +89,14 @@ function InnerApp() {
     setActiveTrend(trend)
   }
 
+  function openWorksAfterGeneration() {
+    setActiveTool(null)
+    setActiveTrend(null)
+    setCategory(null)
+    setTab('works')
+    window.scrollTo({ top: 0 })
+  }
+
   return (
     <>
       <div className="mx-auto flex min-h-[var(--app-height)] w-full max-w-md flex-col">
@@ -105,6 +114,7 @@ function InnerApp() {
             ) : (
               <CreateScreen onOpenCategory={openCategory} />
             ))}
+          {tab === 'works' && <WorksScreen />}
           {tab === 'favorites' && (
             <FavoritesScreen onOpenTool={openTool} onOpenTrend={openTrend} onBrowse={() => changeTab('trends')} />
           )}
@@ -114,7 +124,11 @@ function InnerApp() {
 
       <BottomNav active={tab} onChange={changeTab} />
       <ToolSheet tool={activeTool} onClose={() => setActiveTool(null)} />
-      <TrendSheet trend={activeTrend} onClose={() => setActiveTrend(null)} />
+      <TrendSheet
+        trend={activeTrend}
+        onClose={() => setActiveTrend(null)}
+        onGenerationStarted={openWorksAfterGeneration}
+      />
     </>
   )
 }
