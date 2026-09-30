@@ -1,23 +1,19 @@
 'use client'
 
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
-import { Check, ImagePlus, RefreshCw, Sparkles, Trash2, Volume2 } from 'lucide-react'
+import { Check, Clapperboard, ImagePlus, RefreshCw, Sparkles, Trash2, Upload, Video, Volume2 } from 'lucide-react'
 import { getTelegramInitData, haptics } from '@/lib/telegram'
 import { BottomSheet } from './bottom-sheet'
 import { useI18n } from './i18n-provider'
 import { useUserState } from './user-provider'
 
-const TOKEN_COST = 40
-
-type ReferenceUpload = {
-  file: File
-  url: string
-  name: string
-}
+type Resolution = '480p' | '720p' | '1080p'
+type Mode = 'generate' | 'edit'
+type ReferenceUpload = { file: File; url: string; name: string }
+type VideoUpload = { file: File; url: string; name: string; duration?: number }
 
 async function compressImageIfNeeded(file: File): Promise<File> {
   if (!file.type.startsWith('image/') || file.size <= 3_200_000) return file
-
   const sourceUrl = URL.createObjectURL(file)
   try {
     const image = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -26,18 +22,14 @@ async function compressImageIfNeeded(file: File): Promise<File> {
       img.onerror = () => reject(new Error('IMAGE_DECODE_FAILED'))
       img.src = sourceUrl
     })
-
     const maxSide = 2048
     const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight))
-    const width = Math.max(1, Math.round(image.naturalWidth * scale))
-    const height = Math.max(1, Math.round(image.naturalHeight * scale))
     const canvas = document.createElement('canvas')
-    canvas.width = width
-    canvas.height = height
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale))
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale))
     const context = canvas.getContext('2d')
     if (!context) return file
-    context.drawImage(image, 0, 0, width, height)
-
+    context.drawImage(image, 0, 0, canvas.width, canvas.height)
     for (const quality of [0.9, 0.82, 0.74, 0.66]) {
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality))
       if (blob && blob.size <= 3_200_000) {
@@ -53,13 +45,7 @@ async function compressImageIfNeeded(file: File): Promise<File> {
   }
 }
 
-function ReferenceSlot({
-  index,
-  value,
-  disabled,
-  onChange,
-  onClear,
-}: {
+function ReferenceSlot({ index, value, disabled, onChange, onClear }: {
   index: number
   value?: ReferenceUpload
   disabled?: boolean
@@ -70,9 +56,7 @@ function ReferenceSlot({
   const inputRef = useRef<HTMLInputElement>(null)
   const urlRef = useRef<string | null>(null)
 
-  useEffect(() => () => {
-    if (urlRef.current) URL.revokeObjectURL(urlRef.current)
-  }, [])
+  useEffect(() => () => { if (urlRef.current) URL.revokeObjectURL(urlRef.current) }, [])
 
   async function handleFile(event: ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0]
@@ -90,106 +74,106 @@ function ReferenceSlot({
     <div className={`rounded-2xl border p-3 ${disabled ? 'opacity-45' : 'bg-card'}`}>
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold">@Image{index}</p>
-          <p className="text-[11px] text-muted-foreground">
-            {locale === 'ru' ? `Референс ${index}` : `Reference ${index}`}
-          </p>
+          <p className="text-sm font-semibold">@image{index}</p>
+          <p className="text-[11px] text-muted-foreground">{locale === 'ru' ? `Референс ${index}` : `Reference ${index}`}</p>
         </div>
-        {value && (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand">
-            <Check className="size-3.5" />{locale === 'ru' ? 'Добавлен' : 'Added'}
-          </span>
-        )}
+        {value && <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand"><Check className="size-3.5" />{locale === 'ru' ? 'Добавлен' : 'Added'}</span>}
       </div>
-
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        disabled={disabled}
-        onChange={(event) => void handleFile(event)}
-        className="sr-only"
-      />
-
+      <input ref={inputRef} type="file" accept="image/*" disabled={disabled} onChange={(event) => void handleFile(event)} className="sr-only" />
       {value ? (
         <div className="mt-3 flex items-center gap-3">
           <img src={value.url} alt={`Reference ${index}`} className="size-16 rounded-xl object-cover" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-xs text-muted-foreground">{value.name}</p>
             <div className="mt-2 flex gap-2">
-              <button
-                type="button"
-                onClick={() => inputRef.current?.click()}
-                className="flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium"
-              >
-                <RefreshCw className="size-3.5" />{locale === 'ru' ? 'Заменить' : 'Change'}
-              </button>
-              <button
-                type="button"
-                onClick={onClear}
-                className="flex size-8 items-center justify-center rounded-full border text-muted-foreground"
-                aria-label={locale === 'ru' ? 'Удалить' : 'Remove'}
-              >
-                <Trash2 className="size-3.5" />
-              </button>
+              <button type="button" onClick={() => inputRef.current?.click()} className="flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium"><RefreshCw className="size-3.5" />{locale === 'ru' ? 'Заменить' : 'Change'}</button>
+              <button type="button" onClick={onClear} className="flex size-8 items-center justify-center rounded-full border text-muted-foreground" aria-label={locale === 'ru' ? 'Удалить' : 'Remove'}><Trash2 className="size-3.5" /></button>
             </div>
           </div>
         </div>
       ) : (
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => inputRef.current?.click()}
-          className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand/25 bg-brand-tint/40 text-sm font-medium text-brand disabled:cursor-not-allowed"
-        >
-          <ImagePlus className="size-4" />
-          {disabled
-            ? (locale === 'ru' ? 'Сначала добавьте предыдущий' : 'Add the previous reference first')
-            : (locale === 'ru' ? 'Добавить фото' : 'Add image')}
+        <button type="button" disabled={disabled} onClick={() => inputRef.current?.click()} className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand/25 bg-brand-tint/40 text-sm font-medium text-brand disabled:cursor-not-allowed">
+          <ImagePlus className="size-4" />{disabled ? (locale === 'ru' ? 'Сначала добавьте предыдущий' : 'Add the previous reference first') : (locale === 'ru' ? 'Добавить фото' : 'Add image')}
         </button>
       )}
     </div>
   )
 }
 
-export function SeedanceSheet({
-  open,
-  onClose,
-  onGenerationStarted,
-}: {
+export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
   open: boolean
   onClose: () => void
   onGenerationStarted?: (jobId: string) => void
 }) {
   const { locale } = useI18n()
-  const { tokenBalance, refreshUser } = useUserState()
+  const { refreshUser } = useUserState()
+  const videoInputRef = useRef<HTMLInputElement>(null)
+  const videoUrlRef = useRef<string | null>(null)
+  const [mode, setMode] = useState<Mode>('generate')
   const [prompt, setPrompt] = useState('')
   const [references, setReferences] = useState<Array<ReferenceUpload | undefined>>([undefined, undefined, undefined])
+  const [sourceVideo, setSourceVideo] = useState<VideoUpload | undefined>()
   const [duration, setDuration] = useState(12)
-  const [resolution, setResolution] = useState<'480p' | '720p'>('480p')
+  const [resolution, setResolution] = useState<Resolution>('480p')
   const [generateAudio, setGenerateAudio] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [message, setMessage] = useState('')
 
+  useEffect(() => () => { if (videoUrlRef.current) URL.revokeObjectURL(videoUrlRef.current) }, [])
   if (!open) return null
 
-  const canAfford = tokenBalance >= TOKEN_COST
-  const ready = prompt.trim().length >= 5 && canAfford && !generating
+  const ready = prompt.trim().length >= 5 && !generating && (mode !== 'edit' || Boolean(sourceVideo))
 
   function setReference(index: number, upload: ReferenceUpload) {
-    setReferences((current) => {
-      const next = [...current]
-      next[index] = upload
-      return next
-    })
+    setReferences((current) => { const next = [...current]; next[index] = upload; return next })
   }
 
   function clearReference(index: number) {
-    setReferences((current) => {
-      const next = [...current]
-      for (let i = index; i < next.length; i += 1) next[i] = undefined
-      return next
+    setReferences((current) => { const next = [...current]; for (let i = index; i < next.length; i += 1) next[i] = undefined; return next })
+  }
+
+  async function handleVideo(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!['video/mp4', 'video/quicktime'].includes(file.type)) {
+      setMessage(locale === 'ru' ? 'Нужен MP4 или MOV.' : 'Use an MP4 or MOV file.')
+      return
+    }
+    if (file.size > 100 * 1024 * 1024) {
+      setMessage(locale === 'ru' ? 'Видео больше 100 МБ.' : 'Video is larger than 100 MB.')
+      return
+    }
+    if (videoUrlRef.current) URL.revokeObjectURL(videoUrlRef.current)
+    const url = URL.createObjectURL(file)
+    videoUrlRef.current = url
+    const durationValue = await new Promise<number | undefined>((resolve) => {
+      const video = document.createElement('video')
+      video.preload = 'metadata'
+      video.onloadedmetadata = () => resolve(Number.isFinite(video.duration) ? video.duration : undefined)
+      video.onerror = () => resolve(undefined)
+      video.src = url
     })
+    setSourceVideo({ file, url, name: file.name, duration: durationValue })
+    setMessage('')
+    event.target.value = ''
+  }
+
+  async function uploadSourceVideo(initData: string) {
+    if (!sourceVideo) throw new Error('SOURCE_VIDEO_REQUIRED')
+    const signResponse = await fetch('/api/uploads/sign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData },
+      body: JSON.stringify({ contentType: sourceVideo.file.type, size: sourceVideo.file.size }),
+    })
+    const signed = await signResponse.json().catch(() => ({}))
+    if (!signResponse.ok || !signed?.signedUrl || !signed?.path) throw new Error(String(signed?.details || signed?.error || 'UPLOAD_SIGN_FAILED'))
+
+    const body = new FormData()
+    body.append('cacheControl', '3600')
+    body.append('', sourceVideo.file)
+    const uploadResponse = await fetch(String(signed.signedUrl), { method: 'PUT', headers: { 'x-upsert': 'false' }, body })
+    if (!uploadResponse.ok) throw new Error(`VIDEO_UPLOAD_FAILED_${uploadResponse.status}`)
+    return String(signed.path)
   }
 
   async function generate() {
@@ -198,47 +182,42 @@ export function SeedanceSheet({
       setMessage(locale === 'ru' ? 'Откройте инструмент внутри Telegram Mini App.' : 'Open this tool inside the Telegram Mini App.')
       return
     }
-    if (!prompt.trim()) return
+    if (!ready) return
+
+    if (mode === 'edit' && sourceVideo?.duration && (sourceVideo.duration < 4 || sourceVideo.duration > 30)) {
+      setMessage(locale === 'ru' ? 'Для Video Edit исходный ролик должен быть от 4 до 30 секунд.' : 'Video Edit source must be 4–30 seconds long.')
+      return
+    }
 
     setGenerating(true)
-    setMessage(locale === 'ru' ? 'Запускаю Seedance 2.5…' : 'Starting Seedance 2.5…')
+    setMessage(mode === 'edit' ? (locale === 'ru' ? 'Загружаю @video1 и запускаю Video Edit…' : 'Uploading @video1 and starting Video Edit…') : (locale === 'ru' ? 'Запускаю Seedance 2.5…' : 'Starting Seedance 2.5…'))
 
     try {
+      const sourceVideoPath = mode === 'edit' ? await uploadSourceVideo(initData) : ''
       const form = new FormData()
+      form.append('mode', mode)
       form.append('prompt', prompt.trim())
       form.append('duration', String(duration))
       form.append('resolution', resolution)
       form.append('generateAudio', generateAudio ? 'true' : 'false')
-      references.forEach((reference, index) => {
-        if (reference?.file) form.append(`reference${index + 1}`, reference.file, reference.file.name)
-      })
+      if (sourceVideoPath) form.append('sourceVideoPath', sourceVideoPath)
+      references.forEach((reference, index) => { if (reference?.file) form.append(`reference${index + 1}`, reference.file, reference.file.name) })
 
-      const response = await fetch('/api/generate/direct', {
-        method: 'POST',
-        headers: { 'X-Telegram-Init-Data': initData },
-        body: form,
-      })
+      const response = await fetch('/api/generate/direct', { method: 'POST', headers: { 'X-Telegram-Init-Data': initData }, body: form })
       const data = await response.json().catch(() => ({}))
-
       if (response.ok && data?.ok && data?.jobId) {
         haptics.success()
         await refreshUser()
         onGenerationStarted?.(String(data.jobId))
         return
       }
-
-      if (data?.error === 'INSUFFICIENT_TOKENS') {
-        setMessage(locale === 'ru' ? 'Недостаточно токенов приложения для теста.' : 'Not enough app tokens for this test.')
-      } else if (data?.error === 'REFERENCE_IMAGE_TOO_LARGE') {
-        setMessage(locale === 'ru' ? 'Одно из фото слишком большое. Выберите другое фото.' : 'One reference image is too large.')
-      } else if (data?.details) {
-        setMessage(`${locale === 'ru' ? 'Ошибка' : 'Error'}: ${String(data.details).slice(0, 180)}`)
-      } else {
-        setMessage(locale === 'ru' ? 'Не удалось запустить генерацию.' : 'Could not start generation.')
-      }
+      if (data?.error === 'REFERENCE_IMAGE_TOO_LARGE') setMessage(locale === 'ru' ? 'Одно из фото слишком большое.' : 'One reference image is too large.')
+      else if (data?.details) setMessage(`${locale === 'ru' ? 'Ошибка' : 'Error'}: ${String(data.details).slice(0, 220)}`)
+      else setMessage(locale === 'ru' ? 'Не удалось запустить генерацию.' : 'Could not start generation.')
       await refreshUser()
-    } catch {
-      setMessage(locale === 'ru' ? 'Не удалось связаться с сервером.' : 'Could not reach the server.')
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'UNKNOWN_ERROR'
+      setMessage(`${locale === 'ru' ? 'Ошибка' : 'Error'}: ${messageText.slice(0, 220)}`)
     } finally {
       setGenerating(false)
     }
@@ -246,108 +225,48 @@ export function SeedanceSheet({
 
   return (
     <BottomSheet open title="Seedance 2.5" onClose={onClose}>
-      <div className="rounded-2xl border border-brand/20 bg-brand-tint/60 px-4 py-3">
-        <p className="text-sm font-semibold text-brand">{locale === 'ru' ? 'Прямой тест через BytePlus API' : 'Direct BytePlus API test'}</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {locale === 'ru'
-            ? 'Промпт отправляется напрямую в Seedance 2.5. Референсы идут по порядку: @Image1, @Image2, @Image3.'
-            : 'Your prompt goes directly to Seedance 2.5. References map in order to @Image1, @Image2 and @Image3.'}
-        </p>
+      <div className="grid grid-cols-2 gap-2 rounded-2xl bg-muted/60 p-1">
+        <button type="button" onClick={() => { setMode('generate'); setMessage('') }} className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition ${mode === 'generate' ? 'bg-card text-brand shadow-sm' : 'text-muted-foreground'}`}><Sparkles className="size-4" />{locale === 'ru' ? 'Создать' : 'Generate'}</button>
+        <button type="button" onClick={() => { setMode('edit'); setMessage('') }} className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition ${mode === 'edit' ? 'bg-card text-brand shadow-sm' : 'text-muted-foreground'}`}><Clapperboard className="size-4" />Video Edit</button>
       </div>
 
-      <label htmlFor="seedance-prompt" className="mt-5 block text-sm font-semibold">
-        {locale === 'ru' ? 'Промпт' : 'Prompt'}
-      </label>
-      <textarea
-        id="seedance-prompt"
-        rows={8}
-        value={prompt}
-        onChange={(event) => setPrompt(event.target.value)}
-        placeholder={locale === 'ru'
-          ? 'Вставьте промпт. Для фото используйте @Image1, @Image2, @Image3…'
-          : 'Paste a prompt. Refer to uploaded images as @Image1, @Image2, @Image3…'}
-        className="mt-2 w-full resize-y rounded-2xl border bg-card p-4 text-sm leading-relaxed"
-      />
+      {mode === 'edit' && (
+        <div className="mt-4 rounded-2xl border border-brand/20 bg-brand-tint/60 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div><p className="text-sm font-semibold">@video1 · {locale === 'ru' ? 'Исходное видео' : 'Source video'}</p><p className="mt-0.5 text-xs text-muted-foreground">MP4 / MOV · 4–30 sec</p></div>
+            <Video className="size-5 text-brand" />
+          </div>
+          <input ref={videoInputRef} type="file" accept="video/mp4,video/quicktime,.mp4,.mov" onChange={(event) => void handleVideo(event)} className="sr-only" />
+          {sourceVideo ? (
+            <div className="mt-3 overflow-hidden rounded-xl border bg-black">
+              <video src={sourceVideo.url} controls muted playsInline className="max-h-64 w-full object-contain" />
+              <div className="flex items-center justify-between gap-2 bg-card px-3 py-2"><p className="min-w-0 truncate text-xs text-muted-foreground">{sourceVideo.name}{sourceVideo.duration ? ` · ${sourceVideo.duration.toFixed(1)}s` : ''}</p><button type="button" onClick={() => videoInputRef.current?.click()} className="shrink-0 text-xs font-semibold text-brand">{locale === 'ru' ? 'Заменить' : 'Change'}</button></div>
+            </div>
+          ) : (
+            <button type="button" onClick={() => videoInputRef.current?.click()} className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand/25 bg-card text-sm font-semibold text-brand"><Upload className="size-4" />{locale === 'ru' ? 'Загрузить @video1' : 'Upload @video1'}</button>
+          )}
+        </div>
+      )}
+
+      <label htmlFor="seedance-prompt" className="mt-5 block text-sm font-semibold">{locale === 'ru' ? 'Промпт' : 'Prompt'}</label>
+      <textarea id="seedance-prompt" rows={9} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder={mode === 'edit' ? (locale === 'ru' ? 'Например: Edit @video1. Replace the seated person with @image1 and the vehicle with @image2…' : 'Example: Edit @video1. Replace the seated person with @image1 and the vehicle with @image2…') : (locale === 'ru' ? 'Вставьте промпт. Используйте @image1, @image2…' : 'Paste a prompt. Use @image1, @image2…')} className="mt-2 w-full resize-y rounded-2xl border bg-card p-4 text-sm leading-relaxed" />
 
       <div className="mt-5 grid gap-3">
-        {references.map((reference, index) => (
-          <ReferenceSlot
-            key={index}
-            index={index + 1}
-            value={reference}
-            disabled={index > 0 && !references[index - 1]}
-            onChange={(upload) => setReference(index, upload)}
-            onClear={() => clearReference(index)}
-          />
-        ))}
+        {references.map((reference, index) => <ReferenceSlot key={index} index={index + 1} value={reference} disabled={index > 0 && !references[index - 1]} onChange={(upload) => setReference(index, upload)} onClear={() => clearReference(index)} />)}
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-3">
-        <label className="rounded-2xl border bg-card p-3 text-xs text-muted-foreground">
-          <span className="block font-medium">{locale === 'ru' ? 'Длительность' : 'Duration'}</span>
-          <select
-            value={duration}
-            onChange={(event) => setDuration(Number(event.target.value))}
-            className="mt-2 h-10 w-full rounded-xl border bg-background px-3 text-sm font-semibold text-foreground"
-          >
-            {[8, 10, 12, 15, 20, 30].map((seconds) => <option key={seconds} value={seconds}>{seconds} сек</option>)}
-          </select>
-        </label>
-
-        <label className="rounded-2xl border bg-card p-3 text-xs text-muted-foreground">
-          <span className="block font-medium">{locale === 'ru' ? 'Качество' : 'Quality'}</span>
-          <select
-            value={resolution}
-            onChange={(event) => setResolution(event.target.value === '720p' ? '720p' : '480p')}
-            className="mt-2 h-10 w-full rounded-xl border bg-background px-3 text-sm font-semibold text-foreground"
-          >
-            <option value="480p">480p · test</option>
-            <option value="720p">720p</option>
-          </select>
-        </label>
+      <div className={`mt-5 grid gap-3 ${mode === 'edit' ? 'grid-cols-1' : 'grid-cols-2'}`}>
+        {mode !== 'edit' && (
+          <label className="rounded-2xl border bg-card p-3 text-xs text-muted-foreground"><span className="block font-medium">{locale === 'ru' ? 'Длительность' : 'Duration'}</span><select value={duration} onChange={(event) => setDuration(Number(event.target.value))} className="mt-2 h-10 w-full rounded-xl border bg-background px-3 text-sm font-semibold text-foreground">{[8, 10, 12, 15, 20, 30].map((seconds) => <option key={seconds} value={seconds}>{seconds} сек</option>)}</select></label>
+        )}
+        <label className="rounded-2xl border bg-card p-3 text-xs text-muted-foreground"><span className="block font-medium">{locale === 'ru' ? 'Качество' : 'Quality'}</span><select value={resolution} onChange={(event) => setResolution((['480p', '720p', '1080p'].includes(event.target.value) ? event.target.value : '480p') as Resolution)} className="mt-2 h-10 w-full rounded-xl border bg-background px-3 text-sm font-semibold text-foreground"><option value="480p">480p · test</option><option value="720p">720p</option><option value="1080p">1080p</option></select></label>
       </div>
+      {mode === 'edit' && <p className="mt-2 text-xs text-muted-foreground">{locale === 'ru' ? 'В Video Edit длительность и формат кадра автоматически сохраняются из @video1.' : 'Video Edit automatically preserves @video1 duration and aspect ratio.'}</p>}
 
-      <button
-        type="button"
-        role="switch"
-        aria-checked={generateAudio}
-        onClick={() => {
-          haptics.selection()
-          setGenerateAudio((value) => !value)
-        }}
-        className="mt-4 flex w-full items-center gap-3 rounded-2xl border bg-card px-4 py-3 text-left"
-      >
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-tint text-brand">
-          <Volume2 className="size-5" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold">{locale === 'ru' ? 'Со звуком' : 'Generate with sound'}</span>
-          <span className="block text-xs text-muted-foreground">
-            {locale === 'ru' ? 'Синхронный звук Seedance включён.' : 'Seedance synchronized audio is enabled.'}
-          </span>
-        </span>
-        <span className={`relative h-7 w-12 shrink-0 rounded-full transition ${generateAudio ? 'bg-brand' : 'bg-muted'}`}>
-          <span className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition ${generateAudio ? 'left-6' : 'left-1'}`} />
-        </span>
-      </button>
+      <button type="button" role="switch" aria-checked={generateAudio} onClick={() => { haptics.selection(); setGenerateAudio((value) => !value) }} className="mt-4 flex w-full items-center gap-3 rounded-2xl border bg-card px-4 py-3 text-left"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-tint text-brand"><Volume2 className="size-5" /></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{locale === 'ru' ? 'Со звуком' : 'With sound'}</span><span className="block text-xs text-muted-foreground">{mode === 'edit' ? (locale === 'ru' ? 'Сохраняем и синхронизируем звук исходного видео по промпту.' : 'Keep/sync source audio according to the edit prompt.') : (locale === 'ru' ? 'Синхронный звук Seedance.' : 'Seedance synchronized audio.')}</span></span><span className={`relative h-7 w-12 shrink-0 rounded-full transition ${generateAudio ? 'bg-brand' : 'bg-muted'}`}><span className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition ${generateAudio ? 'left-6' : 'left-1'}`} /></span></button>
 
-      <button
-        type="button"
-        onClick={() => void generate()}
-        disabled={!ready}
-        className="brand-gradient mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-white transition active:scale-[0.98] disabled:opacity-45"
-      >
-        <Sparkles className="size-4" />
-        {generating
-          ? (locale === 'ru' ? 'Запускаю…' : 'Starting…')
-          : (locale === 'ru' ? `Создать видео · ${TOKEN_COST} токенов` : `Generate video · ${TOKEN_COST} tokens`)}
-      </button>
-
-      <p className="mt-3 text-center text-xs text-muted-foreground" aria-live="polite">
-        {message || (canAfford
-          ? (locale === 'ru' ? 'Для тестов камеры лучше начинать с 480p.' : 'Use 480p first while testing camera motion.')
-          : (locale === 'ru' ? 'Недостаточно токенов приложения.' : 'Not enough app tokens.'))}
-      </p>
+      <button type="button" onClick={() => void generate()} disabled={!ready} className="brand-gradient mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-white transition active:scale-[0.98] disabled:opacity-45">{generating ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}{generating ? (locale === 'ru' ? 'Запускаю…' : 'Starting…') : mode === 'edit' ? (locale === 'ru' ? 'Запустить Video Edit' : 'Start Video Edit') : (locale === 'ru' ? 'Создать видео' : 'Generate video')}</button>
+      <p className="mt-3 text-center text-xs text-muted-foreground" aria-live="polite">{message || (locale === 'ru' ? 'Для первого теста оставь 480p.' : 'Use 480p for the first test.')}</p>
     </BottomSheet>
   )
 }

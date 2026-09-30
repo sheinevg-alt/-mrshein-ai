@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { NextResponse } from 'next/server'
-import { createBytePlusSeedance25Task } from '@/lib/server/byteplus'
+import { createBytePlusSeedance25Task, type BytePlusResolution } from '@/lib/server/byteplus'
 import { createSeedance25Task } from '@/lib/server/runway'
 import { hasDatabase, supabaseFetch } from '@/lib/server/supabase'
 import { verifyTelegramInitData } from '@/lib/server/telegram-auth'
@@ -54,6 +54,7 @@ async function readRequest(request: Request) {
       form,
       trendId: String(form.get('trendId') || ''),
       generateAudio: String(form.get('generateAudio') ?? 'true') !== 'false',
+      resolution: String(form.get('resolution') || '480p'),
     }
   }
   const body = await request.json().catch(() => ({}))
@@ -61,6 +62,7 @@ async function readRequest(request: Request) {
     form: null as FormData | null,
     trendId: String(body?.trendId || ''),
     generateAudio: body?.generateAudio !== false,
+    resolution: String(body?.resolution || '480p'),
   }
 }
 
@@ -69,7 +71,8 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!hasDatabase()) return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
 
-  const { form, trendId, generateAudio } = await readRequest(request)
+  const { form, trendId, generateAudio, resolution: requestedResolution } = await readRequest(request)
+  const resolution: BytePlusResolution = requestedResolution === '1080p' ? '1080p' : requestedResolution === '720p' ? '720p' : '480p'
   if (!trendId) return NextResponse.json({ error: 'trendId is required' }, { status: 400 })
 
   const trendResponse = await supabaseFetch(
@@ -146,6 +149,7 @@ export async function POST(request: Request) {
         reference_count: references.length,
         reference_tags: inputSchema.filter((item) => item.kind === 'photo' || !item.kind).map((item) => item.tag).filter(Boolean),
         generate_audio: generateAudio,
+        resolution,
       },
       queued_at: isRunway || isBytePlus ? new Date().toISOString() : null,
     }),
@@ -176,7 +180,7 @@ export async function POST(request: Request) {
         duration: Math.max(4, Math.min(30, Number(trend.duration_seconds || 11))),
         ratio: ratioForBytePlus(trend.aspect_ratio),
         references,
-        resolution: '480p',
+        resolution,
         generateAudio,
       })
 
@@ -185,7 +189,7 @@ export async function POST(request: Request) {
         body: JSON.stringify({
           status: 'processing',
           processing_at: new Date().toISOString(),
-          result_metadata: { byteplus_task_id: task.id, byteplus_test_resolution: '480p' },
+          result_metadata: { byteplus_task_id: task.id, byteplus_test_resolution: resolution },
           updated_at: new Date().toISOString(),
         }),
       })

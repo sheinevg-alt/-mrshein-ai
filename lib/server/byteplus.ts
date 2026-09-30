@@ -3,6 +3,8 @@ import 'server-only'
 const BYTEPLUS_BASE = 'https://ark.ap-southeast.bytepluses.com/api/v3'
 const BYTEPLUS_MODEL = 'dreamina-seedance-2-5-260628'
 
+export type BytePlusResolution = '480p' | '720p' | '1080p'
+
 function apiKey() {
   const key = process.env.ARK_API_KEY
   if (!key) throw new Error('BYTEPLUS_API_NOT_CONFIGURED')
@@ -27,36 +29,10 @@ export type BytePlusTask = {
   duration?: number
 }
 
-export async function createBytePlusSeedance25Task(params: {
-  promptText: string
-  duration: number
-  ratio: string
-  references: string[]
-  resolution?: '480p' | '720p'
-  generateAudio?: boolean
-}) {
-  const content = [
-    { type: 'text', text: params.promptText },
-    ...params.references.map((url) => ({
-      type: 'image_url',
-      image_url: { url },
-      role: 'reference_image',
-    })),
-  ]
-
+async function createTask(body: Record<string, unknown>) {
   const response = await bytePlusFetch('/contents/generations/tasks', {
     method: 'POST',
-    body: JSON.stringify({
-      model: BYTEPLUS_MODEL,
-      content,
-      generate_audio: params.generateAudio !== false,
-      resolution: params.resolution || '480p',
-      ratio: params.ratio,
-      duration: params.duration,
-      omni_reference_task_type: 'reference',
-      watermark: false,
-      output_format: 'mp4',
-    }),
+    body: JSON.stringify(body),
   })
 
   const text = await response.text()
@@ -77,6 +53,70 @@ export async function createBytePlusSeedance25Task(params: {
   }
 
   return data as unknown as BytePlusTask
+}
+
+export async function createBytePlusSeedance25Task(params: {
+  promptText: string
+  duration: number
+  ratio: string
+  references: string[]
+  resolution?: BytePlusResolution
+  generateAudio?: boolean
+}) {
+  const content = [
+    { type: 'text', text: params.promptText },
+    ...params.references.map((url) => ({
+      type: 'image_url',
+      image_url: { url },
+      role: 'reference_image',
+    })),
+  ]
+
+  return createTask({
+    model: BYTEPLUS_MODEL,
+    content,
+    generate_audio: params.generateAudio !== false,
+    resolution: params.resolution || '480p',
+    ratio: params.ratio,
+    duration: params.duration,
+    omni_reference_task_type: 'reference',
+    watermark: false,
+    output_format: 'mp4',
+  })
+}
+
+export async function createBytePlusSeedance25EditTask(params: {
+  promptText: string
+  videoUrl: string
+  references: string[]
+  resolution?: BytePlusResolution
+  generateAudio?: boolean
+}) {
+  const content = [
+    { type: 'text', text: params.promptText },
+    {
+      type: 'video_url',
+      video_url: { url: params.videoUrl },
+      role: 'reference_video',
+    },
+    ...params.references.map((url) => ({
+      type: 'image_url',
+      image_url: { url },
+      role: 'reference_image',
+    })),
+  ]
+
+  return createTask({
+    model: BYTEPLUS_MODEL,
+    content,
+    generate_audio: params.generateAudio !== false,
+    resolution: params.resolution || '480p',
+    ratio: 'adaptive',
+    duration: -1,
+    omni_reference_task_type: 'edit',
+    watermark: false,
+    output_format: 'mp4',
+  })
 }
 
 export async function getBytePlusTask(id: string): Promise<BytePlusTask> {

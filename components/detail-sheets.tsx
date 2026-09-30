@@ -216,6 +216,7 @@ function TrendFlow({ trend, onGenerationStarted }: { trend: Trend; onGenerationS
     ]),
   ))
   const [generateAudio, setGenerateAudio] = useState(true)
+  const [resolution, setResolution] = useState<'480p' | '720p' | '1080p'>('480p')
   const [submitted, setSubmitted] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [resultMessage, setResultMessage] = useState('')
@@ -245,6 +246,7 @@ function TrendFlow({ trend, onGenerationStarted }: { trend: Trend; onGenerationS
       const form = new FormData()
       form.append('trendId', trend.id)
       form.append('generateAudio', generateAudio ? 'true' : 'false')
+      form.append('resolution', resolution)
       for (const input of trend.inputs) {
         const value = values[input.id]
         if (typeof value === 'string') {
@@ -364,7 +366,20 @@ function TrendFlow({ trend, onGenerationStarted }: { trend: Trend; onGenerationS
       )}
 
       {trend.category === 'video' && (
-        <button
+        <>
+          <label className="mt-5 block rounded-2xl border bg-card p-3 text-xs text-muted-foreground">
+            <span className="block font-medium">{locale === 'ru' ? 'Качество' : 'Quality'}</span>
+            <select
+              value={resolution}
+              onChange={(event) => setResolution((['480p', '720p', '1080p'].includes(event.target.value) ? event.target.value : '480p') as '480p' | '720p' | '1080p')}
+              className="mt-2 h-10 w-full rounded-xl border bg-background px-3 text-sm font-semibold text-foreground"
+            >
+              <option value="480p">480p</option>
+              <option value="720p">720p</option>
+              <option value="1080p">1080p</option>
+            </select>
+          </label>
+          <button
           type="button"
           role="switch"
           aria-checked={generateAudio}
@@ -384,7 +399,8 @@ function TrendFlow({ trend, onGenerationStarted }: { trend: Trend; onGenerationS
           <span className={`relative h-7 w-12 shrink-0 rounded-full transition ${generateAudio ? 'bg-brand' : 'bg-muted'}`}>
             <span className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition ${generateAudio ? 'left-6' : 'left-1'}`} />
           </span>
-        </button>
+          </button>
+        </>
       )}
 
       <button
