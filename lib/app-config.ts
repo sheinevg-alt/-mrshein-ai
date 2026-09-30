@@ -1,0 +1,14 @@
+export const APP_CONFIG = {
+  name: 'Shein AI',
+  version: '0.4.0',
+  defaultTokenBalance: 120,
+  supportTelegram: 'https://t.me/MrShein_AI',
+  website: 'https://MrShein.ru',
+  appUrl: process.env.NEXT_PUBLIC_APP_URL || 'https://mrsheinai.vercel.app',
+} as const
+
+export const STORAGE_KEYS = {
+  locale: 'mrshein.locale',
+  favorites: 'mrshein.favorites',
+  notifications: 'mrshein.notifications',
+} as const

@@ -1,0 +1,201 @@
+-- MrShein AI MVP database schema
+-- Run once in Supabase SQL Editor.
+
+create table if not exists public.trends (
+  id text primary key,
+  title_en text not null,
+  title_ru text,
+  category text not null check (category in ('video','image','audio','text')),
+  image_url text not null,
+  uses_count text not null default 'New',
+  token_cost integer not null default 0 check (token_cost >= 0),
+  input_schema jsonb not null default '[]'::jsonb,
+  provider text,
+  model text,
+  hidden_prompt text,
+  published boolean not null default false,
+  sort_order integer not null default 100,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.bot_users (
+  chat_id bigint primary key,
+  telegram_id bigint not null,
+  first_name text,
+  last_name text,
+  username text,
+  language_code text,
+  notifications_enabled boolean not null default true,
+  last_seen_at timestamptz not null default now()
+);
+
+create index if not exists bot_users_telegram_id_idx on public.bot_users(telegram_id);
+
+create table if not exists public.app_users (
+  telegram_id bigint primary key,
+  first_name text,
+  last_name text,
+  username text,
+  language_code text,
+  token_balance integer not null default 120 check (token_balance >= 0),
+  created_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now()
+);
+
+create table if not exists public.generation_history (
+  id uuid primary key default gen_random_uuid(),
+  telegram_id bigint not null,
+  type text not null check (type in ('trend','tool')),
+  source_id text,
+  title text not null,
+  status text not null default 'queued' check (status in ('queued','processing','completed','failed')),
+  token_cost integer not null default 0,
+  result_url text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists generation_history_user_idx on public.generation_history(telegram_id, created_at desc);
+
+-- Public preview images uploaded from the private admin API.
+insert into storage.buckets (id, name, public)
+values ('trend-previews', 'trend-previews', true)
+on conflict (id) do update set public = true;
+
+-- RLS can stay enabled because the app uses the server-only service-role key.
+alter table public.trends enable row level security;
+alter table public.bot_users enable row level security;
+alter table public.app_users enable row level security;
+alter table public.generation_history enable row level security;
+
+-- Knowledge base used by Help & Support.
+create table if not exists public.knowledge_articles (
+  id uuid primary key default gen_random_uuid(),
+  slug text unique not null,
+  category text not null check (category in ('getting-started','generation','tokens','account')),
+  title_en text not null,
+  title_ru text,
+  body_en text not null,
+  body_ru text,
+  published boolean not null default true,
+  sort_order integer not null default 100,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.support_tickets (
+  id uuid primary key default gen_random_uuid(),
+  telegram_id bigint not null,
+  first_name text,
+  last_name text,
+  username text,
+  language_code text,
+  topic text not null default 'other',
+  message text not null,
+  status text not null default 'open' check (status in ('open','answered','closed')),
+  admin_reply text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists support_tickets_user_idx on public.support_tickets(telegram_id, created_at desc);
+create index if not exists support_tickets_status_idx on public.support_tickets(status, created_at desc);
+
+create table if not exists public.token_ledger (
+  id uuid primary key default gen_random_uuid(),
+  telegram_id bigint not null,
+  amount integer not null,
+  event_type text not null check (event_type in ('credit','generation','refund','adjustment')),
+  reference text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists token_ledger_user_idx on public.token_ledger(telegram_id, created_at desc);
+
+alter table public.generation_history add column if not exists provider text;
+alter table public.generation_history add column if not exists model text;
+alter table public.generation_history add column if not exists error_code text;
+
+-- Atomic Token debit. Service-role calls this server-side only.
+create or replace function public.reserve_tokens(
+  p_telegram_id bigint,
+  p_amount integer,
+  p_reference text default null
+)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_balance integer;
+begin
+  if p_amount < 0 then
+    raise exception 'INVALID_AMOUNT';
+  end if;
+
+  update public.app_users
+  set token_balance = token_balance - p_amount,
+      last_seen_at = now()
+  where telegram_id = p_telegram_id
+    and token_balance >= p_amount
+  returning token_balance into v_balance;
+
+  if v_balance is null then
+    raise exception 'INSUFFICIENT_TOKENS';
+  end if;
+
+  insert into public.token_ledger(telegram_id, amount, event_type, reference)
+  values (p_telegram_id, -p_amount, 'generation', p_reference);
+
+  return v_balance;
+end;
+$$;
+
+create or replace function public.refund_tokens(
+  p_telegram_id bigint,
+  p_amount integer,
+  p_reference text default null
+)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_balance integer;
+begin
+  if p_amount < 0 then
+    raise exception 'INVALID_AMOUNT';
+  end if;
+
+  update public.app_users
+  set token_balance = token_balance + p_amount,
+      last_seen_at = now()
+  where telegram_id = p_telegram_id
+  returning token_balance into v_balance;
+
+  if v_balance is null then
+    raise exception 'USER_NOT_FOUND';
+  end if;
+
+  insert into public.token_ledger(telegram_id, amount, event_type, reference)
+  values (p_telegram_id, p_amount, 'refund', p_reference);
+
+  return v_balance;
+end;
+$$;
+
+alter table public.knowledge_articles enable row level security;
+alter table public.support_tickets enable row level security;
+alter table public.token_ledger enable row level security;
+
+-- Starter knowledge-base articles. These are original MrShein AI copy and can be edited later in Admin.
+insert into public.knowledge_articles (slug, category, title_en, title_ru, body_en, body_ru, sort_order)
+values
+  ('getting-started-with-trends','getting-started','How to use Trends','Как пользоваться трендами','Open a trend, add only the files or text requested on its card, check the Token price, then tap Generate. Some trends require no uploads at all.','Открой тренд, добавь только те файлы или текст, которые указаны в карточке, проверь стоимость в токенах и нажми Generate. Некоторые тренды вообще не требуют загрузок.',10),
+  ('photo-quality','generation','What makes a good photo reference','Какие фото лучше использовать','Use a clear, well-lit image where the important subject is visible and not heavily blurred or covered. Follow the specific requirements shown inside each trend.','Используй чёткое фото с хорошим светом, где главный объект хорошо виден, не размыт и не перекрыт. Всегда учитывай отдельные требования внутри конкретного тренда.',20),
+  ('generation-failed','generation','Why a generation can fail','Почему генерация может завершиться ошибкой','A generation can fail because of a provider outage, unsupported input, temporary capacity limits or a processing error. If the service reports a technical failure, reserved Tokens are returned automatically.','Генерация может завершиться ошибкой из-за сбоя провайдера, неподходящего исходника, временного лимита мощности или ошибки обработки. При технической ошибке зарезервированные токены возвращаются автоматически.',30),
+  ('token-refunds','tokens','When Tokens are returned','Когда возвращаются токены','Tokens are reserved when a generation starts. If the generation fails for a technical reason before a usable result is delivered, the reserved Tokens are returned to your balance.','Токены резервируются при запуске генерации. Если генерация завершается технической ошибкой до получения пригодного результата, зарезервированные токены возвращаются на баланс.',40)
+on conflict (slug) do nothing;
