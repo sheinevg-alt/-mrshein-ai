@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { getBytePlusTask } from '@/lib/server/byteplus'
 import { getRunwayTask } from '@/lib/server/runway'
 import { hasDatabase, supabaseFetch } from '@/lib/server/supabase'
 import { verifyTelegramInitData } from '@/lib/server/telegram-auth'
@@ -7,6 +8,32 @@ export const dynamic = 'force-dynamic'
 
 async function rpc(name: string, payload: Record<string, unknown>) {
   return supabaseFetch(`rpc/${name}`, { method: 'POST', body: JSON.stringify(payload) })
+}
+
+async function failAndRefund(job: any, userId: number, code: string, metadata: Record<string, unknown> = {}) {
+  let tokenBalance: number | null = null
+  if (!job.refunded_at && Number(job.token_cost || 0) > 0) {
+    const refund = await rpc('refund_tokens', {
+      p_telegram_id: userId,
+      p_amount: Number(job.token_cost || 0),
+      p_reference: `provider-failed:${job.id}`,
+    })
+    if (refund.ok) tokenBalance = Number(await refund.json())
+  }
+
+  await supabaseFetch(`generation_history?id=eq.${job.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      status: 'failed',
+      error_code: code.slice(0, 240),
+      failed_at: new Date().toISOString(),
+      refunded_at: job.refunded_at || new Date().toISOString(),
+      result_metadata: { ...(job.result_metadata || {}), ...metadata },
+      updated_at: new Date().toISOString(),
+    }),
+  })
+
+  return { tokenBalance, tokensRefunded: Number(job.token_cost || 0) }
 }
 
 export async function GET(request: Request) {
@@ -28,11 +55,56 @@ export async function GET(request: Request) {
   if (job.status === 'completed') return NextResponse.json({ ok: true, status: 'completed', jobId: job.id, resultUrl: job.result_url })
   if (job.status === 'failed') return NextResponse.json({ ok: false, status: 'failed', jobId: job.id, error: job.error_code || 'GENERATION_FAILED' })
 
-  const taskId = String(job.result_metadata?.runway_task_id || '')
-  if (!taskId) return NextResponse.json({ ok: true, status: job.status || 'processing', jobId: job.id })
+  const bytePlusTaskId = String(job.result_metadata?.byteplus_task_id || '')
+  if (bytePlusTaskId) {
+    try {
+      const task = await getBytePlusTask(bytePlusTaskId)
+      const status = String(task.status || '').toLowerCase()
+
+      if (status === 'succeeded') {
+        const resultUrl = String(task.content?.video_url || '')
+        if (!resultUrl) throw new Error('BYTEPLUS_OUTPUT_MISSING')
+
+        await supabaseFetch(`generation_history?id=eq.${job.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            status: 'completed',
+            result_url: resultUrl,
+            completed_at: new Date().toISOString(),
+            result_metadata: {
+              ...(job.result_metadata || {}),
+              byteplus_status: status,
+              byteplus_usage: task.usage || null,
+              byteplus_resolution: task.resolution || null,
+            },
+            updated_at: new Date().toISOString(),
+          }),
+        })
+        return NextResponse.json({ ok: true, status: 'completed', jobId: job.id, resultUrl, progress: 1 })
+      }
+
+      if (status === 'failed' || status === 'expired') {
+        const code = String(task.error?.code || task.error?.message || `BYTEPLUS_${status.toUpperCase()}`)
+        const refund = await failAndRefund(job, user.id, code, {
+          byteplus_status: status,
+          byteplus_error: task.error || null,
+          byteplus_usage: task.usage || null,
+        })
+        return NextResponse.json({ ok: false, status: 'failed', jobId: job.id, error: code, ...refund })
+      }
+
+      return NextResponse.json({ ok: true, status: 'processing', jobId: job.id, progress: null })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'BYTEPLUS_STATUS_FAILED'
+      return NextResponse.json({ ok: false, status: 'processing', jobId: job.id, transientError: message }, { status: 202 })
+    }
+  }
+
+  const runwayTaskId = String(job.result_metadata?.runway_task_id || '')
+  if (!runwayTaskId) return NextResponse.json({ ok: true, status: job.status || 'processing', jobId: job.id })
 
   try {
-    const task = await getRunwayTask(taskId)
+    const task = await getRunwayTask(runwayTaskId)
     const status = String(task.status || '').toUpperCase()
 
     if (status === 'SUCCEEDED') {
@@ -53,29 +125,9 @@ export async function GET(request: Request) {
     }
 
     if (status === 'FAILED' || status === 'CANCELED') {
-      let tokenBalance: number | null = null
-      if (!job.refunded_at && Number(job.token_cost || 0) > 0) {
-        const refund = await rpc('refund_tokens', {
-          p_telegram_id: user.id,
-          p_amount: Number(job.token_cost || 0),
-          p_reference: `runway-${status.toLowerCase()}:${job.id}`,
-        })
-        if (refund.ok) tokenBalance = Number(await refund.json())
-      }
-
       const code = String(task.failureCode || task.failure || `RUNWAY_${status}`).slice(0, 240)
-      await supabaseFetch(`generation_history?id=eq.${job.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          status: 'failed',
-          error_code: code,
-          failed_at: new Date().toISOString(),
-          refunded_at: job.refunded_at || new Date().toISOString(),
-          result_metadata: { ...(job.result_metadata || {}), runway_status: status },
-          updated_at: new Date().toISOString(),
-        }),
-      })
-      return NextResponse.json({ ok: false, status: 'failed', jobId: job.id, error: code, tokenBalance, tokensRefunded: Number(job.token_cost || 0) })
+      const refund = await failAndRefund(job, user.id, code, { runway_status: status })
+      return NextResponse.json({ ok: false, status: 'failed', jobId: job.id, error: code, ...refund })
     }
 
     return NextResponse.json({ ok: true, status: 'processing', jobId: job.id, progress: typeof task.progress === 'number' ? task.progress : null })

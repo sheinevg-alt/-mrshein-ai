@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { NextResponse } from 'next/server'
+import { createBytePlusSeedance25Task } from '@/lib/server/byteplus'
 import { createSeedance25Task } from '@/lib/server/runway'
 import { hasDatabase, supabaseFetch } from '@/lib/server/supabase'
 import { verifyTelegramInitData } from '@/lib/server/telegram-auth'
@@ -24,11 +25,17 @@ function ratioForRunway(aspectRatio?: string | null) {
   return map[ratio] || '720:1280'
 }
 
+function ratioForBytePlus(aspectRatio?: string | null) {
+  const ratio = String(aspectRatio || '9:16')
+  return ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'].includes(ratio) ? ratio : '9:16'
+}
+
 async function fileToDataUri(file: File) {
   if (!file.type.startsWith('image/')) throw new Error('UNSUPPORTED_REFERENCE_TYPE')
   if (file.size > MAX_INLINE_IMAGE_BYTES) throw new Error('REFERENCE_IMAGE_TOO_LARGE')
   const bytes = Buffer.from(await file.arrayBuffer())
-  return `data:${file.type || 'image/jpeg'};base64,${bytes.toString('base64')}`
+  const mime = (file.type || 'image/jpeg').toLowerCase()
+  return `data:${mime};base64,${bytes.toString('base64')}`
 }
 
 type InputSchemaItem = {
@@ -110,7 +117,10 @@ export async function POST(request: Request) {
     newBalance = Number(await reserve.json())
   }
 
-  const isRunway = String(trend.provider || '').toLowerCase() === 'runway' && String(trend.model || '').toLowerCase() === 'seedance2_5'
+  const provider = String(trend.provider || '').toLowerCase()
+  const model = String(trend.model || '').toLowerCase()
+  const isRunway = provider === 'runway' && model === 'seedance2_5'
+  const isBytePlus = provider === 'byteplus' && (model === 'dreamina-seedance-2-5-260628' || model === 'seedance2_5')
 
   const historyResponse = await supabaseFetch('generation_history', {
     method: 'POST',
@@ -120,7 +130,7 @@ export async function POST(request: Request) {
       type: 'trend',
       source_id: trend.id,
       title: trend.title_en,
-      status: isRunway ? 'queued' : 'processing',
+      status: isRunway || isBytePlus ? 'queued' : 'processing',
       token_cost: tokenCost,
       provider: trend.provider || 'mock',
       model: trend.model || 'mock-success',
@@ -128,7 +138,7 @@ export async function POST(request: Request) {
         reference_count: references.length,
         reference_tags: inputSchema.filter((item) => item.kind === 'photo' || !item.kind).map((item) => item.tag).filter(Boolean),
       },
-      queued_at: isRunway ? new Date().toISOString() : null,
+      queued_at: isRunway || isBytePlus ? new Date().toISOString() : null,
     }),
   })
 
@@ -139,7 +149,7 @@ export async function POST(request: Request) {
 
   const job = (await historyResponse.json())?.[0]
 
-  if (isRunway) {
+  if (isRunway || isBytePlus) {
     if (!form) {
       if (tokenCost > 0) await rpc('refund_tokens', { p_telegram_id: user.id, p_amount: tokenCost, p_reference: `missing-input:${job.id}` })
       await supabaseFetch(`generation_history?id=eq.${job.id}`, {
@@ -148,7 +158,44 @@ export async function POST(request: Request) {
       })
       return NextResponse.json({ error: 'INPUTS_NOT_UPLOADED' }, { status: 400 })
     }
+  }
 
+  if (isBytePlus) {
+    try {
+      const task = await createBytePlusSeedance25Task({
+        promptText: String(trend.hidden_prompt || ''),
+        duration: Math.max(4, Math.min(30, Number(trend.duration_seconds || 11))),
+        ratio: ratioForBytePlus(trend.aspect_ratio),
+        references,
+        resolution: '480p',
+      })
+
+      await supabaseFetch(`generation_history?id=eq.${job.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'processing',
+          processing_at: new Date().toISOString(),
+          result_metadata: { byteplus_task_id: task.id, byteplus_test_resolution: '480p' },
+          updated_at: new Date().toISOString(),
+        }),
+      })
+
+      return NextResponse.json({ ok: true, status: 'processing', jobId: job.id, providerTaskId: task.id, tokenBalance: newBalance })
+    } catch (error) {
+      if (tokenCost > 0) {
+        const refund = await rpc('refund_tokens', { p_telegram_id: user.id, p_amount: tokenCost, p_reference: `byteplus-create-failed:${job.id}` })
+        if (refund.ok) newBalance = Number(await refund.json())
+      }
+      const message = error instanceof Error ? error.message : 'BYTEPLUS_CREATE_FAILED'
+      await supabaseFetch(`generation_history?id=eq.${job.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'failed', error_code: message.slice(0, 240), failed_at: new Date().toISOString(), refunded_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
+      })
+      return NextResponse.json({ error: 'BYTEPLUS_CREATE_FAILED', details: message, tokensRefunded: tokenCost, tokenBalance: newBalance }, { status: 502 })
+    }
+  }
+
+  if (isRunway) {
     try {
       const task = await createSeedance25Task({
         promptText: String(trend.hidden_prompt || ''),
@@ -168,20 +215,10 @@ export async function POST(request: Request) {
         }),
       })
 
-      return NextResponse.json({
-        ok: true,
-        status: 'processing',
-        jobId: job.id,
-        providerTaskId: task.id,
-        tokenBalance: newBalance,
-      })
+      return NextResponse.json({ ok: true, status: 'processing', jobId: job.id, providerTaskId: task.id, tokenBalance: newBalance })
     } catch (error) {
       if (tokenCost > 0) {
-        const refund = await rpc('refund_tokens', {
-          p_telegram_id: user.id,
-          p_amount: tokenCost,
-          p_reference: `runway-create-failed:${job.id}`,
-        })
+        const refund = await rpc('refund_tokens', { p_telegram_id: user.id, p_amount: tokenCost, p_reference: `runway-create-failed:${job.id}` })
         if (refund.ok) newBalance = Number(await refund.json())
       }
       const message = error instanceof Error ? error.message : 'RUNWAY_CREATE_FAILED'
@@ -193,7 +230,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const simulateFailure = String(trend.provider || '').toLowerCase() === 'mock-error' || String(trend.model || '').toLowerCase() === 'mock-error'
+  const simulateFailure = provider === 'mock-error' || model === 'mock-error'
   if (simulateFailure) {
     if (tokenCost > 0) {
       const refund = await rpc('refund_tokens', { p_telegram_id: user.id, p_amount: tokenCost, p_reference: `failed:${job.id}` })
