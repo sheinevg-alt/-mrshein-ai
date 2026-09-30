@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { getApiModelsTask } from '@/lib/server/apimodels'
 import { getBytePlusTask } from '@/lib/server/byteplus'
 import { getRunwayTask } from '@/lib/server/runway'
 import { hasDatabase, supabaseFetch } from '@/lib/server/supabase'
@@ -54,6 +55,50 @@ export async function GET(request: Request) {
 
   if (job.status === 'completed') return NextResponse.json({ ok: true, status: 'completed', jobId: job.id, resultUrl: job.result_url })
   if (job.status === 'failed') return NextResponse.json({ ok: false, status: 'failed', jobId: job.id, error: job.error_code || 'GENERATION_FAILED' })
+
+  const apiModelsTaskId = String(job.result_metadata?.apimodels_task_id || '')
+  if (apiModelsTaskId) {
+    try {
+      const task = await getApiModelsTask(apiModelsTaskId)
+      const status = String(task.state || '').toLowerCase()
+
+      if (status === 'completed' || status === 'succeeded' || status === 'success') {
+        const resultUrl = String(task.resultUrls?.[0] || '')
+        if (!resultUrl) throw new Error('APIMODELS_OUTPUT_MISSING')
+
+        await supabaseFetch(`generation_history?id=eq.${job.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            status: 'completed',
+            result_url: resultUrl,
+            completed_at: new Date().toISOString(),
+            result_metadata: {
+              ...(job.result_metadata || {}),
+              apimodels_status: status,
+              apimodels_usage: task.usage || null,
+            },
+            updated_at: new Date().toISOString(),
+          }),
+        })
+        return NextResponse.json({ ok: true, status: 'completed', jobId: job.id, resultUrl, progress: 1 })
+      }
+
+      if (status === 'failed' || status === 'error' || status === 'canceled' || status === 'cancelled') {
+        const code = String(task.error || `APIMODELS_${status.toUpperCase()}`)
+        const refund = await failAndRefund(job, user.id, code, {
+          apimodels_status: status,
+          apimodels_error: task.error || null,
+          apimodels_usage: task.usage || null,
+        })
+        return NextResponse.json({ ok: false, status: 'failed', jobId: job.id, error: code, ...refund })
+      }
+
+      return NextResponse.json({ ok: true, status: 'processing', jobId: job.id, progress: null })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'APIMODELS_STATUS_FAILED'
+      return NextResponse.json({ ok: false, status: 'processing', jobId: job.id, transientError: message }, { status: 202 })
+    }
+  }
 
   const bytePlusTaskId = String(job.result_metadata?.byteplus_task_id || '')
   if (bytePlusTaskId) {

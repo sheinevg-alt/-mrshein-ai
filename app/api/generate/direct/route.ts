@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 import {
-  createBytePlusSeedance25EditTask,
-  createBytePlusSeedance25Task,
-  type BytePlusResolution,
-} from '@/lib/server/byteplus'
+  createApiModelsSeedance25EditTask,
+  createApiModelsSeedance25Task,
+  type ApiModelsResolution,
+} from '@/lib/server/apimodels'
 import {
   createStorageSignedDownloadUrl,
   hasDatabase,
@@ -13,7 +13,7 @@ import { verifyTelegramInitData } from '@/lib/server/telegram-auth'
 
 export const dynamic = 'force-dynamic'
 
-const MODEL = 'dreamina-seedance-2-5-260628'
+const MODEL = 'seedance-2.5'
 const INPUT_BUCKET = 'generation-inputs'
 
 function clampDuration(value: unknown) {
@@ -21,9 +21,8 @@ function clampDuration(value: unknown) {
   return Math.max(4, Math.min(30, Number.isFinite(parsed) ? parsed : 12))
 }
 
-function safeResolution(value: unknown): BytePlusResolution {
+function safeResolution(value: unknown): ApiModelsResolution {
   const v = String(value || '480p')
-  if (v === '1080p') return '1080p'
   if (v === '720p') return '720p'
   return '480p'
 }
@@ -80,7 +79,7 @@ export async function POST(request: Request) {
       title: mode === 'edit' ? 'Seedance 2.5 · Video Edit' : sourceVideoPath ? 'Seedance 2.5 · Video reference' : 'Seedance 2.5',
       status: 'queued',
       token_cost: 0,
-      provider: 'byteplus',
+      provider: 'apimodels',
       model: MODEL,
       input_payload: {
         mode,
@@ -116,14 +115,14 @@ export async function POST(request: Request) {
       : []
 
     const task = mode === 'edit'
-      ? await createBytePlusSeedance25EditTask({
+      ? await createApiModelsSeedance25EditTask({
           promptText: prompt,
           videoUrl: videoReferences[0],
           references,
           resolution,
           generateAudio,
         })
-      : await createBytePlusSeedance25Task({
+      : await createApiModelsSeedance25Task({
           promptText: prompt,
           duration,
           ratio: '9:16',
@@ -139,10 +138,10 @@ export async function POST(request: Request) {
         status: 'processing',
         processing_at: new Date().toISOString(),
         result_metadata: {
-          byteplus_task_id: task.id,
-          byteplus_direct_tool: true,
-          byteplus_mode: mode,
-          byteplus_test_resolution: resolution,
+          apimodels_task_id: task.id,
+          apimodels_direct_tool: true,
+          apimodels_mode: mode,
+          apimodels_resolution: resolution,
         },
         updated_at: new Date().toISOString(),
       }),
@@ -155,7 +154,7 @@ export async function POST(request: Request) {
       providerTaskId: task.id,
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'BYTEPLUS_CREATE_FAILED'
+    const message = error instanceof Error ? error.message : 'APIMODELS_CREATE_FAILED'
     await supabaseFetch(`generation_history?id=eq.${job.id}`, {
       method: 'PATCH',
       body: JSON.stringify({
@@ -167,7 +166,7 @@ export async function POST(request: Request) {
     })
 
     return NextResponse.json({
-      error: 'BYTEPLUS_CREATE_FAILED',
+      error: 'APIMODELS_CREATE_FAILED',
       details: message,
     }, { status: 502 })
   }

@@ -7,7 +7,7 @@ import { BottomSheet } from './bottom-sheet'
 import { useI18n } from './i18n-provider'
 import { useUserState } from './user-provider'
 
-type Resolution = '480p' | '720p' | '1080p'
+type Resolution = '480p' | '720p'
 type Mode = 'generate' | 'edit'
 type ReferenceUpload = { file: File; url: string; name: string }
 type VideoUpload = { file: File; url: string; name: string; duration?: number }
@@ -318,7 +318,7 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
         ) : (
           <button type="button" onClick={() => videoInputRef.current?.click()} className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand/25 bg-card text-sm font-semibold text-brand"><Upload className="size-4" />{locale === 'ru' ? 'Загрузить @video1' : 'Upload @video1'}</button>
         )}
-        {mode === 'generate' && <p className="mt-2 text-[11px] text-muted-foreground">{locale === 'ru' ? 'В режиме «Создать» видео передаётся как обычный reference_video вместе с фото.' : 'In Generate mode the video is sent as a regular reference_video together with images.'}</p>}
+        {mode === 'generate' && <p className="mt-2 text-[11px] text-muted-foreground">{locale === 'ru' ? 'В режиме «Создать» видео и фото отправляются как мультимодальные референсы.' : 'In Generate mode video and images are sent as multimodal references.'}</p>}
       </div>
 
       <label htmlFor="seedance-prompt" className="mt-5 block text-sm font-semibold">{locale === 'ru' ? 'Промпт' : 'Prompt'}</label>
@@ -416,7 +416,7 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
         {mode !== 'edit' && (
           <label className="rounded-2xl border bg-card p-3 text-xs text-muted-foreground"><span className="block font-medium">{locale === 'ru' ? 'Длительность' : 'Duration'}</span><select value={duration} onChange={(event) => setDuration(Number(event.target.value))} className="mt-2 h-10 w-full rounded-xl border bg-background px-3 text-sm font-semibold text-foreground">{Array.from({ length: 27 }, (_, index) => index + 4).map((seconds) => <option key={seconds} value={seconds}>{seconds} сек</option>)}</select></label>
         )}
-        <label className="rounded-2xl border bg-card p-3 text-xs text-muted-foreground"><span className="block font-medium">{locale === 'ru' ? 'Качество' : 'Quality'}</span><select value={resolution} onChange={(event) => setResolution((['480p', '720p', '1080p'].includes(event.target.value) ? event.target.value : '480p') as Resolution)} className="mt-2 h-10 w-full rounded-xl border bg-background px-3 text-sm font-semibold text-foreground"><option value="480p">480p · test</option><option value="720p">720p</option><option value="1080p">1080p</option></select></label>
+        <label className="rounded-2xl border bg-card p-3 text-xs text-muted-foreground"><span className="block font-medium">{locale === 'ru' ? 'Качество' : 'Quality'}</span><select value={resolution} onChange={(event) => setResolution((['480p', '720p'].includes(event.target.value) ? event.target.value : '480p') as Resolution)} className="mt-2 h-10 w-full rounded-xl border bg-background px-3 text-sm font-semibold text-foreground"><option value="480p">480p · test</option><option value="720p">720p</option></select></label>
       </div>
       {mode === 'edit' && <p className="mt-2 text-xs text-muted-foreground">{locale === 'ru' ? 'В Video Edit длительность и формат кадра автоматически сохраняются из @video1.' : 'Video Edit automatically preserves @video1 duration and aspect ratio.'}</p>}
 
