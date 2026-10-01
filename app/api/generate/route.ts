@@ -1,13 +1,50 @@
 import { Buffer } from 'node:buffer'
+import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
+import { createApiModelsSeedance25Task, type ApiModelsResolution } from '@/lib/server/apimodels'
 import { createBytePlusSeedance25Task, type BytePlusResolution } from '@/lib/server/byteplus'
 import { createSeedance25Task } from '@/lib/server/runway'
-import { hasDatabase, supabaseFetch } from '@/lib/server/supabase'
+import {
+  createStorageSignedDownloadUrl,
+  createStorageSignedUploadUrl,
+  hasDatabase,
+  supabaseFetch,
+} from '@/lib/server/supabase'
 import { verifyTelegramInitData } from '@/lib/server/telegram-auth'
 
 export const dynamic = 'force-dynamic'
 
 const MAX_INLINE_IMAGE_BYTES = 3_500_000
+const INPUT_BUCKET = 'generation-inputs'
+
+function imageExtension(file: File) {
+  const type = String(file.type || '').toLowerCase()
+  if (type === 'image/png') return 'png'
+  if (type === 'image/webp') return 'webp'
+  if (type === 'image/heic') return 'heic'
+  if (type === 'image/heif') return 'heif'
+  return 'jpg'
+}
+
+async function uploadReferenceForApiModels(file: File, telegramId: number) {
+  if (!file.type.startsWith('image/')) throw new Error('UNSUPPORTED_REFERENCE_TYPE')
+  if (file.size > 30 * 1024 * 1024) throw new Error('REFERENCE_IMAGE_TOO_LARGE')
+
+  const path = `${telegramId}/images/${Date.now()}-${randomUUID()}.${imageExtension(file)}`
+  const signed = await createStorageSignedUploadUrl(INPUT_BUCKET, path)
+  const body = new FormData()
+  body.append('cacheControl', '3600')
+  body.append('', file)
+
+  const uploadResponse = await fetch(signed.signedUrl, {
+    method: 'PUT',
+    headers: { 'x-upsert': 'false' },
+    body,
+  })
+  if (!uploadResponse.ok) throw new Error(`INPUT_UPLOAD_FAILED_${uploadResponse.status}`)
+
+  return createStorageSignedDownloadUrl(INPUT_BUCKET, path, 7200)
+}
 
 async function rpc(name: string, payload: Record<string, unknown>) {
   return supabaseFetch(`rpc/${name}`, { method: 'POST', body: JSON.stringify(payload) })
@@ -82,6 +119,12 @@ export async function POST(request: Request) {
   const trend = trends?.[0]
   if (!trend?.published) return NextResponse.json({ error: 'Trend not found' }, { status: 404 })
 
+  const provider = String(trend.provider || '').toLowerCase()
+  const model = String(trend.model || '').toLowerCase()
+  const isRunway = provider === 'runway' && model === 'seedance2_5'
+  const isBytePlus = provider === 'byteplus' && (model === 'dreamina-seedance-2-5-260628' || model === 'seedance2_5')
+  const isApiModels = provider === 'apimodels' && model === 'seedance-2.5'
+
   const inputSchema: InputSchemaItem[] = Array.isArray(trend.input_schema) ? trend.input_schema : []
   const references: string[] = []
 
@@ -96,7 +139,11 @@ export async function POST(request: Request) {
         const suppliedUrl = String(form.get(`${id}_url`) || '')
         let uri = ''
 
-        if (upload instanceof File && upload.size > 0) uri = await fileToDataUri(upload)
+        if (upload instanceof File && upload.size > 0) {
+          uri = isApiModels
+            ? await uploadReferenceForApiModels(upload, user.id)
+            : await fileToDataUri(upload)
+        }
         else if (suppliedUrl.startsWith('https://')) uri = suppliedUrl
         else if (input.default_asset_url) uri = String(input.default_asset_url)
 
@@ -128,11 +175,6 @@ export async function POST(request: Request) {
     newBalance = Number(await reserve.json())
   }
 
-  const provider = String(trend.provider || '').toLowerCase()
-  const model = String(trend.model || '').toLowerCase()
-  const isRunway = provider === 'runway' && model === 'seedance2_5'
-  const isBytePlus = provider === 'byteplus' && (model === 'dreamina-seedance-2-5-260628' || model === 'seedance2_5')
-
   const historyResponse = await supabaseFetch('generation_history', {
     method: 'POST',
     headers: { Prefer: 'return=representation' },
@@ -141,7 +183,7 @@ export async function POST(request: Request) {
       type: 'trend',
       source_id: trend.id,
       title: trend.title_en,
-      status: isRunway || isBytePlus ? 'queued' : 'processing',
+      status: isRunway || isBytePlus || isApiModels ? 'queued' : 'processing',
       token_cost: tokenCost,
       provider: trend.provider || 'mock',
       model: trend.model || 'mock-success',
@@ -151,7 +193,7 @@ export async function POST(request: Request) {
         generate_audio: generateAudio,
         resolution,
       },
-      queued_at: isRunway || isBytePlus ? new Date().toISOString() : null,
+      queued_at: isRunway || isBytePlus || isApiModels ? new Date().toISOString() : null,
     }),
   })
 
@@ -162,7 +204,7 @@ export async function POST(request: Request) {
 
   const job = (await historyResponse.json())?.[0]
 
-  if (isRunway || isBytePlus) {
+  if (isRunway || isBytePlus || isApiModels) {
     if (!form) {
       if (tokenCost > 0) await rpc('refund_tokens', { p_telegram_id: user.id, p_amount: tokenCost, p_reference: `missing-input:${job.id}` })
       await supabaseFetch(`generation_history?id=eq.${job.id}`, {
@@ -170,6 +212,58 @@ export async function POST(request: Request) {
         body: JSON.stringify({ status: 'failed', error_code: 'INPUTS_NOT_UPLOADED', failed_at: new Date().toISOString(), refunded_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
       })
       return NextResponse.json({ error: 'INPUTS_NOT_UPLOADED' }, { status: 400 })
+    }
+  }
+
+  if (isApiModels) {
+    try {
+      const config = trend.generation_config && typeof trend.generation_config === 'object'
+        ? trend.generation_config as Record<string, unknown>
+        : {}
+      const sourceVideoPath = String(config.source_video_path || '')
+      if (!sourceVideoPath) throw new Error('TREND_SOURCE_VIDEO_MISSING')
+
+      const videoUrl = await createStorageSignedDownloadUrl(INPUT_BUCKET, sourceVideoPath, 7200)
+      const callbackUrl = `${new URL(request.url).origin}/api/generate/callback/apimodels?jobId=${encodeURIComponent(job.id)}`
+      const apiResolution: ApiModelsResolution = resolution === '720p' ? '720p' : '480p'
+      const task = await createApiModelsSeedance25Task({
+        promptText: String(trend.hidden_prompt || ''),
+        duration: Math.max(4, Math.min(30, Number(trend.duration_seconds || 12))),
+        ratio: ratioForBytePlus(trend.aspect_ratio),
+        references,
+        videoReferences: [videoUrl],
+        resolution: apiResolution,
+        generateAudio,
+        callbackUrl,
+      })
+
+      await supabaseFetch(`generation_history?id=eq.${job.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'processing',
+          processing_at: new Date().toISOString(),
+          result_metadata: {
+            apimodels_task_id: task.id,
+            apimodels_trend_recipe: true,
+            apimodels_resolution: apiResolution,
+            prompt_version: String(config.prompt_version || 'v1.1'),
+          },
+          updated_at: new Date().toISOString(),
+        }),
+      })
+
+      return NextResponse.json({ ok: true, status: 'processing', jobId: job.id, providerTaskId: task.id, tokenBalance: newBalance })
+    } catch (error) {
+      if (tokenCost > 0) {
+        const refund = await rpc('refund_tokens', { p_telegram_id: user.id, p_amount: tokenCost, p_reference: `apimodels-create-failed:${job.id}` })
+        if (refund.ok) newBalance = Number(await refund.json())
+      }
+      const message = error instanceof Error ? error.message : 'APIMODELS_CREATE_FAILED'
+      await supabaseFetch(`generation_history?id=eq.${job.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'failed', error_code: message.slice(0, 240), failed_at: new Date().toISOString(), refunded_at: tokenCost > 0 ? new Date().toISOString() : null, updated_at: new Date().toISOString() }),
+      })
+      return NextResponse.json({ error: 'APIMODELS_CREATE_FAILED', details: message, tokensRefunded: tokenCost, tokenBalance: newBalance }, { status: 502 })
     }
   }
 
