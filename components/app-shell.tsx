@@ -53,7 +53,8 @@ function InnerApp() {
   const canGoBack = sheetOpen || (tab === 'create' && category !== null)
 
   useEffect(() => {
-    if (deepLinkHandled.current || trends.length === 0) return
+    if (deepLinkHandled.current) return
+
     const params = new URLSearchParams(window.location.search)
     const workId = params.get('work')
     if (workId) {
@@ -64,15 +65,31 @@ function InnerApp() {
     }
 
     const trendId = params.get('trend')
-    if (!trendId) {
+    if (trendId) {
+      if (trends.length === 0) return
+      const match = trends.find((trend) => trend.id === trendId)
+      if (match) {
+        setTab('trends')
+        setActiveTrend(match)
+      }
       deepLinkHandled.current = true
       return
     }
-    const match = trends.find((trend) => trend.id === trendId)
-    if (match) {
-      setTab('trends')
-      setActiveTrend(match)
+
+    const requestedCategory = params.get('category')
+    if (requestedCategory && ['video', 'image', 'audio', 'text'].includes(requestedCategory)) {
+      setCategory(requestedCategory as CategoryId)
+      setTab('create')
+      deepLinkHandled.current = true
+      return
     }
+
+    const requestedTab = params.get('tab')
+    if (requestedTab && ['trends', 'create', 'works', 'favorites', 'profile'].includes(requestedTab)) {
+      setTab(requestedTab as TabId)
+      if (requestedTab === 'works') markWorksSeen()
+    }
+
     deepLinkHandled.current = true
   }, [markWorksSeen, trends])
 
