@@ -57,7 +57,7 @@ export function BottomSheet({ open, onClose, title, children }: BottomSheetProps
             <X className="size-4" />
           </button>
         </div>
-        <div className="max-h-[78dvh] overflow-y-auto px-5 pt-3 no-scrollbar">{children}</div>
+        <div data-bottom-sheet-scroll className="max-h-[78dvh] overflow-y-auto overscroll-contain px-5 pt-3 no-scrollbar">{children}</div>
       </div>
     </div>
   )
