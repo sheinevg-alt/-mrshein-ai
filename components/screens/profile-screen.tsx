@@ -82,7 +82,7 @@ export function ProfileScreen() {
         ))}
       </section>
 
-      <button type="button" onClick={() => setPanel('tokens')} className="brand-gradient mt-3 flex w-full items-center gap-3 rounded-2xl p-4 text-left text-white shadow-[0_12px_28px_-14px_oklch(0.52_0.16_72/0.72)] transition active:scale-[0.98]">
+      <button type="button" onClick={() => setPanel('tokens')} className="brand-gradient mt-3 flex w-full items-center gap-3 rounded-2xl p-4 text-left text-white shadow-[0_12px_28px_-14px_oklch(0.5_0.21_264/0.8)] transition active:scale-[0.98]">
         <Sparkles className="size-5" strokeWidth={2} aria-hidden="true" />
         <span className="flex-1">
           <span className="block text-sm font-semibold">{t('profile.getTokens')}</span>
