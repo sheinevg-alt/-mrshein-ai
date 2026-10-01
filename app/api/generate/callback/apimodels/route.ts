@@ -62,8 +62,8 @@ export async function POST(request: Request) {
           await telegramApi('sendMessage', {
             chat_id: botUser.chat_id,
             text: ru
-              ? '✅ <b>Ваше видео готово</b>\n\nОткройте Shein One, чтобы посмотреть результат.'
-              : '✅ <b>Your video is ready</b>\n\nOpen Shein One to view the result.',
+              ? '✅ <b>Ваше видео готово</b>\n\nОткройте Banana Zero, чтобы посмотреть результат.'
+              : '✅ <b>Your video is ready</b>\n\nOpen Banana Zero to view the result.',
             parse_mode: 'HTML',
             reply_markup: {
               inline_keyboard: [[{
