@@ -46,7 +46,7 @@ export const MODEL_CATALOG: ModelToolDefinition[] = [
     id: 'nano-banana-2',
     category: 'image',
     provider: 'apimodels',
-    model: 'gemini-3.1-flash-image',
+    model: 'gemini-3.1-flash-image-preview',
     displayName: 'Nano Banana 2',
     descriptionRu: 'Основная модель изображений: генерация, edit и референсы.',
     descriptionEn: 'Main image model for generation, editing and references.',
