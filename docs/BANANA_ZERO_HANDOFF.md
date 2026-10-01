@@ -5,7 +5,7 @@ Last updated: 2026-10-01
 ## Canonical product state
 
 - Public site: https://bananazero.ru
-- Main Telegram bot: Banana Zero / @MrShein_AI_bot
+- Main Telegram bot: Banana Zero / @BananaZeroBot
 - Support bot: @BananaZero_Care_bot
 - Support operator group flow: one Telegram forum topic per client
 - Production hosting: Vercel
