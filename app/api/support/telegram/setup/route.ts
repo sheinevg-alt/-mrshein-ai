@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
+import { requireAdmin } from '@/lib/server/admin-auth'
 import { getSupportBotConfig, supportTelegramApi } from '@/lib/server/support-telegram'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (!requireAdmin(request)) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
+
   try {
     const config = await getSupportBotConfig()
     const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://mrshein-ai-v3.vercel.app').replace(/\/$/, '')
