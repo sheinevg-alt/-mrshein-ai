@@ -11,6 +11,8 @@
   --color-brand-foreground: var(--brand-foreground);
   --color-brand-soft: var(--brand-soft);
   --color-brand-tint: var(--brand-tint);
+  --color-banana: var(--banana);
+  --color-banana-soft: var(--banana-soft);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -40,28 +42,30 @@
 
 :root {
   color-scheme: light;
-  --background: oklch(0.982 0.006 250);
-  --foreground: oklch(0.23 0.03 262);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.23 0.03 262);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.23 0.03 262);
-  --primary: oklch(0.52 0.2 262);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.955 0.012 250);
-  --secondary-foreground: oklch(0.23 0.03 262);
-  --muted: oklch(0.955 0.01 250);
-  --muted-foreground: oklch(0.54 0.025 258);
-  --accent: oklch(0.95 0.025 252);
-  --accent-foreground: oklch(0.23 0.03 262);
-  --brand: oklch(0.52 0.2 262);
-  --brand-foreground: oklch(1 0 0);
-  --brand-soft: oklch(0.72 0.13 245);
-  --brand-tint: oklch(0.95 0.03 252);
-  --destructive: oklch(0.58 0.2 25);
-  --border: oklch(0.91 0.014 255);
-  --input: oklch(0.89 0.018 255);
-  --ring: oklch(0.52 0.2 262 / 45%);
+  --background: #f8faff;
+  --foreground: #171a22;
+  --card: #ffffff;
+  --card-foreground: #171a22;
+  --popover: #ffffff;
+  --popover-foreground: #171a22;
+  --primary: #1e3a8a;
+  --primary-foreground: #ffffff;
+  --secondary: #eef4ff;
+  --secondary-foreground: #171a22;
+  --muted: #f1f5fb;
+  --muted-foreground: #66758e;
+  --accent: #e0e7ff;
+  --accent-foreground: #171a22;
+  --brand: #1e3a8a;
+  --brand-foreground: #ffffff;
+  --brand-soft: #3b82f6;
+  --brand-tint: #e0e7ff;
+  --banana: #f6ab10;
+  --banana-soft: #fff3d6;
+  --destructive: #d94b40;
+  --border: #e6eeff;
+  --input: #cbd5f3;
+  --ring: rgb(59 130 246 / 42%);
   --radius: 0.875rem;
 
   /* Telegram injects these; fall back to the device safe area outside Telegram */
@@ -71,6 +75,34 @@
   --app-safe-bottom: var(--tg-safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
   --app-height: var(--tg-viewport-stable-height, 100dvh);
   --nav-height: 3.5rem;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #0b0f1a;
+  --foreground: #f9fafb;
+  --card: #111827;
+  --card-foreground: #f9fafb;
+  --popover: #111827;
+  --popover-foreground: #f9fafb;
+  --primary: #1e3a8a;
+  --primary-foreground: #ffffff;
+  --secondary: #182235;
+  --secondary-foreground: #f9fafb;
+  --muted: #172033;
+  --muted-foreground: #98a6bd;
+  --accent: #1f2937;
+  --accent-foreground: #f9fafb;
+  --brand: #2553c7;
+  --brand-foreground: #ffffff;
+  --brand-soft: #3b82f6;
+  --brand-tint: #14213b;
+  --banana: #f6ab10;
+  --banana-soft: #3a2b12;
+  --destructive: #ef6b61;
+  --border: #26344d;
+  --input: #334155;
+  --ring: rgb(59 130 246 / 48%);
 }
 
 @layer base {
@@ -87,8 +119,11 @@
     -webkit-font-smoothing: antialiased;
     -webkit-user-select: none;
     user-select: none;
-    background-image: radial-gradient(120% 420px at 50% -120px, oklch(0.93 0.045 250) 0%, transparent 70%);
+    background-image: radial-gradient(120% 420px at 50% -120px, #dfeaff 0%, transparent 70%);
     background-repeat: no-repeat;
+  }
+  html.dark body {
+    background-image: radial-gradient(120% 420px at 50% -120px, #14213b 0%, transparent 70%);
   }
   input,
   textarea,
@@ -99,7 +134,7 @@
 }
 
 @utility glass {
-  background-color: oklch(1 0 0 / 78%);
+  background-color: color-mix(in srgb, var(--card) 82%, transparent);
   border: 1px solid var(--border);
   box-shadow:
     0 1px 2px oklch(0.3 0.05 260 / 4%),
@@ -109,14 +144,19 @@
 }
 
 @utility glass-strong {
-  background-color: oklch(1 0 0 / 88%);
+  background-color: color-mix(in srgb, var(--card) 92%, transparent);
   border: 1px solid var(--border);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   backdrop-filter: blur(24px) saturate(180%);
 }
 
 @utility brand-gradient {
-  background-image: linear-gradient(135deg, oklch(0.66 0.16 245) 0%, oklch(0.5 0.21 264) 100%);
+  background-image: linear-gradient(135deg, #3b82f6 0%, #1e3a8a 100%);
+}
+
+@utility banana-accent {
+  background-color: var(--banana);
+  color: #171a22;
 }
 
 @utility no-scrollbar {
@@ -142,5 +182,5 @@
   .admin-field textarea { resize: vertical; }
   .admin-field input:focus,
   .admin-field select:focus,
-  .admin-field textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px oklch(0.52 0.2 262 / 12%); }
+  .admin-field textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgb(59 130 246 / 14%); }
 }
