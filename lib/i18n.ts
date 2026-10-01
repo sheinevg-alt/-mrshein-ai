@@ -79,7 +79,7 @@ export const en = {
   'language.title': 'Language',
   'language.english': 'English',
   'language.russian': 'Русский',
-  'language.auto': 'Telegram language is used on first launch. You can change it here anytime.',
+  'language.auto': 'Russian is used by default. You can change the language here anytime.',
 
   'history.title': 'History',
   'history.emptyTitle': 'No generations yet',
@@ -216,7 +216,7 @@ const ru: Record<MessageKey, string> = {
   'language.title': 'Язык',
   'language.english': 'English',
   'language.russian': 'Русский',
-  'language.auto': 'При первом запуске используется язык Telegram. Здесь его всегда можно изменить.',
+  'language.auto': 'По умолчанию используется русский язык. Здесь его всегда можно изменить.',
 
   'history.title': 'История',
   'history.emptyTitle': 'Генераций пока нет',
@@ -270,7 +270,7 @@ const ru: Record<MessageKey, string> = {
 }
 
 export const dictionaries: Record<Locale, Record<MessageKey, string>> = { en, ru }
-export const DEFAULT_LOCALE: Locale = 'en'
+export const DEFAULT_LOCALE: Locale = 'ru'
 
 export function normalizeLocale(languageCode?: string | null): Locale {
   return languageCode?.toLowerCase().startsWith('ru') ? 'ru' : 'en'

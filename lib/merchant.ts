@@ -9,5 +9,5 @@ export const MERCHANT = {
   correspondentAccount: '30101810745374525104',
   website: 'https://bananazero.ru',
   telegram: 'https://t.me/BananaZero_Care_bot',
-  telegramLabel: '@BananaZero_Care_bot',
+  telegramLabel: 'Служба поддержки',
 } as const

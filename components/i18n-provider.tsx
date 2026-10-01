@@ -1,9 +1,8 @@
 'use client'
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { DEFAULT_LOCALE, normalizeLocale, translate, type Locale, type MessageKey } from '@/lib/i18n'
+import { DEFAULT_LOCALE, translate, type Locale, type MessageKey } from '@/lib/i18n'
 import { STORAGE_KEYS } from '@/lib/app-config'
-import { getTelegramUser } from '@/lib/telegram'
 
 type I18nContextValue = {
   locale: Locale
@@ -22,8 +21,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       setLocaleState(stored)
       return
     }
-    const detected = normalizeLocale(getTelegramUser()?.language_code)
-    setLocaleState(detected)
+    setLocaleState(DEFAULT_LOCALE)
   }, [])
 
   useEffect(() => {
