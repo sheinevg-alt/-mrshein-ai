@@ -32,6 +32,15 @@ export async function POST(request: Request) {
     const message = update?.message
     if (!message) return NextResponse.json({ ok: true })
 
+    if (message.chat?.type !== 'private' && String(message.text || '').trim() === '/chatid') {
+      await supportTelegramApi('sendMessage', {
+        chat_id: message.chat.id,
+        text: `Chat ID: <code>${message.chat.id}</code>`,
+        parse_mode: 'HTML',
+      })
+      return NextResponse.json({ ok: true })
+    }
+
     if (message.chat?.type === 'private') {
       const text = String(message.text || '')
       if (text === '/start' || text.startsWith('/start ')) {
