@@ -119,6 +119,13 @@ export async function POST(request: Request) {
   const trend = trends?.[0]
   if (!trend?.published) return NextResponse.json({ error: 'Trend not found' }, { status: 404 })
 
+  const trendConfig = trend.generation_config && typeof trend.generation_config === 'object'
+    ? trend.generation_config as Record<string, unknown>
+    : {}
+  if (String(trendConfig.execution_mode || '') === 'direct') {
+    return NextResponse.json({ error: 'DIRECT_TREND_REQUIRES_DIRECT_FLOW' }, { status: 409 })
+  }
+
   const provider = String(trend.provider || '').toLowerCase()
   const model = String(trend.model || '').toLowerCase()
   const isRunway = provider === 'runway' && model === 'seedance2_5'
