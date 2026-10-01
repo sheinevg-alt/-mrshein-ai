@@ -403,15 +403,18 @@ export async function createApiModelsImageTask(params: {
   ratio?: string
   resolution?: ApiModelsImageResolution
   references?: string[]
+  quality?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
   callbackUrl?: string
 }) {
-  const references = (params.references || []).filter(Boolean).slice(0, 10)
+  const references = (params.references || []).filter(Boolean).slice(0, 16)
+  const isGptImage = params.model.startsWith('gpt-image-2.5')
   return createTaskAt('/images/generations', {
     model: params.model,
     prompt: params.promptText,
     aspect_ratio: params.ratio || '1:1',
-    resolution: params.resolution || '2k',
-    ...(references.length ? { images: references } : {}),
+    resolution: String(params.resolution || '2k').toUpperCase(),
+    ...(references.length ? { image_urls: references } : {}),
+    ...(isGptImage ? { quality: params.quality || 'medium' } : {}),
     ...(params.callbackUrl ? { callback_url: params.callbackUrl } : {}),
   })
 }
