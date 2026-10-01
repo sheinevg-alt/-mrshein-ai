@@ -145,7 +145,7 @@ export function WorksScreen({ onRepeatGeneration }: { onRepeatGeneration?: (jobI
       const blob = await response.blob()
       const video = isVideoUrl(item.resultUrl)
       const ext = extensionForType(response.headers.get('content-type') || blob.type || '', video)
-      const filename = `Shein-One-${video ? 'video' : 'image'}-${item.id.slice(0, 8)}.${ext}`
+      const filename = `Banana-Zero-${video ? 'video' : 'image'}-${item.id.slice(0, 8)}.${ext}`
       const file = new File([blob], filename, { type: blob.type || response.headers.get('content-type') || undefined })
 
       const shareNavigator = navigator as Navigator & {
@@ -247,7 +247,7 @@ export function WorksScreen({ onRepeatGeneration }: { onRepeatGeneration?: (jobI
                   <div className="mt-3 rounded-2xl bg-destructive/8 px-4 py-3">
                     <p className="flex items-center gap-2 text-sm font-semibold text-destructive">
                       <AlertCircle className="size-4" />
-                      {locale === 'ru' ? 'Не удалось создать видео' : 'Could not create the video'}
+                      {locale === 'ru' ? 'Не удалось создать результат' : 'Could not create the result'}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">{failureCopy(item, locale)}</p>
                     <button
