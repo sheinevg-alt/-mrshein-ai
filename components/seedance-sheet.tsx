@@ -268,6 +268,7 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
           mode,
           prompt: prompt.trim(),
           duration,
+          sourceDuration: sourceVideo?.duration || undefined,
           resolution,
           generateAudio,
           sourceVideoPath,
