@@ -115,7 +115,7 @@ export const tools: Tool[] = [
   { id: 'gpt-image-2-5', category: 'image', name: { en: 'GPT Image 2.5', ru: 'GPT Image 2.5' }, description: { en: 'Precise edits, text, products and transparent PNG', ru: 'Точный edit, текст, товары и прозрачный PNG' }, icon: Brush, badge: 'New', kind: 'model', modelId: 'gpt-image-2.5-flare', provider: 'apimodels' },
 
   { id: 'suno-v5', category: 'audio', name: { en: 'Suno v5', ru: 'Suno v5' }, description: { en: 'Songs, instrumentals and music concepts', ru: 'Песни, инструменталы и музыкальные идеи' }, icon: Music, badge: 'Popular', kind: 'model', modelId: 'suno-v5', provider: 'apimodels' },
-  { id: 'elevenlabs-tts', category: 'audio', name: { en: 'ElevenLabs', ru: 'ElevenLabs' }, description: { en: 'Natural text-to-speech and voice-over', ru: 'Естественная озвучка и voice-over' }, icon: Mic, kind: 'model', modelId: 'eleven-tts-v4', provider: 'apimodels' },
+  { id: 'elevenlabs-tts', category: 'audio', name: { en: 'ElevenLabs', ru: 'ElevenLabs' }, description: { en: 'Natural text-to-speech and voice-over', ru: 'Естественная озвучка и voice-over' }, icon: Mic, kind: 'model', modelId: 'eleven-tts-v3', provider: 'apimodels' },
   { id: 'kling-audio', category: 'audio', name: { en: 'Kling Audio', ru: 'Kling Audio' }, description: { en: 'Sound effects and video-to-audio', ru: 'Звуковые эффекты и озвучивание видео' }, icon: AudioWaveform, kind: 'model', modelId: 'kling-sound-effects', provider: 'apimodels' },
 
   { id: 'gpt-6-sol', category: 'text', name: { en: 'GPT-6 Sol', ru: 'GPT-6 Sol' }, description: { en: 'Prompts, scripts and advanced writing', ru: 'Промпты, сценарии и сложные тексты' }, icon: MessageSquare, badge: 'Popular', kind: 'model', modelId: 'gpt-6-sol', provider: 'apimodels' },
