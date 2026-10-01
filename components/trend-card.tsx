@@ -37,7 +37,14 @@ export function TrendCard({ trend, onOpen, featured = false, className }: TrendC
         <button type="button" tabIndex={-1} aria-hidden="true" onClick={() => onOpen(trend)} className="absolute inset-0 transition active:bg-white/10" />
         {trend.cardBadge ? (
           <div className="absolute top-2 left-2 flex flex-col items-start gap-1.5">
-            <span className="rounded-full border border-white/35 bg-foreground/90 px-2.5 py-1 text-[10px] font-extrabold tracking-[0.08em] text-background shadow-lg">
+            <span
+              className={cn(
+                'rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-[0.08em] shadow-lg',
+                trend.cardBadge === 'popular'
+                  ? 'border-white/35 bg-foreground/90 text-background'
+                  : 'border-transparent bg-banana text-[#171A22]',
+              )}
+            >
               {trend.cardBadge === 'hit'
                 ? (locale === 'ru' ? 'ХИТ' : 'HIT')
                 : trend.cardBadge === 'new'
