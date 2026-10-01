@@ -12,17 +12,17 @@ type TrendsContextValue = {
 const TrendsContext = createContext<TrendsContextValue | null>(null)
 
 export function TrendsProvider({ children }: { children: React.ReactNode }) {
-  const [trends, setTrends] = useState<Trend[]>(fallbackTrends)
+  const [trends, setTrends] = useState<Trend[]>([])
   const [loading, setLoading] = useState(true)
 
   async function refresh() {
     try {
       const response = await fetch('/api/trends', { cache: 'no-store' })
-      if (!response.ok) return
+      if (!response.ok) { setTrends(fallbackTrends); return }
       const data = await response.json()
-      if (Array.isArray(data?.trends) && data.trends.length > 0) setTrends(data.trends)
+      if (Array.isArray(data?.trends)) setTrends(data.trends)
     } catch {
-      // Static fallback keeps the Mini App usable before the database is connected.
+      setTrends(fallbackTrends)
     } finally {
       setLoading(false)
     }
