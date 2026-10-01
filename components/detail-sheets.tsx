@@ -217,6 +217,9 @@ function TrendFlow({ trend, onGenerationStarted }: { trend: Trend; onGenerationS
   ))
   const [generateAudio, setGenerateAudio] = useState(true)
   const [resolution, setResolution] = useState<'480p' | '720p' | '1080p'>('480p')
+  const resolutionOptions: Array<'480p' | '720p' | '1080p'> = trend.resolutions?.length
+    ? trend.resolutions
+    : ['480p', '720p', '1080p']
   const [submitted, setSubmitted] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [resultMessage, setResultMessage] = useState('')
@@ -371,12 +374,21 @@ function TrendFlow({ trend, onGenerationStarted }: { trend: Trend; onGenerationS
             <span className="block font-medium">{locale === 'ru' ? 'Качество' : 'Quality'}</span>
             <select
               value={resolution}
-              onChange={(event) => setResolution((['480p', '720p', '1080p'].includes(event.target.value) ? event.target.value : '480p') as '480p' | '720p' | '1080p')}
+              onChange={(event) => {
+                const next = event.target.value as '480p' | '720p' | '1080p'
+                setResolution(resolutionOptions.includes(next) ? next : resolutionOptions[0] || '480p')
+              }}
               className="mt-2 h-10 w-full rounded-xl border bg-background px-3 text-sm font-semibold text-foreground"
             >
-              <option value="480p">480p</option>
-              <option value="720p">720p</option>
-              <option value="1080p">1080p</option>
+              {resolutionOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option === '480p'
+                    ? (locale === 'ru' ? 'Стандарт · 480p' : 'Standard · 480p')
+                    : option === '720p'
+                      ? (locale === 'ru' ? 'Высокое · 720p' : 'High · 720p')
+                      : (locale === 'ru' ? 'Максимальное · 1080p' : 'Maximum · 1080p')}
+                </option>
+              ))}
             </select>
           </label>
           <button
