@@ -75,6 +75,7 @@ function toPublicTrend(row: TrendRow): Trend {
     generateAudioDefault: config.default_generate_audio === undefined
       ? undefined
       : Boolean(config.default_generate_audio),
+    generateAudioLocked: Boolean(config.lock_audio),
   }
 }
 
