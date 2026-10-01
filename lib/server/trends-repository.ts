@@ -72,6 +72,9 @@ function toPublicTrend(row: TrendRow): Trend {
     cardBadge: ['hit', 'new', 'popular'].includes(String(config.card_badge || '').toLowerCase())
       ? String(config.card_badge).toLowerCase() as 'hit' | 'new' | 'popular'
       : undefined,
+    generateAudioDefault: config.default_generate_audio === undefined
+      ? undefined
+      : Boolean(config.default_generate_audio),
   }
 }
 
