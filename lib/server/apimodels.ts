@@ -1,4 +1,5 @@
 import 'server-only'
+import { createHmac, timingSafeEqual } from 'node:crypto'
 
 const APIMODELS_BASE = 'https://api.apimodels.app/v1'
 const APIMODELS_MODEL = 'seedance-2.5'
@@ -16,6 +17,18 @@ async function apiModelsFetch(path: string, init: RequestInit = {}) {
   headers.set('Authorization', `Bearer ${apiKey()}`)
   if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   return fetch(`${APIMODELS_BASE}${path}`, { ...init, headers, cache: 'no-store' })
+}
+
+export function createApiModelsCallbackToken(jobId: string) {
+  return createHmac('sha256', apiKey()).update(`banana-zero:${jobId}`).digest('hex')
+}
+
+export function verifyApiModelsCallbackToken(jobId: string, token: string) {
+  if (!jobId || !token) return false
+  const expected = createApiModelsCallbackToken(jobId)
+  const left = Buffer.from(expected, 'utf8')
+  const right = Buffer.from(token, 'utf8')
+  return left.length === right.length && timingSafeEqual(left, right)
 }
 
 
