@@ -16,6 +16,7 @@ import { TrendsScreen } from './screens/trends-screen'
 import { WorksScreen } from './screens/works-screen'
 import { TrendsProvider, useTrends } from './trends-provider'
 import { SeedanceSheet } from './seedance-sheet'
+import { RepeatGenerationSheet } from './repeat-generation-sheet'
 import { UserProvider, useUserState } from './user-provider'
 
 export function AppShell() {
@@ -42,9 +43,10 @@ function InnerApp() {
   const [activeTool, setActiveTool] = useState<Tool | null>(null)
   const [activeTrend, setActiveTrend] = useState<Trend | null>(null)
   const [seedanceOpen, setSeedanceOpen] = useState(false)
+  const [repeatJobId, setRepeatJobId] = useState<string | null>(null)
   const deepLinkHandled = useRef(false)
 
-  const sheetOpen = activeTool !== null || activeTrend !== null || seedanceOpen
+  const sheetOpen = activeTool !== null || activeTrend !== null || seedanceOpen || repeatJobId !== null
   const canGoBack = sheetOpen || (tab === 'create' && category !== null)
 
   useEffect(() => {
@@ -72,7 +74,8 @@ function InnerApp() {
   }, [markWorksSeen, trends])
 
   function goBack() {
-    if (seedanceOpen) setSeedanceOpen(false)
+    if (repeatJobId) setRepeatJobId(null)
+    else if (seedanceOpen) setSeedanceOpen(false)
     else if (activeTool) setActiveTool(null)
     else if (activeTrend) setActiveTrend(null)
     else if (category) setCategory(null)
@@ -106,6 +109,7 @@ function InnerApp() {
   }
 
   function openWorksAfterGeneration() {
+    setRepeatJobId(null)
     setSeedanceOpen(false)
     setActiveTool(null)
     setActiveTrend(null)
@@ -144,7 +148,7 @@ function InnerApp() {
             ) : (
               <CreateScreen onOpenCategory={openCategory} onOpenSeedance={() => { haptics.impact('light'); setSeedanceOpen(true) }} />
             ))}
-          {tab === 'works' && <WorksScreen />}
+          {tab === 'works' && <WorksScreen onRepeatGeneration={(jobId) => setRepeatJobId(jobId)} />}
           {tab === 'favorites' && (
             <FavoritesScreen onOpenTool={openTool} onOpenTrend={openTrend} onBrowse={() => changeTab('trends')} />
           )}
@@ -171,6 +175,7 @@ function InnerApp() {
 
       <BottomNav active={tab} onChange={changeTab} worksBadge={unreadWorks} />
       <SeedanceSheet open={seedanceOpen} onClose={() => setSeedanceOpen(false)} onGenerationStarted={openWorksAfterGeneration} />
+      <RepeatGenerationSheet jobId={repeatJobId} onClose={() => setRepeatJobId(null)} onGenerationStarted={openWorksAfterGeneration} />
       <ToolSheet tool={activeTool} onClose={() => setActiveTool(null)} />
       <TrendSheet
         trend={activeTrend}
