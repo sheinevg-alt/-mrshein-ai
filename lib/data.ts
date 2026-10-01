@@ -83,6 +83,7 @@ export type Trend = {
   resolutions?: Array<'480p' | '720p' | '1080p'>
   executionMode?: 'direct'
   cardBadge?: 'hit' | 'new' | 'popular'
+  generateAudioDefault?: boolean
 }
 
 export const TOKEN_BALANCE = 120
