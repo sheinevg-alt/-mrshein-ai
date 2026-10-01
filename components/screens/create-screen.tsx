@@ -36,7 +36,7 @@ export function CreateScreen({
             {locale === 'ru' ? 'Свой промпт + до 3 референсов через BytePlus API' : 'Your prompt + up to 3 references via BytePlus API'}
           </span>
         </span>
-        <Sparkles className="size-5 shrink-0 text-brand" />
+        <Sparkles className="size-5 shrink-0 text-banana" />
       </button>
 
       <ul className="grid grid-cols-2 gap-3">
