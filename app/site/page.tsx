@@ -30,6 +30,7 @@ export default function SitePage() {
             <a href="#features" className="transition hover:text-[#171A22]">Возможности</a>
             <a href="#how" className="transition hover:text-[#171A22]">Как работает</a>
             <a href="#pricing" className="transition hover:text-[#171A22]">Тарифы</a>
+            <Link href="/contacts" className="transition hover:text-[#171A22]">Контакты</Link>
           </nav>
           <a
             href="https://mrshein-ai-v3.vercel.app"
@@ -145,9 +146,10 @@ export default function SitePage() {
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-8 text-sm text-[#66758E] md:flex-row md:items-center md:justify-between md:px-8">
           <div className="flex items-center gap-2"><span className="font-bold text-[#171A22]">Banana Zero</span><span>·</span><span>bananazero.ru</span></div>
           <div className="flex flex-wrap gap-5">
-            <span>Политика конфиденциальности</span>
-            <span>Оферта</span>
-            <span>Условия возврата</span>
+            <Link href="/privacy" className="transition hover:text-[#171A22]">Политика конфиденциальности</Link>
+            <Link href="/offer" className="transition hover:text-[#171A22]">Публичная оферта</Link>
+            <Link href="/refund" className="transition hover:text-[#171A22]">Оплата и возврат</Link>
+            <Link href="/contacts" className="transition hover:text-[#171A22]">Контакты</Link>
           </div>
         </div>
       </footer>
