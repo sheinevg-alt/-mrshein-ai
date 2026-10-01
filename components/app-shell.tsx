@@ -188,7 +188,7 @@ function InnerApp() {
               <CheckCircle2 className="size-5" />
             </span>
             <button type="button" onClick={openCompletedWork} className="min-w-0 flex-1 text-left">
-              <span className="block text-sm font-semibold">{locale === 'ru' ? 'Ваше видео готово' : 'Your video is ready'}</span>
+              <span className="block text-sm font-semibold">{locale === 'ru' ? 'Ваш результат готов' : 'Your result is ready'}</span>
               <span className="block truncate text-xs text-muted-foreground">{locale === 'ru' ? 'Нажмите, чтобы посмотреть результат' : 'Tap to view the result'}</span>
             </button>
             <button type="button" onClick={clearCompletionNotice} className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground" aria-label={locale === 'ru' ? 'Закрыть' : 'Close'}>
