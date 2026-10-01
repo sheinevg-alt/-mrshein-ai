@@ -12,9 +12,26 @@ import { useUserState } from './user-provider'
 type FileUpload = { url: string; isVideo: boolean; isAudio: boolean; name: string; isDefault?: boolean; file?: File }
 type InputValue = FileUpload | string
 
-export function ToolSheet({ tool, onClose }: { tool: Tool | null; onClose: () => void }) {
+export function ToolSheet({
+  tool,
+  onClose,
+  onGenerationStarted,
+}: {
+  tool: Tool | null
+  onClose: () => void
+  onGenerationStarted?: (jobId: string) => void
+}) {
   const { t, locale } = useI18n()
   if (!tool) return null
+
+  if (tool.kind === 'model') {
+    return (
+      <BottomSheet open title={localize(tool.name, locale)} onClose={onClose}>
+        <ModelToolFlow tool={tool} onGenerationStarted={onGenerationStarted} />
+      </BottomSheet>
+    )
+  }
+
   const Icon = tool.icon
   const name = localize(tool.name, locale)
   const description = localize(tool.description, locale)
@@ -31,22 +48,342 @@ export function ToolSheet({ tool, onClose }: { tool: Tool | null; onClose: () =>
           <p className="text-xs text-muted-foreground">{t('tool.categoryTool', { category })}</p>
         </div>
       </div>
+      <p className="mt-5 rounded-2xl bg-brand-tint/60 px-4 py-3 text-sm text-muted-foreground">
+        {locale === 'ru' ? 'Этот быстрый инструмент подключается следующим этапом. AI-модели выше уже получают рабочие панели.' : 'This quick tool is next in the rollout. AI models above already have working panels.'}
+      </p>
+    </BottomSheet>
+  )
+}
 
-      <label htmlFor="tool-prompt" className="mt-6 block text-xs font-medium text-muted-foreground">{t('tool.promptLabel')}</label>
+function ModelToolFlow({ tool, onGenerationStarted }: { tool: Tool; onGenerationStarted?: (jobId: string) => void }) {
+  const { locale } = useI18n()
+  const { tokenBalance, refreshUser } = useUserState()
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [prompt, setPrompt] = useState('')
+  const [reference, setReference] = useState<FileUpload | null>(null)
+  const [duration, setDuration] = useState(tool.id === 'omni-flash' ? 4 : 5)
+  const [resolution, setResolution] = useState(tool.category === 'video' ? '720p' : '2k')
+  const [ratio, setRatio] = useState(tool.category === 'image' ? '1:1' : '9:16')
+  const [quality, setQuality] = useState('medium')
+  const [mode, setMode] = useState('std')
+  const [generateAudio, setGenerateAudio] = useState(false)
+  const [reasoningEffort, setReasoningEffort] = useState('medium')
+  const [quotedTokens, setQuotedTokens] = useState<number | null>(null)
+  const [providerEstimate, setProviderEstimate] = useState<number | null>(null)
+  const [generating, setGenerating] = useState(false)
+  const [message, setMessage] = useState('')
+  const [textResult, setTextResult] = useState('')
+  const [audioDataUrl, setAudioDataUrl] = useState('')
+
+  const isVideo = tool.category === 'video'
+  const isImage = tool.category === 'image'
+  const isText = tool.category === 'text'
+  const isAudio = tool.category === 'audio'
+  const wantsVideoInput = tool.id === 'kling-audio'
+  const wantsImageInput = isImage || tool.id === 'omni-flash' || tool.id === 'kling-v3'
+
+  useEffect(() => {
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      void fetch('/api/generate/model/quote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          toolId: tool.id,
+          promptLength: prompt.length,
+          settings: { duration, resolution, ratio, quality, mode, generateAudio, reasoningEffort },
+        }),
+      }).then(async (response) => {
+        const data = await response.json().catch(() => ({}))
+        if (!cancelled && response.ok) {
+          setQuotedTokens(Number(data.tokenCost || 0))
+          setProviderEstimate(data.providerUsdEstimate == null ? null : Number(data.providerUsdEstimate))
+        }
+      }).catch(() => undefined)
+    }, 200)
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [tool.id, prompt.length, duration, resolution, ratio, quality, mode, generateAudio, reasoningEffort])
+
+  useEffect(() => () => {
+    if (reference?.url) URL.revokeObjectURL(reference.url)
+  }, [reference])
+
+  async function chooseFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const selected = event.target.files?.[0]
+    if (!selected) return
+    const file = selected.type.startsWith('image/') ? await compressImageIfNeeded(selected) : selected
+    if (reference?.url) URL.revokeObjectURL(reference.url)
+    setReference({
+      file,
+      url: URL.createObjectURL(file),
+      name: file.name,
+      isVideo: file.type.startsWith('video/'),
+      isAudio: false,
+    })
+    setMessage('')
+    event.target.value = ''
+  }
+
+  async function generate() {
+    const initData = getTelegramInitData()
+    if (!initData) {
+      setMessage(locale === 'ru' ? 'Откройте Banana Zero внутри Telegram Mini App.' : 'Open Banana Zero inside Telegram Mini App.')
+      return
+    }
+    if (prompt.trim().length < 2) {
+      setMessage(locale === 'ru' ? 'Введите запрос.' : 'Enter a prompt.')
+      return
+    }
+
+    setGenerating(true)
+    setMessage(locale === 'ru' ? 'Запускаю генерацию…' : 'Starting generation…')
+    setTextResult('')
+    setAudioDataUrl('')
+
+    try {
+      let referencePaths: string[] = []
+      let sourceVideoPath = ''
+      if (reference?.file) {
+        const path = await uploadTrendInputFile(reference.file, initData)
+        if (reference.isVideo) sourceVideoPath = path
+        else referencePaths = [path]
+      }
+
+      const response = await fetch('/api/generate/model', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Telegram-Init-Data': initData,
+        },
+        body: JSON.stringify({
+          toolId: tool.id,
+          prompt: prompt.trim(),
+          referencePaths,
+          sourceVideoPath,
+          settings: { duration, resolution, ratio, quality, mode, generateAudio, reasoningEffort },
+        }),
+      })
+      const data = await response.json().catch(() => ({}))
+
+      if (response.ok && data?.ok) {
+        haptics.success()
+        await refreshUser()
+        if (data.status === 'completed' && typeof data.text === 'string') {
+          setTextResult(data.text)
+          setMessage(locale === 'ru' ? 'Готово.' : 'Done.')
+          return
+        }
+        if (data.status === 'completed' && typeof data.audioDataUrl === 'string') {
+          setAudioDataUrl(data.audioDataUrl)
+          setMessage(locale === 'ru' ? 'Озвучка готова. Сохраните её сейчас.' : 'Voice-over is ready. Save it now.')
+          return
+        }
+        if (data.jobId) {
+          onGenerationStarted?.(String(data.jobId))
+          return
+        }
+      }
+
+      if (data?.error === 'INSUFFICIENT_TOKENS') {
+        setMessage(locale === 'ru'
+          ? `Недостаточно токенов. Для этой настройки нужно ${Number(data.requiredTokens || quotedTokens || 0)}.`
+          : `Not enough Tokens. This setup needs ${Number(data.requiredTokens || quotedTokens || 0)}.`)
+      } else {
+        setMessage(locale === 'ru'
+          ? `Не удалось запустить: ${String(data?.details || data?.error || 'ошибка').slice(0, 180)}`
+          : `Could not start: ${String(data?.details || data?.error || 'error').slice(0, 180)}`)
+      }
+      await refreshUser()
+    } catch (error) {
+      setMessage(locale === 'ru' ? 'Не удалось запустить генерацию.' : 'Could not start generation.')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const durationOptions = tool.id === 'omni-flash'
+    ? [4, 6, 8, 10]
+    : tool.id === 'kling-v3'
+      ? Array.from({ length: 13 }, (_, index) => index + 3)
+      : [3, 4, 5, 6, 7, 8, 9, 10]
+
+  return (
+    <div>
+      <div className="rounded-2xl border border-brand/20 bg-brand-tint/50 p-4">
+        <p className="text-sm font-semibold">{localize(tool.name, locale)}</p>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">{localize(tool.description, locale)}</p>
+        <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+          <span className="rounded-full bg-card px-2.5 py-1 font-semibold">APIMODELS</span>
+          <span className="rounded-full bg-card px-2.5 py-1">{locale === 'ru' ? 'Доступно всем' : 'Visible to everyone'}</span>
+        </div>
+      </div>
+
+      <label className="mt-5 block text-xs font-medium text-muted-foreground">
+        {isText ? (locale === 'ru' ? 'Задача / текст' : 'Task / text') : isAudio ? (locale === 'ru' ? 'Описание / текст' : 'Description / text') : (locale === 'ru' ? 'Промпт' : 'Prompt')}
+      </label>
       <textarea
-        id="tool-prompt"
-        rows={4}
-        disabled
-        placeholder={t('tool.promptPlaceholder')}
-        className="mt-2 w-full resize-none rounded-2xl border bg-muted/60 p-4 text-base placeholder:text-muted-foreground/80 disabled:opacity-70"
+        rows={5}
+        value={prompt}
+        onChange={(event) => setPrompt(event.target.value)}
+        placeholder={locale === 'ru' ? 'Опишите, что нужно создать…' : 'Describe what you want to create…'}
+        className="mt-2 w-full resize-none rounded-2xl border bg-card p-4 text-sm"
       />
 
-      <button type="button" disabled className="brand-gradient mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-white disabled:opacity-45">
-        <Sparkles className="size-4" aria-hidden="true" />
-        {t('tool.generate', { count: getToolTokens(tool) })}
+      {wantsImageInput && (
+        <div className="mt-4">
+          <p className="text-xs font-medium text-muted-foreground">{locale === 'ru' ? 'Референс · необязательно' : 'Reference · optional'}</p>
+          <input ref={fileRef} type="file" accept="image/*" onChange={(event) => void chooseFile(event)} className="sr-only" />
+          {reference ? (
+            <div className="mt-2 flex items-center gap-3 rounded-2xl border bg-card p-3">
+              <img src={reference.url} alt="" className="size-16 rounded-xl object-cover" />
+              <p className="min-w-0 flex-1 truncate text-xs">{reference.name}</p>
+              <button type="button" onClick={() => fileRef.current?.click()} className="rounded-full border px-3 py-2 text-xs font-semibold">{locale === 'ru' ? 'Заменить' : 'Change'}</button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => fileRef.current?.click()} className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-brand/25 bg-brand-tint/30 text-sm font-semibold text-brand">
+              <ImagePlus className="size-4" />{locale === 'ru' ? 'Добавить фото' : 'Add image'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {wantsVideoInput && (
+        <div className="mt-4">
+          <p className="text-xs font-medium text-muted-foreground">{locale === 'ru' ? 'Видео · необязательно (для Video-to-Audio)' : 'Video · optional (for Video-to-Audio)'}</p>
+          <input ref={fileRef} type="file" accept="video/mp4,video/quicktime,.mp4,.mov" onChange={(event) => void chooseFile(event)} className="sr-only" />
+          {reference?.isVideo ? (
+            <div className="mt-2 overflow-hidden rounded-2xl border bg-card">
+              <video src={reference.url} controls muted playsInline className="max-h-52 w-full bg-black object-contain" />
+              <div className="flex items-center justify-between px-3 py-2"><span className="truncate text-xs">{reference.name}</span><button type="button" onClick={() => fileRef.current?.click()} className="text-xs font-semibold text-brand">{locale === 'ru' ? 'Заменить' : 'Change'}</button></div>
+            </div>
+          ) : (
+            <button type="button" onClick={() => fileRef.current?.click()} className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-brand/25 bg-brand-tint/30 text-sm font-semibold text-brand">
+              <Video className="size-4" />{locale === 'ru' ? 'Добавить видео' : 'Add video'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {isVideo && (
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <label className="rounded-2xl border bg-card p-3 text-xs text-muted-foreground">
+            <span>{locale === 'ru' ? 'Длительность' : 'Duration'}</span>
+            <select value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="mt-2 h-10 w-full rounded-xl border bg-background px-2 text-sm font-semibold text-foreground">
+              {durationOptions.map((value) => <option key={value} value={value}>{value} sec</option>)}
+            </select>
+          </label>
+          <label className="rounded-2xl border bg-card p-3 text-xs text-muted-foreground">
+            <span>{locale === 'ru' ? 'Формат' : 'Aspect'}</span>
+            <select value={ratio} onChange={(e) => setRatio(e.target.value)} className="mt-2 h-10 w-full rounded-xl border bg-background px-2 text-sm font-semibold text-foreground">
+              {['9:16','16:9','1:1'].map((value) => <option key={value}>{value}</option>)}
+            </select>
+          </label>
+          {tool.id === 'omni-flash' && (
+            <label className="rounded-2xl border bg-card p-3 text-xs text-muted-foreground">
+              <span>{locale === 'ru' ? 'Качество' : 'Quality'}</span>
+              <select value={resolution} onChange={(e) => setResolution(e.target.value)} className="mt-2 h-10 w-full rounded-xl border bg-background px-2 text-sm font-semibold text-foreground">
+                {['720p','1080p','4k'].map((value) => <option key={value}>{value}</option>)}
+              </select>
+            </label>
+          )}
+          {tool.id === 'kling-v3' && (
+            <>
+              <label className="rounded-2xl border bg-card p-3 text-xs text-muted-foreground">
+                <span>Mode</span>
+                <select value={mode} onChange={(e) => setMode(e.target.value)} className="mt-2 h-10 w-full rounded-xl border bg-background px-2 text-sm font-semibold text-foreground">
+                  <option value="std">Standard · 720p</option><option value="pro">Pro · 1080p</option>
+                </select>
+              </label>
+              <label className="flex items-center justify-between rounded-2xl border bg-card p-3 text-xs">
+                <span>{locale === 'ru' ? 'Со звуком' : 'With audio'}</span>
+                <input type="checkbox" checked={generateAudio} onChange={(e) => setGenerateAudio(e.target.checked)} className="size-4" />
+              </label>
+            </>
+          )}
+        </div>
+      )}
+
+      {isImage && (
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <label className="rounded-2xl border bg-card p-3 text-xs text-muted-foreground">
+            <span>{locale === 'ru' ? 'Разрешение' : 'Resolution'}</span>
+            <select value={resolution} onChange={(e) => setResolution(e.target.value)} className="mt-2 h-10 w-full rounded-xl border bg-background px-2 text-sm font-semibold text-foreground">
+              {['1k','2k','4k'].map((value) => <option key={value}>{value.toUpperCase()}</option>)}
+            </select>
+          </label>
+          <label className="rounded-2xl border bg-card p-3 text-xs text-muted-foreground">
+            <span>{locale === 'ru' ? 'Формат' : 'Aspect'}</span>
+            <select value={ratio} onChange={(e) => setRatio(e.target.value)} className="mt-2 h-10 w-full rounded-xl border bg-background px-2 text-sm font-semibold text-foreground">
+              {['1:1','9:16','16:9','4:3','3:4'].map((value) => <option key={value}>{value}</option>)}
+            </select>
+          </label>
+          {tool.id === 'gpt-image-2-5' && (
+            <label className="col-span-2 rounded-2xl border bg-card p-3 text-xs text-muted-foreground">
+              <span>{locale === 'ru' ? 'Детализация' : 'Detail quality'}</span>
+              <select value={quality} onChange={(e) => setQuality(e.target.value)} className="mt-2 h-10 w-full rounded-xl border bg-background px-2 text-sm font-semibold text-foreground">
+                {['low','medium','high','xhigh','max'].map((value) => <option key={value}>{value}</option>)}
+              </select>
+            </label>
+          )}
+        </div>
+      )}
+
+      {isText && tool.id !== 'claude-sonnet-5' && (
+        <label className="mt-4 block rounded-2xl border bg-card p-3 text-xs text-muted-foreground">
+          <span>Reasoning</span>
+          <select value={reasoningEffort} onChange={(e) => setReasoningEffort(e.target.value)} className="mt-2 h-10 w-full rounded-xl border bg-background px-2 text-sm font-semibold text-foreground">
+            {['none','low','medium','high'].map((value) => <option key={value}>{value}</option>)}
+          </select>
+        </label>
+      )}
+
+      {isAudio && tool.id === 'kling-audio' && !reference?.isVideo && (
+        <label className="mt-4 block rounded-2xl border bg-card p-3 text-xs text-muted-foreground">
+          <span>{locale === 'ru' ? 'Длительность SFX' : 'SFX duration'}</span>
+          <select value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="mt-2 h-10 w-full rounded-xl border bg-background px-2 text-sm font-semibold text-foreground">
+            {[3,4,5,6,7,8,9,10].map((value) => <option key={value}>{value} sec</option>)}
+          </select>
+        </label>
+      )}
+
+      <div className="mt-5 flex items-center justify-between rounded-2xl border bg-card px-4 py-3">
+        <div>
+          <p className="text-xs text-muted-foreground">{locale === 'ru' ? 'Стоимость запуска' : 'Generation price'}</p>
+          <p className="mt-0.5 text-lg font-black">{quotedTokens == null ? '…' : `${quotedTokens} Tokens`}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-muted-foreground">{locale === 'ru' ? 'Ваш баланс' : 'Your balance'}</p>
+          <p className="mt-0.5 text-sm font-semibold">{tokenBalance} Tokens</p>
+        </div>
+      </div>
+      {providerEstimate != null && (
+        <p className="mt-1 text-right text-[10px] text-muted-foreground">{locale === 'ru' ? 'Оценка себестоимости' : 'Provider estimate'}: ${providerEstimate.toFixed(4)}</p>
+      )}
+
+      <button type="button" onClick={() => void generate()} disabled={generating || prompt.trim().length < 2} className="brand-gradient mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-white disabled:opacity-45">
+        <Sparkles className="size-4" />
+        {generating
+          ? (locale === 'ru' ? 'Запускаю…' : 'Starting…')
+          : quotedTokens != null && tokenBalance < quotedTokens
+            ? (locale === 'ru' ? `Нужно ${quotedTokens} Tokens` : `Need ${quotedTokens} Tokens`)
+            : (locale === 'ru' ? `Создать · ${quotedTokens ?? '…'} Tokens` : `Generate · ${quotedTokens ?? '…'} Tokens`)}
       </button>
-      <p className="mt-3 text-center text-xs text-muted-foreground">{t('tool.soon')}</p>
-    </BottomSheet>
+
+      {message && <p className="mt-3 text-center text-xs text-muted-foreground">{message}</p>}
+      {textResult && (
+        <div className="mt-4 rounded-2xl border bg-card p-4">
+          <p className="whitespace-pre-wrap text-sm leading-6">{textResult}</p>
+        </div>
+      )}
+      {audioDataUrl && (
+        <div className="mt-4 rounded-2xl border bg-card p-4">
+          <audio src={audioDataUrl} controls className="w-full" />
+          <a href={audioDataUrl} download="Banana-Zero-voice.mp3" className="mt-3 flex h-10 items-center justify-center rounded-full border text-xs font-semibold">
+            {locale === 'ru' ? 'Скачать MP3' : 'Download MP3'}
+          </a>
+        </div>
+      )}
+    </div>
   )
 }
 
