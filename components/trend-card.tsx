@@ -69,7 +69,7 @@ export function TrendCard({ trend, onOpen, featured = false, className }: TrendC
           type="button"
           onClick={() => onOpen(trend)}
           className={cn(
-            'brand-gradient flex shrink-0 items-center justify-center gap-1.5 rounded-full font-semibold text-white shadow-[0_6px_16px_-8px_oklch(0.52_0.16_72/0.65)] transition active:scale-95',
+            'brand-gradient flex shrink-0 items-center justify-center gap-1.5 rounded-full font-semibold text-white shadow-[0_6px_16px_-8px_oklch(0.5_0.21_264/0.7)] transition active:scale-95',
             featured ? 'h-10 px-4 text-sm' : 'mt-auto h-9 w-full text-[13px]',
           )}
         >
