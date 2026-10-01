@@ -122,6 +122,7 @@ export async function POST(request: Request) {
   const trendConfig = trend.generation_config && typeof trend.generation_config === 'object'
     ? trend.generation_config as Record<string, unknown>
     : {}
+  const effectiveGenerateAudio = trendConfig.lock_audio ? false : generateAudio
   if (String(trendConfig.execution_mode || '') === 'direct') {
     return NextResponse.json({ error: 'DIRECT_TREND_REQUIRES_DIRECT_FLOW' }, { status: 409 })
   }
@@ -201,7 +202,7 @@ export async function POST(request: Request) {
       input_payload: {
         reference_count: references.length,
         reference_tags: referenceTags,
-        generate_audio: generateAudio,
+        generate_audio: effectiveGenerateAudio,
         resolution,
       },
       queued_at: isRunway || isBytePlus || isApiModels ? new Date().toISOString() : null,
@@ -251,7 +252,7 @@ export async function POST(request: Request) {
         references,
         videoReferences,
         resolution: apiResolution,
-        generateAudio,
+        effectiveGenerateAudio,
         callbackUrl,
       })
 
@@ -262,7 +263,7 @@ export async function POST(request: Request) {
             prompt: promptText,
             reference_count: references.length,
             reference_tags: referenceTags,
-            generate_audio: generateAudio,
+            generate_audio: effectiveGenerateAudio,
             resolution: apiResolution,
             duration: Math.max(4, Math.min(30, Number(trend.duration_seconds || 12))),
             aspect_ratio: ratioForBytePlus(trend.aspect_ratio),
@@ -311,7 +312,7 @@ export async function POST(request: Request) {
         ratio: ratioForBytePlus(trend.aspect_ratio),
         references,
         resolution,
-        generateAudio,
+        effectiveGenerateAudio,
       })
 
       await supabaseFetch(`generation_history?id=eq.${job.id}`, {
@@ -346,7 +347,7 @@ export async function POST(request: Request) {
         duration: Math.max(4, Math.min(30, Number(trend.duration_seconds || 11))),
         ratio: ratioForRunway(trend.aspect_ratio),
         references,
-        audio: generateAudio,
+        audio: effectiveGenerateAudio,
       })
 
       await supabaseFetch(`generation_history?id=eq.${job.id}`, {
