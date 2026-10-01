@@ -425,7 +425,10 @@ export async function createApiModelsAudioTask(params: {
   callbackUrl?: string
 }) {
   const body: Record<string, unknown> = { model: params.model }
-  if (params.model === 'kling-video-to-audio') {
+  if (params.model === 'suno-v5') {
+    body.description = params.promptText
+    body.mv = 'chirp-v5'
+  } else if (params.model === 'kling-video-to-audio') {
     if (!params.videoUrl) throw new Error('VIDEO_REQUIRED')
     body.video_url = params.videoUrl
     body.sound_effect_prompt = params.promptText
@@ -481,5 +484,35 @@ export async function createApiModelsChatCompletion(params: {
     requestId,
     creditsUsd: Number.isFinite(cost as number) ? cost : null,
     usage: payload?.usage || null,
+  }
+}
+
+
+export async function createApiModelsElevenTts(params: {
+  text: string
+  voiceId?: string
+  model?: 'eleven-tts-flash' | 'eleven-tts-turbo' | 'eleven-tts-multilingual' | 'eleven-tts-v3'
+}) {
+  const response = await apiModelsFetch('/tts/stream', {
+    method: 'POST',
+    body: JSON.stringify({
+      model: params.model || 'eleven-tts-v3',
+      text: params.text,
+      voice_id: params.voiceId || 'EXAVITQu4vr4xnSDxMaL',
+    }),
+  })
+  if (!response.ok) {
+    const message = await response.text().catch(() => '')
+    throw new Error(message || `APIMODELS_TTS_FAILED_${response.status}`)
+  }
+  const audio = Buffer.from(await response.arrayBuffer())
+  const requestId = String(response.headers.get('x-apimodels-request-id') || '')
+  const costHeader = response.headers.get('x-apimodels-cost')
+  const cost = costHeader == null ? null : Number(costHeader)
+  return {
+    audio,
+    mimeType: response.headers.get('content-type') || 'audio/mpeg',
+    requestId,
+    creditsUsd: Number.isFinite(cost as number) ? cost : null,
   }
 }
