@@ -451,18 +451,24 @@ function TrendFlow({ trend, onGenerationStarted }: { trend: Trend; onGenerationS
           type="button"
           role="switch"
           aria-checked={generateAudio}
+          disabled={trend.generateAudioLocked}
           onClick={() => {
+            if (trend.generateAudioLocked) return
             haptics.selection()
             setGenerateAudio((value) => !value)
           }}
-          className="mt-5 flex w-full items-center gap-3 rounded-2xl border bg-card px-4 py-3 text-left transition active:scale-[0.99]"
+          className="mt-5 flex w-full items-center gap-3 rounded-2xl border bg-card px-4 py-3 text-left transition active:scale-[0.99] disabled:cursor-default disabled:opacity-75"
         >
           <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-tint text-brand">
             <Volume2 className="size-5" />
           </span>
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-semibold">{locale === 'ru' ? 'Со звуком' : 'Generate with sound'}</span>
-            <span className="block text-xs text-muted-foreground">{locale === 'ru' ? 'Seedance создаст синхронный звук вместе с видео.' : 'Seedance will create synchronized audio with the video.'}</span>
+            <span className="block text-xs text-muted-foreground">{
+              trend.generateAudioLocked
+                ? (locale === 'ru' ? 'Для этого тренда звук отключён.' : 'Audio is disabled for this trend.')
+                : (locale === 'ru' ? 'Seedance создаст синхронный звук вместе с видео.' : 'Seedance will create synchronized audio with the video.')
+            }</span>
           </span>
           <span className={`relative h-7 w-12 shrink-0 rounded-full transition ${generateAudio ? 'bg-brand' : 'bg-muted'}`}>
             <span className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition ${generateAudio ? 'left-6' : 'left-1'}`} />
