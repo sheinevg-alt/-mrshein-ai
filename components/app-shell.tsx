@@ -120,6 +120,11 @@ function InnerApp() {
 
   function openTool(tool: Tool) {
     haptics.impact('light')
+    if (tool.id === 'seedance-2-5') {
+      setActiveTool(null)
+      setSeedanceOpen(true)
+      return
+    }
     setActiveTool(tool)
   }
 
@@ -196,7 +201,7 @@ function InnerApp() {
       <BottomNav active={tab} onChange={changeTab} worksBadge={unreadWorks} />
       <SeedanceSheet open={seedanceOpen} onClose={() => setSeedanceOpen(false)} onGenerationStarted={openWorksAfterGeneration} />
       <RepeatGenerationSheet jobId={repeatJobId} onClose={() => setRepeatJobId(null)} onGenerationStarted={openWorksAfterGeneration} />
-      <ToolSheet tool={activeTool} onClose={() => setActiveTool(null)} />
+      <ToolSheet tool={activeTool} onClose={() => setActiveTool(null)} onGenerationStarted={openWorksAfterGeneration} />
       <TrendSheet
         trend={activeTrend}
         onClose={() => setActiveTrend(null)}
