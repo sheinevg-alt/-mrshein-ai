@@ -18,19 +18,22 @@ import { TrendsProvider, useTrends } from './trends-provider'
 import { SeedanceSheet } from './seedance-sheet'
 import { RepeatGenerationSheet } from './repeat-generation-sheet'
 import { UserProvider, useUserState } from './user-provider'
+import { ThemeProvider } from './theme-provider'
 
 export function AppShell() {
   useTelegramInit()
   return (
-    <I18nProvider>
-      <UserProvider>
-        <TrendsProvider>
-          <FavoritesProvider>
-            <InnerApp />
-          </FavoritesProvider>
-        </TrendsProvider>
-      </UserProvider>
-    </I18nProvider>
+    <ThemeProvider>
+      <I18nProvider>
+        <UserProvider>
+          <TrendsProvider>
+            <FavoritesProvider>
+              <InnerApp />
+            </FavoritesProvider>
+          </TrendsProvider>
+        </UserProvider>
+      </I18nProvider>
+    </ThemeProvider>
   )
 }
 

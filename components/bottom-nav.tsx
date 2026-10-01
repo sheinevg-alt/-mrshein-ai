@@ -37,7 +37,7 @@ export function BottomNav({ active, onChange, worksBadge = false }: {
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
                   'relative flex h-full w-full flex-col items-center justify-center gap-0.5 px-0.5 text-[9px] font-medium transition-colors active:scale-95',
-                  isActive ? 'text-brand' : 'text-muted-foreground',
+                  isActive ? (id === 'create' ? 'text-banana' : 'text-brand') : 'text-muted-foreground',
                 )}
               >
                 <span className="relative">

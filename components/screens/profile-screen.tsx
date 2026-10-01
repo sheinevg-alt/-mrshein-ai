@@ -8,8 +8,11 @@ import {
   Clock,
   Globe,
   LifeBuoy,
+  Monitor,
+  Moon,
   Settings,
   Sparkles,
+  Sun,
   type LucideIcon,
 } from 'lucide-react'
 import { APP_CONFIG } from '@/lib/app-config'
@@ -21,6 +24,7 @@ import { useI18n } from '../i18n-provider'
 import { ScreenHeader } from '../screen-header'
 import { useUserState } from '../user-provider'
 import { SupportPanel } from '../support-panel'
+import { useTheme, type ThemeMode } from '../theme-provider'
 
 const noopSubscribe = () => () => {}
 type Panel = 'history' | 'notifications' | 'language' | 'settings' | 'help' | 'tokens' | null
@@ -115,6 +119,7 @@ export function ProfileScreen() {
 
 function ProfilePanel({ panel, onClose }: { panel: Panel; onClose: () => void }) {
   const { t, locale, setLocale } = useI18n()
+  const { theme, setTheme } = useTheme()
   const { history, notificationsEnabled, setNotificationsEnabled } = useUserState()
   if (!panel) return null
 
@@ -181,9 +186,31 @@ function ProfilePanel({ panel, onClose }: { panel: Panel; onClose: () => void })
       )}
 
       {panel === 'settings' && (
-        <div className="divide-y rounded-2xl border">
-          <div className="flex items-center justify-between px-4 py-3"><span className="text-sm">{t('settings.version')}</span><span className="text-xs text-muted-foreground">{APP_CONFIG.version}</span></div>
-          <div className="flex items-center justify-between px-4 py-3"><span className="text-sm">{t('settings.telegram')}</span><span className="text-xs text-muted-foreground">Active</span></div>
+        <div className="space-y-3">
+          <div className="rounded-2xl border p-3">
+            <p className="px-1 pb-2 text-xs font-medium text-muted-foreground">{locale === 'ru' ? 'Тема' : 'Theme'}</p>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                ['light', Sun, locale === 'ru' ? 'Светлая' : 'Light'],
+                ['dark', Moon, locale === 'ru' ? 'Тёмная' : 'Dark'],
+                ['system', Monitor, locale === 'ru' ? 'Система' : 'System'],
+              ] as [ThemeMode, LucideIcon, string][]).map(([id, Icon, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setTheme(id)}
+                  className={`flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 text-[11px] font-medium transition active:scale-95 ${theme === id ? 'border-brand bg-brand-tint text-brand' : 'bg-card text-muted-foreground'}`}
+                >
+                  <Icon className={`size-4 ${id === 'dark' && theme === id ? 'text-banana' : ''}`} />
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="divide-y rounded-2xl border">
+            <div className="flex items-center justify-between px-4 py-3"><span className="text-sm">{t('settings.version')}</span><span className="text-xs text-muted-foreground">{APP_CONFIG.version}</span></div>
+            <div className="flex items-center justify-between px-4 py-3"><span className="text-sm">{t('settings.telegram')}</span><span className="text-xs text-muted-foreground">Active</span></div>
+          </div>
         </div>
       )}
 

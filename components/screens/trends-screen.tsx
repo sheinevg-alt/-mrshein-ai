@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { categories, localize, type CategoryId, type Trend } from '@/lib/data'
 import { haptics } from '@/lib/telegram'
 import { cn } from '@/lib/utils'
+import { BrandLogo } from '../brand-logo'
 import { CategoryTile } from '../category-tile'
 import { useI18n } from '../i18n-provider'
 import { TokenBalancePill } from '../tokens'
@@ -33,6 +34,7 @@ export function TrendsScreen({ onOpenTrend, onOpenCategory }: TrendsScreenProps)
     <div className="animate-in fade-in duration-300">
       <header className="flex items-center justify-between gap-3 pt-4 pb-5">
         <div className="flex min-w-0 items-center gap-3">
+          <BrandLogo className="size-10 shrink-0" />
           <div className="min-w-0">
             <h1 className="truncate text-xl leading-tight font-semibold tracking-tight">{t('app.name')}</h1>
             <p className="truncate text-xs text-muted-foreground">{t('app.tagline')}</p>
