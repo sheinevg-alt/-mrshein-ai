@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import {
   createApiModelsSeedance25Task,
+  registerApiModelsPortrait,
   type ApiModelsResolution,
 } from '@/lib/server/apimodels'
 import {
@@ -151,11 +152,45 @@ export async function POST(request: Request) {
   const job = (await historyResponse.json())?.[0]
 
   try {
-    const references = await Promise.all(
+    const signedReferences = await Promise.all(
       referencePaths.map((path) => createStorageSignedDownloadUrl(INPUT_BUCKET, path, 7200)),
     )
+
+    if (!signedReferences[0]) throw new Error('PERSON_REFERENCE_MISSING')
+    const portrait = await registerApiModelsPortrait(signedReferences[0], `trend-${trend.id}-person`)
+    const references = [
+      portrait.assetUrl,
+      ...signedReferences.slice(1),
+    ]
+
     const videoUrl = await createStorageSignedDownloadUrl(INPUT_BUCKET, sourceVideoPath, 7200)
     const callbackUrl = `${new URL(request.url).origin}/api/generate/callback/apimodels?jobId=${encodeURIComponent(job.id)}`
+
+    await supabaseFetch(`generation_history?id=eq.${job.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        input_payload: {
+          mode: 'generate',
+          prompt,
+          source_video_path: sourceVideoPath,
+          reference_paths: referencePaths,
+          reference_count: referencePaths.length + 1,
+          reference_tags: [
+            '@Video1',
+            ...referencePaths.map((_, index) => `@Image${index + 1}`),
+          ],
+          generate_audio: generateAudio,
+          duration,
+          aspect_ratio: ratio,
+          resolution,
+          execution_mode: 'direct',
+          person_reference_mode: 'asset',
+          person_asset_id: portrait.id || null,
+          person_asset_url: portrait.assetUrl,
+        },
+        updated_at: new Date().toISOString(),
+      }),
+    })
 
     const task = await createApiModelsSeedance25Task({
       promptText: prompt,
@@ -179,6 +214,7 @@ export async function POST(request: Request) {
           apimodels_trend_direct: true,
           apimodels_mode: 'generate',
           apimodels_resolution: resolution,
+          apimodels_person_asset: true,
           prompt_version: String(config.prompt_version || 'control'),
         },
         updated_at: new Date().toISOString(),
