@@ -1,4 +1,4 @@
--- MrShein AI MVP database schema
+-- Banana Zero database schema
 -- Run once in Supabase SQL Editor.
 
 create table if not exists public.trends (
@@ -241,3 +241,75 @@ values
   ('generation-failed','generation','Why a generation can fail','Почему генерация может завершиться ошибкой','A generation can fail because of a provider outage, unsupported input, temporary capacity limits or a processing error. If the service reports a technical failure, reserved Tokens are returned automatically.','Генерация может завершиться ошибкой из-за сбоя провайдера, неподходящего исходника, временного лимита мощности или ошибки обработки. При технической ошибке зарезервированные токены возвращаются автоматически.',30),
   ('token-refunds','tokens','When Tokens are returned','Когда возвращаются токены','Tokens are reserved when a generation starts. If the generation fails for a technical reason before a usable result is delivered, the reserved Tokens are returned to your balance.','Токены резервируются при запуске генерации. Если генерация завершается технической ошибкой до получения пригодного результата, зарезервированные токены возвращаются на баланс.',40)
 on conflict (slug) do nothing;
+
+
+-- Banana Zero owner/admin audit trail and atomic manual Token adjustments.
+create table if not exists public.admin_audit_log (
+  id uuid primary key default gen_random_uuid(),
+  action text not null,
+  subject_type text not null,
+  subject_id text,
+  actor text not null default 'banana-zero-admin',
+  metadata jsonb not null default '{}'::jsonb,
+  idempotency_key text unique,
+  created_at timestamptz not null default now()
+);
+
+alter table public.admin_audit_log enable row level security;
+revoke all on table public.admin_audit_log from anon, authenticated;
+grant select, insert on table public.admin_audit_log to service_role;
+
+create or replace function public.admin_adjust_tokens(
+  p_telegram_id bigint,
+  p_amount integer,
+  p_reference text default null,
+  p_actor text default 'banana-zero-admin',
+  p_idempotency_key text default null
+)
+returns integer
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_balance integer;
+  v_audit_id uuid;
+begin
+  if p_amount = 0 then raise exception 'INVALID_AMOUNT'; end if;
+
+  if p_idempotency_key is not null and length(trim(p_idempotency_key)) > 0 then
+    insert into public.admin_audit_log(action, subject_type, subject_id, actor, metadata, idempotency_key)
+    values ('tokens.adjust','telegram_user',p_telegram_id::text,coalesce(nullif(trim(p_actor),''),'banana-zero-admin'),
+      jsonb_build_object('amount',p_amount,'reference',p_reference),trim(p_idempotency_key))
+    on conflict (idempotency_key) do nothing returning id into v_audit_id;
+
+    if v_audit_id is null then
+      select token_balance into v_balance from public.app_users where telegram_id = p_telegram_id;
+      if v_balance is null then raise exception 'USER_NOT_FOUND'; end if;
+      return v_balance;
+    end if;
+  else
+    insert into public.admin_audit_log(action, subject_type, subject_id, actor, metadata)
+    values ('tokens.adjust','telegram_user',p_telegram_id::text,coalesce(nullif(trim(p_actor),''),'banana-zero-admin'),
+      jsonb_build_object('amount',p_amount,'reference',p_reference));
+  end if;
+
+  update public.app_users
+  set token_balance = token_balance + p_amount, last_seen_at = now()
+  where telegram_id = p_telegram_id and token_balance + p_amount >= 0
+  returning token_balance into v_balance;
+
+  if v_balance is null then
+    if exists (select 1 from public.app_users where telegram_id = p_telegram_id) then raise exception 'INSUFFICIENT_TOKENS'; end if;
+    raise exception 'USER_NOT_FOUND';
+  end if;
+
+  insert into public.token_ledger(telegram_id, amount, event_type, reference)
+  values (p_telegram_id,p_amount,'adjustment',coalesce(nullif(trim(p_reference),''),'admin manual adjustment'));
+
+  return v_balance;
+end;
+$$;
+
+revoke all on function public.admin_adjust_tokens(bigint, integer, text, text, text) from public, anon, authenticated;
+grant execute on function public.admin_adjust_tokens(bigint, integer, text, text, text) to service_role;
