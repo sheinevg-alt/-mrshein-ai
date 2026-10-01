@@ -1,23 +1,13 @@
 import { NextResponse } from 'next/server'
-import { supportTelegramApi } from '@/lib/server/support-telegram'
+import { getSupportBotConfig, supportTelegramApi } from '@/lib/server/support-telegram'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const tokenConfigured = Boolean(process.env.SUPPORT_TELEGRAM_BOT_TOKEN)
-  const secret = process.env.SUPPORT_TELEGRAM_WEBHOOK_SECRET
-
-  if (!tokenConfigured || !secret) {
-    return NextResponse.json({
-      ok: false,
-      error: 'Missing SUPPORT_TELEGRAM_BOT_TOKEN or SUPPORT_TELEGRAM_WEBHOOK_SECRET',
-    }, { status: 503 })
-  }
-
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://mrshein-ai-v3.vercel.app').replace(/\/$/, '')
-  const webhookUrl = `${appUrl}/api/support/telegram/webhook`
-
   try {
+    const config = await getSupportBotConfig()
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://mrshein-ai-v3.vercel.app').replace(/\/$/, '')
+    const webhookUrl = `${appUrl}/api/support/telegram/webhook`
     const bot = await supportTelegramApi('getMe', {})
 
     await supportTelegramApi('setMyDescription', {
@@ -38,7 +28,7 @@ export async function GET() {
 
     await supportTelegramApi('setWebhook', {
       url: webhookUrl,
-      secret_token: secret,
+      secret_token: config.webhook_secret,
       allowed_updates: ['message'],
       drop_pending_updates: false,
     })
@@ -57,7 +47,7 @@ export async function GET() {
         pending_update_count: webhook.pending_update_count,
         last_error_message: webhook.last_error_message || null,
       },
-      operatorChatConfigured: Boolean(process.env.SUPPORT_OPERATOR_CHAT_ID),
+      operatorChatConfigured: Boolean(config.operator_chat_id),
     })
   } catch (error) {
     return NextResponse.json({
