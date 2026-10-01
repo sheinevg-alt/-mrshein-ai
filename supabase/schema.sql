@@ -313,3 +313,31 @@ $$;
 
 revoke all on function public.admin_adjust_tokens(bigint, integer, text, text, text) from public, anon, authenticated;
 grant execute on function public.admin_adjust_tokens(bigint, integer, text, text, text) to service_role;
+
+
+-- Banana Zero security hardening: server-side referral RPCs are never callable directly
+-- by anon/authenticated clients. The Next.js server invokes them with service_role.
+revoke execute on function public.apply_referral_attribution(bigint, text) from public, anon, authenticated;
+revoke execute on function public.convert_referral_rub_to_tokens(bigint, numeric) from public, anon, authenticated;
+revoke execute on function public.credit_referral_for_payment(uuid) from public, anon, authenticated;
+revoke execute on function public.ensure_referral_profile(bigint, text) from public, anon, authenticated;
+revoke execute on function public.gift_referral_balance_as_tokens(bigint, text, numeric) from public, anon, authenticated;
+revoke execute on function public.gift_referral_balance_as_tokens(bigint, bigint, numeric) from public, anon, authenticated;
+revoke execute on function public.process_referral_payout_request(uuid, text, text) from public, anon, authenticated;
+revoke execute on function public.release_due_referral_commissions() from public, anon, authenticated;
+revoke execute on function public.request_referral_payout(bigint, text, numeric, text) from public, anon, authenticated;
+revoke execute on function public.reverse_referral_for_payment(uuid) from public, anon, authenticated;
+
+grant execute on function public.apply_referral_attribution(bigint, text) to service_role;
+grant execute on function public.convert_referral_rub_to_tokens(bigint, numeric) to service_role;
+grant execute on function public.credit_referral_for_payment(uuid) to service_role;
+grant execute on function public.ensure_referral_profile(bigint, text) to service_role;
+grant execute on function public.gift_referral_balance_as_tokens(bigint, text, numeric) to service_role;
+grant execute on function public.gift_referral_balance_as_tokens(bigint, bigint, numeric) to service_role;
+grant execute on function public.process_referral_payout_request(uuid, text, text) to service_role;
+grant execute on function public.release_due_referral_commissions() to service_role;
+grant execute on function public.request_referral_payout(bigint, text, numeric, text) to service_role;
+grant execute on function public.reverse_referral_for_payment(uuid) to service_role;
+
+alter view public.referral_wallet_balances set (security_invoker = true);
+alter function public.price_tokens_from_provider_cost(numeric) set search_path = public;
