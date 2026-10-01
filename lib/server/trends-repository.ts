@@ -68,6 +68,7 @@ function toPublicTrend(row: TrendRow): Trend {
     tokens: row.token_cost,
     inputs: Array.isArray(row.input_schema) ? row.input_schema.map(normalizeInput) : [],
     resolutions: resolutions.length ? resolutions : undefined,
+    executionMode: String(config.execution_mode || '') === 'direct' ? 'direct' : undefined,
   }
 }
 
