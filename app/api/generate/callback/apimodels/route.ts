@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getApiModelsGenerationTask } from '@/lib/server/apimodels'
+import { getApiModelsGenerationTask, verifyApiModelsCallbackToken } from '@/lib/server/apimodels'
 import { supabaseFetch } from '@/lib/server/supabase'
 import { telegramApi } from '@/lib/server/telegram-bot'
 
@@ -12,7 +12,11 @@ async function rpc(name: string, payload: Record<string, unknown>) {
 export async function POST(request: Request) {
   const url = new URL(request.url)
   const jobId = url.searchParams.get('jobId') || ''
+  const token = url.searchParams.get('token') || ''
   if (!jobId) return NextResponse.json({ ok: false, error: 'JOB_ID_REQUIRED' }, { status: 400 })
+  if (!verifyApiModelsCallbackToken(jobId, token)) {
+    return NextResponse.json({ ok: false, error: 'INVALID_CALLBACK_TOKEN' }, { status: 401 })
+  }
 
   const historyResponse = await supabaseFetch(
     `generation_history?select=id,telegram_id,status,title,type,source_id,token_cost,result_url,result_metadata,provider&id=eq.${encodeURIComponent(jobId)}&limit=1`,
