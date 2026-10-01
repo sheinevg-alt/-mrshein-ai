@@ -1,12 +1,14 @@
 'use client'
 
-import { useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import {
   Bell,
   Check,
   ChevronRight,
   Clock,
   Globe,
+  Gift,
+  Copy,
   LifeBuoy,
   Monitor,
   Moon,
@@ -17,7 +19,7 @@ import {
 } from 'lucide-react'
 import { APP_CONFIG } from '@/lib/app-config'
 import type { Locale, MessageKey } from '@/lib/i18n'
-import { getTelegramUser } from '@/lib/telegram'
+import { getTelegramInitData, getTelegramUser } from '@/lib/telegram'
 import { BottomSheet } from '../bottom-sheet'
 import { useFavorites } from '../favorites-provider'
 import { useI18n } from '../i18n-provider'
@@ -27,13 +29,14 @@ import { SupportPanel } from '../support-panel'
 import { useTheme, type ThemeMode } from '../theme-provider'
 
 const noopSubscribe = () => () => {}
-type Panel = 'history' | 'notifications' | 'language' | 'settings' | 'help' | 'tokens' | null
+type Panel = 'history' | 'notifications' | 'language' | 'settings' | 'help' | 'tokens' | 'referral' | null
 
 function useTelegramProfile() {
   return useSyncExternalStore(noopSubscribe, () => getTelegramUser() ?? null, () => null)
 }
 
 const menu: { id: Exclude<Panel, null | 'tokens'>; label: MessageKey; icon: LucideIcon }[] = [
+  { id: 'referral', label: 'profile.referral', icon: Gift },
   { id: 'history', label: 'profile.history', icon: Clock },
   { id: 'notifications', label: 'profile.notifications', icon: Bell },
   { id: 'language', label: 'profile.language', icon: Globe },
@@ -129,6 +132,7 @@ function ProfilePanel({ panel, onClose }: { panel: Panel; onClose: () => void })
     language: 'language.title',
     settings: 'settings.title',
     help: 'help.title',
+    referral: 'referral.title',
     tokens: 'tokens.title',
   }
 
@@ -215,8 +219,130 @@ function ProfilePanel({ panel, onClose }: { panel: Panel; onClose: () => void })
       )}
 
       {panel === 'help' && <SupportPanel />}
+      {panel === 'referral' && <ReferralPanel />}
 
       {panel === 'tokens' && <p className="pb-4 text-sm leading-relaxed text-muted-foreground">{t('tokens.soon')}</p>}
     </BottomSheet>
+  )
+}
+
+
+type ReferralData = {
+  referralCode: string
+  referralLink: string | null
+  commissionPct: number
+  invitedCount: number
+  availableRub: number
+  pendingRub: number
+  totalEarnedRub: number
+  referredRevenueRub: number
+}
+
+function ReferralPanel() {
+  const { t, locale } = useI18n()
+  const { refreshUser } = useUserState()
+  const [data, setData] = useState<ReferralData | null>(null)
+  const [status, setStatus] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function load() {
+    const initData = getTelegramInitData()
+    if (!initData) {
+      setStatus(locale === 'ru' ? 'Реферальный кабинет доступен после входа через Telegram.' : 'Referral dashboard is available after Telegram sign-in.')
+      return
+    }
+    const response = await fetch('/api/referrals/me', {
+      headers: { 'X-Telegram-Init-Data': initData },
+      cache: 'no-store',
+    })
+    const next = await response.json().catch(() => null)
+    if (!response.ok) {
+      setStatus(locale === 'ru' ? 'Не удалось загрузить реферальный кабинет.' : 'Could not load referral dashboard.')
+      return
+    }
+    setData(next)
+    setStatus('')
+  }
+
+  useEffect(() => { void load() }, [])
+
+  async function copyLink() {
+    if (!data?.referralLink) return
+    await navigator.clipboard.writeText(data.referralLink)
+    setStatus(t('referral.copied'))
+  }
+
+  async function convertAll() {
+    if (!data || data.availableRub <= 0 || busy) return
+    const initData = getTelegramInitData()
+    if (!initData) return
+    setBusy(true)
+    setStatus('')
+    try {
+      const response = await fetch('/api/referrals/me', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Telegram-Init-Data': initData,
+        },
+        body: JSON.stringify({ action: 'convert_to_tokens', amountRub: data.availableRub }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(String(result?.error || 'CONVERSION_FAILED'))
+      setStatus(locale === 'ru'
+        ? `Начислено токенов: ${Number(result.tokensAdded || 0)}`
+        : `Tokens added: ${Number(result.tokensAdded || 0)}`)
+      await Promise.all([load(), refreshUser()])
+    } catch {
+      setStatus(locale === 'ru' ? 'Не удалось перевести баланс в токены.' : 'Could not convert the balance to Tokens.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!data) {
+    return <p className="pb-4 text-sm text-muted-foreground">{status || (locale === 'ru' ? 'Загрузка…' : 'Loading…')}</p>
+  }
+
+  return (
+    <div className="pb-3">
+      <div className="rounded-3xl border border-banana/30 bg-banana/10 p-4">
+        <div className="flex items-center gap-3">
+          <span className="flex size-11 items-center justify-center rounded-2xl bg-banana text-[#171A22]"><Gift className="size-5" /></span>
+          <div>
+            <p className="text-base font-semibold">{t('referral.intro')}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{locale === 'ru' ? 'Комиссия начисляется с успешных покупок приглашённых пользователей.' : 'Commission is credited from successful purchases by referred users.'}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        {[
+          [t('referral.balance'), `${data.availableRub.toFixed(2)} ₽`],
+          [t('referral.pending'), `${data.pendingRub.toFixed(2)} ₽`],
+          [t('referral.invited'), String(data.invitedCount)],
+          [t('referral.earned'), `${data.totalEarnedRub.toFixed(2)} ₽`],
+        ].map(([label, value]) => (
+          <div key={label} className="rounded-2xl border p-3">
+            <p className="text-lg font-semibold tabular-nums">{value}</p>
+            <p className="text-[11px] text-muted-foreground">{label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 rounded-2xl border p-4">
+        <p className="text-xs font-medium text-muted-foreground">{t('referral.link')}</p>
+        <p className="mt-2 break-all text-sm font-medium">{data.referralLink || data.referralCode}</p>
+        <button type="button" disabled={!data.referralLink} onClick={() => void copyLink()} className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-foreground text-xs font-semibold text-background disabled:opacity-40">
+          <Copy className="size-4" />{t('referral.copy')}
+        </button>
+      </div>
+
+      <button type="button" disabled={data.availableRub <= 0 || busy} onClick={() => void convertAll()} className="brand-gradient mt-3 h-11 w-full rounded-full text-sm font-semibold text-white disabled:opacity-40">
+        {busy ? (locale === 'ru' ? 'Перевожу…' : 'Converting…') : t('referral.convertAll')}
+      </button>
+      <p className="mt-2 text-center text-[11px] text-muted-foreground">{locale === 'ru' ? 'Вывод рублей подключим отдельно после настройки выплат и проверки реквизитов.' : 'Cash withdrawals will be enabled separately after payout verification is configured.'}</p>
+      {status && <p className="mt-3 text-center text-xs text-brand">{status}</p>}
+    </div>
   )
 }

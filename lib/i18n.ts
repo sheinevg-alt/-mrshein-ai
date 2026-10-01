@@ -74,6 +74,7 @@ export const en = {
   'profile.language': 'Language',
   'profile.settings': 'Settings',
   'profile.help': 'Help & Support',
+  'profile.referral': 'Referral program',
   'profile.version': 'Banana Zero · v{version}',
 
   'language.title': 'Language',
@@ -122,6 +123,17 @@ export const en = {
   'generation.failedRefunded': 'Test error. Tokens were returned automatically.',
   'generation.backendNeeded': 'Connect the backend to test the full generation flow.',
 
+  'referral.title': 'Referral program',
+  'referral.intro': 'Invite friends and earn 20% from their purchases.',
+  'referral.balance': 'Available',
+  'referral.pending': 'Pending',
+  'referral.invited': 'Invited',
+  'referral.earned': 'Earned',
+  'referral.link': 'Your referral link',
+  'referral.copy': 'Copy link',
+  'referral.copied': 'Link copied',
+  'referral.convert': 'Convert to Tokens',
+  'referral.convertAll': 'Convert available balance',
   'tokens.title': 'Tokens',
   'tokens.soon': 'Token top-ups and plans will be connected in the next stage.',
 
@@ -211,6 +223,7 @@ const ru: Record<MessageKey, string> = {
   'profile.language': 'Язык',
   'profile.settings': 'Настройки',
   'profile.help': 'Помощь и поддержка',
+  'profile.referral': 'Реферальная программа',
   'profile.version': 'Banana Zero · v{version}',
 
   'language.title': 'Язык',
@@ -259,6 +272,17 @@ const ru: Record<MessageKey, string> = {
   'generation.failedRefunded': 'Тестовая ошибка. Токены автоматически возвращены.',
   'generation.backendNeeded': 'Подключи backend, чтобы проверить полный цикл генерации.',
 
+  'referral.title': 'Реферальная программа',
+  'referral.intro': 'Приглашай друзей и получай 20% с их покупок.',
+  'referral.balance': 'Доступно',
+  'referral.pending': 'Ожидает',
+  'referral.invited': 'Приглашено',
+  'referral.earned': 'Заработано',
+  'referral.link': 'Твоя реферальная ссылка',
+  'referral.copy': 'Скопировать ссылку',
+  'referral.copied': 'Ссылка скопирована',
+  'referral.convert': 'Перевести в токены',
+  'referral.convertAll': 'Перевести доступный баланс',
   'tokens.title': 'Токены',
   'tokens.soon': 'Пополнение токенов и тарифы подключим на следующем этапе.',
 

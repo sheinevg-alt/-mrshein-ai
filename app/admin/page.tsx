@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 
 type InputKind = 'photo' | 'video' | 'audio' | 'text'
@@ -284,7 +285,10 @@ export default function AdminPage() {
     <main className="mx-auto min-h-dvh max-w-3xl px-4 py-8">
       <div className="flex items-start justify-between gap-4">
         <div><h1 className="text-2xl font-semibold">Shein AI Admin</h1><p className="text-sm text-muted-foreground">Одна панель для Telegram Mini App и будущего сайта.</p></div>
-        <button type="button" disabled={busy} onClick={() => void setupWebhook()} className="rounded-full border px-4 py-2 text-xs font-medium">Подключить bot</button>
+        <div className="flex gap-2">
+          <Link href="/admin/referrals" className="rounded-full border px-4 py-2 text-xs font-medium">Рефералы</Link>
+          <button type="button" disabled={busy} onClick={() => void setupWebhook()} className="rounded-full border px-4 py-2 text-xs font-medium">Подключить bot</button>
+        </div>
       </div>
 
       {status && <div className="mt-4 rounded-2xl bg-brand-tint px-4 py-3 text-sm text-brand">{status}</div>}
