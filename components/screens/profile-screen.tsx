@@ -194,7 +194,7 @@ function ProfilePanel({ panel, onClose }: { panel: Panel; onClose: () => void })
                 ['light', Sun, locale === 'ru' ? 'Светлая' : 'Light'],
                 ['dark', Moon, locale === 'ru' ? 'Тёмная' : 'Dark'],
                 ['system', Monitor, locale === 'ru' ? 'Система' : 'System'],
-              ] as [ThemeMode, typeof Sun, string][]).map(([id, Icon, label]) => (
+              ] as [ThemeMode, LucideIcon, string][]).map(([id, Icon, label]) => (
                 <button
                   key={id}
                   type="button"
