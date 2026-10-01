@@ -69,6 +69,9 @@ function toPublicTrend(row: TrendRow): Trend {
     inputs: Array.isArray(row.input_schema) ? row.input_schema.map(normalizeInput) : [],
     resolutions: resolutions.length ? resolutions : undefined,
     executionMode: String(config.execution_mode || '') === 'direct' ? 'direct' : undefined,
+    cardBadge: ['hit', 'new', 'popular'].includes(String(config.card_badge || '').toLowerCase())
+      ? String(config.card_badge).toLowerCase() as 'hit' | 'new' | 'popular'
+      : undefined,
   }
 }
 
