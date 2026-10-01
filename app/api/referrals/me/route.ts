@@ -17,12 +17,13 @@ export async function GET(request: Request) {
   await rpc('ensure_referral_profile', { p_telegram_id: user.id, p_preferred_code: null })
   await rpc('release_due_referral_commissions', {})
 
-  const [profileResponse, balanceResponse, referredResponse, commissionsResponse, usersResponse] = await Promise.all([
+  const [profileResponse, balanceResponse, referredResponse, commissionsResponse, usersResponse, payoutsResponse] = await Promise.all([
     supabaseFetch(`referral_profiles?select=referral_code,referral_rate,referred_by,attributed_at&telegram_id=eq.${user.id}&limit=1`),
     supabaseFetch(`referral_wallet_balances?select=available_rub,pending_rub&telegram_id=eq.${user.id}&limit=1`),
     supabaseFetch(`referral_profiles?select=telegram_id&referred_by=eq.${user.id}`),
     supabaseFetch(`referral_commissions?select=commission_rub,status,gross_amount_rub,created_at,referred_telegram_id&referrer_telegram_id=eq.${user.id}&order=created_at.desc&limit=50`),
     supabaseFetch('app_users?select=telegram_id,first_name,last_name,username'),
+    supabaseFetch(`referral_payout_requests?select=id,payout_method,amount_rub,status,requested_at,processed_at&telegram_id=eq.${user.id}&order=requested_at.desc&limit=20`),
   ])
 
   const profile = profileResponse.ok ? (await profileResponse.json())?.[0] : null
@@ -30,6 +31,7 @@ export async function GET(request: Request) {
   const referred = referredResponse.ok ? await referredResponse.json() : []
   const commissions = commissionsResponse.ok ? await commissionsResponse.json() : []
   const users = usersResponse.ok ? await usersResponse.json() : []
+  const payouts = payoutsResponse.ok ? await payoutsResponse.json() : []
   const userMap = new Map((users || []).map((item: any) => [String(item.telegram_id), item]))
 
   let botUsername = ''
@@ -53,12 +55,18 @@ export async function GET(request: Request) {
     .filter((item: any) => item.status !== 'reversed')
     .reduce((sum: number, item: any) => sum + Number(item.gross_amount_rub || 0), 0)
 
+  const reservedPayoutRub = (payouts || [])
+    .filter((item: any) => item.status === 'pending' || item.status === 'approved')
+    .reduce((sum: number, item: any) => sum + Number(item.amount_rub || 0), 0)
+
   return NextResponse.json({
     referralCode,
     referralLink,
     commissionPct: Math.round(Number(profile?.referral_rate || 0.2) * 100),
     invitedCount: Array.isArray(referred) ? referred.length : 0,
-    availableRub: Number(balance?.available_rub || 0),
+    availableRub: Math.max(0, Number(balance?.available_rub || 0) - reservedPayoutRub),
+    reservedPayoutRub: Number(reservedPayoutRub.toFixed(2)),
+    payouts: Array.isArray(payouts) ? payouts : [],
     pendingRub: Number(balance?.pending_rub || 0),
     totalEarnedRub: Number(totalEarned.toFixed(2)),
     referredRevenueRub: Number(referredRevenue.toFixed(2)),
@@ -86,6 +94,26 @@ export async function POST(request: Request) {
   const amountRub = Number(body?.amountRub)
   if (!Number.isFinite(amountRub) || amountRub <= 0) {
     return NextResponse.json({ error: 'INVALID_AMOUNT' }, { status: 400 })
+  }
+
+  if (action === 'request_payout') {
+    const method = String(body?.method || '')
+    const destination = String(body?.destination || '').trim().slice(0, 500)
+    if (!['card', 'crypto'].includes(method) || !destination) {
+      return NextResponse.json({ error: 'INVALID_PAYOUT_DATA' }, { status: 400 })
+    }
+    const response = await rpc('request_referral_payout', {
+      p_telegram_id: user.id,
+      p_method: method,
+      p_amount_rub: amountRub,
+      p_destination: destination,
+    })
+    const raw = await response.text()
+    if (!response.ok) {
+      const insufficient = raw.includes('INSUFFICIENT_REFERRAL_BALANCE')
+      return NextResponse.json({ error: insufficient ? 'INSUFFICIENT_REFERRAL_BALANCE' : 'PAYOUT_REQUEST_FAILED' }, { status: insufficient ? 402 : 500 })
+    }
+    return NextResponse.json({ ok: true })
   }
 
   if (action !== 'convert_to_tokens' && action !== 'gift_tokens') {
