@@ -15,6 +15,7 @@ type TrendRow = {
   uses_count?: string | null
   token_cost: number
   input_schema?: RawInput[] | null
+  generation_config?: Record<string, unknown> | null
 }
 
 function normalizeKind(value: unknown): TrendInputKind {
@@ -50,6 +51,12 @@ function normalizeInput(input: RawInput): TrendInput {
 }
 
 function toPublicTrend(row: TrendRow): Trend {
+  const config = row.generation_config && typeof row.generation_config === 'object' ? row.generation_config : {}
+  const rawResolutions = Array.isArray(config.allowed_resolutions) ? config.allowed_resolutions : []
+  const resolutions = rawResolutions
+    .map((value) => String(value))
+    .filter((value): value is '480p' | '720p' | '1080p' => ['480p', '720p', '1080p'].includes(value))
+
   return {
     id: row.id,
     title: { en: row.title_en, ru: row.title_ru || undefined },
@@ -60,13 +67,14 @@ function toPublicTrend(row: TrendRow): Trend {
     uses: row.uses_count || 'New',
     tokens: row.token_cost,
     inputs: Array.isArray(row.input_schema) ? row.input_schema.map(normalizeInput) : [],
+    resolutions: resolutions.length ? resolutions : undefined,
   }
 }
 
 export async function getPublicTrends(): Promise<Trend[]> {
   if (!hasDatabase()) return fallbackTrends
   const response = await supabaseFetch(
-    'trends?select=id,title_en,title_ru,category,image_url,preview_video_url,aspect_ratio,uses_count,token_cost,input_schema&published=eq.true&order=sort_order.asc,created_at.desc',
+    'trends?select=id,title_en,title_ru,category,image_url,preview_video_url,aspect_ratio,uses_count,token_cost,input_schema,generation_config&published=eq.true&order=sort_order.asc,created_at.desc',
   )
   if (!response.ok) return fallbackTrends
   const rows = (await response.json()) as TrendRow[]
