@@ -15,31 +15,56 @@ type TelegramMessage = {
   message_thread_id?: number
   text?: string
   caption?: string
-  chat: { id: number; type?: string }
+  chat: { id: number; type?: string; title?: string; is_forum?: boolean }
   from?: TelegramUser & { is_bot?: boolean }
 }
 
-function supportToken() {
-  const token = process.env.SUPPORT_TELEGRAM_BOT_TOKEN
-  if (!token) throw new Error('SUPPORT_TELEGRAM_BOT_TOKEN is not configured')
-  return token
+type SupportBotConfig = {
+  bot_token: string
+  webhook_secret: string
+  operator_chat_id?: number | null
+  operator_setup_code?: string | null
+  bot_username?: string | null
 }
 
-function operatorChatId() {
-  const id = process.env.SUPPORT_OPERATOR_CHAT_ID
-  if (!id) throw new Error('SUPPORT_OPERATOR_CHAT_ID is not configured')
-  return id
-}
+export async function getSupportBotConfig(): Promise<SupportBotConfig> {
+  const envToken = process.env.SUPPORT_TELEGRAM_BOT_TOKEN
+  const envSecret = process.env.SUPPORT_TELEGRAM_WEBHOOK_SECRET
+  const envChatId = process.env.SUPPORT_OPERATOR_CHAT_ID
 
-export function hasSupportTelegram() {
-  return Boolean(
-    process.env.SUPPORT_TELEGRAM_BOT_TOKEN &&
-    process.env.SUPPORT_OPERATOR_CHAT_ID,
+  if (envToken && envSecret) {
+    return {
+      bot_token: envToken,
+      webhook_secret: envSecret,
+      operator_chat_id: envChatId ? Number(envChatId) : null,
+      operator_setup_code: null,
+      bot_username: null,
+    }
+  }
+
+  if (!hasDatabase()) throw new Error('Banana Zero Care is not configured')
+
+  const response = await supabaseFetch(
+    'support_bot_config?select=bot_token,webhook_secret,operator_chat_id,operator_setup_code,bot_username&id=eq.banana-zero-care&limit=1',
   )
+  if (!response.ok) throw new Error('Could not read Banana Zero Care config')
+  const row = (await response.json())?.[0]
+  if (!row?.bot_token || !row?.webhook_secret) throw new Error('Banana Zero Care config is incomplete')
+  return row
+}
+
+export async function isSupportReady() {
+  try {
+    const config = await getSupportBotConfig()
+    return Boolean(config.bot_token && config.webhook_secret && config.operator_chat_id)
+  } catch {
+    return false
+  }
 }
 
 export async function supportTelegramApi(method: string, payload: Record<string, unknown>) {
-  const response = await fetch(`https://api.telegram.org/bot${supportToken()}/${method}`, {
+  const config = await getSupportBotConfig()
+  const response = await fetch(`https://api.telegram.org/bot${config.bot_token}/${method}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -50,6 +75,48 @@ export async function supportTelegramApi(method: string, payload: Record<string,
     throw new Error(data?.description || `Telegram API ${method} failed`)
   }
   return data.result
+}
+
+async function operatorChatId() {
+  const config = await getSupportBotConfig()
+  if (!config.operator_chat_id) throw new Error('SUPPORT_OPERATOR_CHAT_ID is not configured')
+  return String(config.operator_chat_id)
+}
+
+export async function completeOperatorSetup(chatId: number, setupCode: string, chatIsForum?: boolean) {
+  if (!hasDatabase()) throw new Error('Supabase is required')
+  const config = await getSupportBotConfig()
+
+  if (!config.operator_setup_code || setupCode.trim() !== String(config.operator_setup_code).trim()) {
+    return { ok: false as const, reason: 'INVALID_CODE' }
+  }
+
+  if (!chatIsForum) {
+    return { ok: false as const, reason: 'TOPICS_REQUIRED' }
+  }
+
+  const response = await supabaseFetch('support_bot_config?id=eq.banana-zero-care', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      operator_chat_id: chatId,
+      operator_setup_code: null,
+      updated_at: new Date().toISOString(),
+    }),
+  })
+  if (!response.ok) throw new Error('Could not save operator chat')
+
+  return { ok: true as const }
+}
+
+export async function saveSupportBotUsername(username: string) {
+  if (!hasDatabase()) return
+  await supabaseFetch('support_bot_config?id=eq.banana-zero-care', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      bot_username: username,
+      updated_at: new Date().toISOString(),
+    }),
+  })
 }
 
 function displayName(user: TelegramUser) {
@@ -125,15 +192,16 @@ export async function ensureSupportThread(user: TelegramUser, userChatId = user.
     return Number(existing.operator_thread_id)
   }
 
+  const chatId = await operatorChatId()
   const created = await supportTelegramApi('createForumTopic', {
-    chat_id: operatorChatId(),
+    chat_id: chatId,
     name: topicName(user),
   })
   const threadId = Number(created.message_thread_id)
   await saveThread(user, userChatId, threadId)
 
   await supportTelegramApi('sendMessage', {
-    chat_id: operatorChatId(),
+    chat_id: chatId,
     message_thread_id: threadId,
     text: [
       '<b>Banana Zero Care</b>',
@@ -206,9 +274,10 @@ export async function handlePrivateSupportMessage(message: TelegramMessage) {
   if (!user?.id) return
 
   const threadId = await ensureSupportThread(user, message.chat.id)
+  const chatId = await operatorChatId()
 
   await supportTelegramApi('copyMessage', {
-    chat_id: operatorChatId(),
+    chat_id: chatId,
     from_chat_id: message.chat.id,
     message_id: message.message_id,
     message_thread_id: threadId,
@@ -218,7 +287,8 @@ export async function handlePrivateSupportMessage(message: TelegramMessage) {
 }
 
 export async function handleOperatorSupportMessage(message: TelegramMessage) {
-  if (String(message.chat.id) !== String(operatorChatId())) return false
+  const configuredChatId = await operatorChatId().catch(() => null)
+  if (!configuredChatId || String(message.chat.id) !== configuredChatId) return false
   if (!message.message_thread_id || message.from?.is_bot) return true
 
   const thread = await getThreadByOperatorThread(message.message_thread_id)
@@ -261,7 +331,7 @@ export async function handleOperatorSupportMessage(message: TelegramMessage) {
 }
 
 export async function notifyOperatorAboutMiniAppTicket(ticket: any) {
-  if (!hasSupportTelegram()) return
+  if (!(await isSupportReady())) return
 
   const user: TelegramUser = {
     id: Number(ticket.telegram_id),
@@ -272,9 +342,10 @@ export async function notifyOperatorAboutMiniAppTicket(ticket: any) {
   }
 
   const threadId = await ensureSupportThread(user, user.id)
+  const chatId = await operatorChatId()
 
   await supportTelegramApi('sendMessage', {
-    chat_id: operatorChatId(),
+    chat_id: chatId,
     message_thread_id: threadId,
     text: [
       '🆕 <b>Обращение из Mini App</b>',
