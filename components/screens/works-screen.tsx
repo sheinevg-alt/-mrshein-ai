@@ -64,7 +64,7 @@ function failureCopy(item: HistoryItem, locale: 'en' | 'ru') {
     : 'The service could not finish the generation. You can try again.'
 }
 
-export function WorksScreen() {
+export function WorksScreen({ onRepeatGeneration }: { onRepeatGeneration?: (jobId: string) => void }) {
   const { locale } = useI18n()
   const { history, refreshUser, markWorksSeen } = useUserState()
   const [refreshing, setRefreshing] = useState(false)
@@ -304,6 +304,19 @@ export function WorksScreen() {
                       <ExternalLink className="size-4" />
                       {locale === 'ru' ? 'Открыть результат' : 'Open result'}
                     </a>
+                    {item.provider === 'apimodels' && item.model === 'seedance-2.5' && onRepeatGeneration && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          haptics.impact('light')
+                          onRepeatGeneration(item.id)
+                        }}
+                        className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-full border border-brand/25 bg-brand-tint/50 text-sm font-semibold text-brand transition active:scale-[0.98]"
+                      >
+                        <RotateCcw className="size-4" />
+                        {locale === 'ru' ? 'Повторить с теми же настройками' : 'Repeat with same settings'}
+                      </button>
+                    )}
                     {downloadErrorId === item.id && (
                       <p className="mt-2 text-center text-xs text-destructive">
                         {locale === 'ru' ? 'Не удалось скачать файл. Попробуйте ещё раз.' : 'Could not download the file. Please try again.'}
