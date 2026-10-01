@@ -1,6 +1,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight, Clapperboard, ImageIcon, Sparkles, WandSparkles } from 'lucide-react'
+import { MERCHANT } from '@/lib/merchant'
 
 const features = [
   { icon: Clapperboard, title: 'AI-видео', text: 'Создавайте видео по промпту и референсам в несколько шагов.' },
@@ -144,7 +145,10 @@ export default function SitePage() {
 
       <footer className="border-t border-[#E6EEFF] bg-white">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-8 text-sm text-[#66758E] md:flex-row md:items-center md:justify-between md:px-8">
-          <div className="flex items-center gap-2"><span className="font-bold text-[#171A22]">Banana Zero</span><span>·</span><span>bananazero.ru</span></div>
+          <div>
+            <div className="flex items-center gap-2"><span className="font-bold text-[#171A22]">Banana Zero</span><span>·</span><span>bananazero.ru</span></div>
+            <p className="mt-1 text-[11px] text-[#8B99AD]">{MERCHANT.legalName} · ИНН {MERCHANT.inn} · ОГРНИП {MERCHANT.ogrnip}</p>
+          </div>
           <div className="flex flex-wrap gap-5">
             <Link href="/privacy" className="transition hover:text-[#171A22]">Политика конфиденциальности</Link>
             <Link href="/offer" className="transition hover:text-[#171A22]">Публичная оферта</Link>
