@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     await telegramApi('setChatMenuButton', {
       menu_button: {
         type: 'web_app',
-        text: 'Открыть Banana Zero',
+        text: 'Создать контент',
         web_app: { url: appUrl },
       },
     })
