@@ -80,6 +80,7 @@ export type Trend = {
   uses: string
   tokens: number
   inputs: TrendInput[]
+  resolutions?: Array<'480p' | '720p' | '1080p'>
 }
 
 export const TOKEN_BALANCE = 120
