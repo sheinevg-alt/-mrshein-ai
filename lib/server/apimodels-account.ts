@@ -1,6 +1,6 @@
 import 'server-only'
 
-const ACCOUNT_BASE = 'https://apimodels.app/api/v1'
+const ACCOUNT_BASE = 'https://api.apimodels.app/v1'
 
 function key() {
   const value = process.env.APIMODELS_API_KEY
