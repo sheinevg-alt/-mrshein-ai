@@ -160,6 +160,19 @@ function parseTaskPayload(payload: Record<string, unknown>): ApiModelsTask {
     ? data.output as Record<string, unknown>
     : null
 
+  let resultJson: Record<string, unknown> | null = null
+  const rawResultJson = data.resultJson ?? data.result_json
+  if (typeof rawResultJson === 'string' && rawResultJson.trim()) {
+    try {
+      const parsed = JSON.parse(rawResultJson)
+      resultJson = objectRecord(parsed)
+    } catch {
+      resultJson = null
+    }
+  } else {
+    resultJson = objectRecord(rawResultJson)
+  }
+
   const resultUrls = [
     ...(Array.isArray(data.resultUrls) ? data.resultUrls : []),
     ...(Array.isArray(data.result_urls) ? data.result_urls : []),
@@ -167,6 +180,9 @@ function parseTaskPayload(payload: Record<string, unknown>): ApiModelsTask {
     ...(Array.isArray(output?.urls) ? output.urls as unknown[] : []),
     ...(typeof output?.video_url === 'string' ? [output.video_url] : []),
     ...(typeof data.video_url === 'string' ? [data.video_url] : []),
+    ...(Array.isArray(resultJson?.resultUrls) ? resultJson!.resultUrls as unknown[] : []),
+    ...(Array.isArray(resultJson?.result_urls) ? resultJson!.result_urls as unknown[] : []),
+    ...(typeof resultJson?.video_url === 'string' ? [resultJson.video_url] : []),
   ].map((value) => String(value || '')).filter(Boolean)
 
   const state = String(data.state || data.status || payload.status || '').toLowerCase()
@@ -289,4 +305,69 @@ export async function getApiModelsTask(id: string): Promise<ApiModelsTask> {
   }
 
   return parseTaskPayload(payload)
+}
+
+
+export type ApiModelsOmniResolution = '720p' | '1080p' | '4k'
+export type ApiModelsKlingModel = 'kling-v2-6' | 'kling-v3'
+export type ApiModelsKlingMode = 'std' | 'pro'
+
+export async function createApiModelsGeminiOmniFlashTask(params: {
+  promptText: string
+  duration: 4 | 6 | 8 | 10
+  ratio: '16:9' | '9:16'
+  resolution?: ApiModelsOmniResolution
+  firstFrameUrl?: string
+  lastFrameUrl?: string
+  references?: string[]
+  callbackUrl?: string
+}) {
+  const references = (params.references || []).filter(Boolean).slice(0, 7)
+  if (params.lastFrameUrl && !params.firstFrameUrl) {
+    throw new Error('OMNI_LAST_FRAME_REQUIRES_FIRST_FRAME')
+  }
+  if ((params.firstFrameUrl || params.lastFrameUrl) && references.length > 0) {
+    throw new Error('OMNI_KEYFRAMES_CANNOT_COMBINE_WITH_REFERENCES')
+  }
+
+  return createTask({
+    model: 'gemini-omni-1.1-flash',
+    prompt: params.promptText,
+    duration: String(params.duration),
+    resolution: params.resolution || '720p',
+    aspect_ratio: params.ratio,
+    ...(params.firstFrameUrl ? { first_frame_url: params.firstFrameUrl } : {}),
+    ...(params.lastFrameUrl ? { last_frame_url: params.lastFrameUrl } : {}),
+    ...(references.length ? { images: references } : {}),
+    ...(params.callbackUrl ? { callback_url: params.callbackUrl } : {}),
+  })
+}
+
+export async function createApiModelsKlingTask(params: {
+  model?: ApiModelsKlingModel
+  promptText: string
+  duration: number
+  ratio: string
+  imageUrl?: string
+  mode?: ApiModelsKlingMode
+  generateAudio?: boolean
+  negativePrompt?: string
+  callbackUrl?: string
+}) {
+  const model = params.model || 'kling-v3'
+  const duration = model === 'kling-v2-6'
+    ? (params.duration >= 10 ? 10 : 5)
+    : Math.max(3, Math.min(15, Math.round(params.duration)))
+
+  return createTask({
+    model,
+    prompt: params.promptText,
+    mode: params.mode || 'std',
+    duration: String(duration),
+    sound: params.generateAudio ? 'on' : 'off',
+    aspect_ratio: params.ratio,
+    ...(params.imageUrl ? { image: params.imageUrl } : {}),
+    ...(params.negativePrompt ? { negative_prompt: params.negativePrompt } : {}),
+    ...(params.callbackUrl ? { callback_url: params.callbackUrl } : {}),
+  })
 }
