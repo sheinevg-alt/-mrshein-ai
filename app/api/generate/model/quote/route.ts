@@ -14,15 +14,21 @@ export async function POST(request: Request) {
   const promptLength = Math.max(0, Number((body as any).promptLength || 0))
   const quote = await quoteTokens({
     toolId,
-    duration: settings.duration,
+    duration: toolId === 'seedance-2-5' && settings.mode === 'edit'
+      ? settings.sourceDuration
+      : settings.duration,
     resolution: settings.resolution,
     quality: settings.quality,
     mode: settings.mode,
     generateAudio: settings.generateAudio,
     promptLength,
   })
+  const tokenCost = toolId === 'seedance-2-5' && settings.mode === 'edit'
+    ? Math.ceil((quote.tokenCost * 1.2) / 10) * 10
+    : quote.tokenCost
+
   return NextResponse.json({
     ok: true,
-    tokenCost: quote.tokenCost,
+    tokenCost,
   })
 }
