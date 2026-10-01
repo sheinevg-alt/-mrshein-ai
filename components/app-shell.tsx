@@ -164,9 +164,9 @@ function InnerApp() {
           {tab === 'trends' && <TrendsScreen onOpenTrend={openTrend} onOpenCategory={openCategory} />}
           {tab === 'create' &&
             (category ? (
-              <CategoryScreen categoryId={category} onBack={() => setCategory(null)} onOpenTool={openTool} />
+              <CategoryScreen categoryId={category} onBack={() => setCategory(null)} onOpenTool={openTool} onOpenTrend={openTrend} />
             ) : (
-              <CreateScreen onOpenCategory={openCategory} onOpenSeedance={() => { haptics.impact('light'); setSeedanceOpen(true) }} />
+              <CreateScreen onOpenCategory={openCategory} />
             ))}
           {tab === 'works' && <WorksScreen onRepeatGeneration={(jobId) => setRepeatJobId(jobId)} />}
           {tab === 'favorites' && (
