@@ -10,17 +10,19 @@ export async function GET(request: Request) {
 
   await supabaseFetch('rpc/release_due_referral_commissions', { method: 'POST', body: '{}' })
 
-  const [profilesResponse, commissionsResponse, balancesResponse, usersResponse] = await Promise.all([
+  const [profilesResponse, commissionsResponse, balancesResponse, usersResponse, payoutsResponse] = await Promise.all([
     supabaseFetch('referral_profiles?select=telegram_id,referral_code,referred_by,referral_rate,attributed_at,created_at&order=created_at.asc'),
     supabaseFetch('referral_commissions?select=referrer_telegram_id,referred_telegram_id,gross_amount_rub,commission_rub,status,created_at&order=created_at.desc'),
     supabaseFetch('referral_wallet_balances?select=telegram_id,available_rub,pending_rub'),
     supabaseFetch('app_users?select=telegram_id,first_name,last_name,username,token_balance,created_at,last_seen_at'),
+    supabaseFetch('referral_payout_requests?select=id,telegram_id,payout_method,amount_rub,status,requested_at,processed_at,admin_note&order=requested_at.desc&limit=100'),
   ])
 
   const profiles = profilesResponse.ok ? await profilesResponse.json() : []
   const commissions = commissionsResponse.ok ? await commissionsResponse.json() : []
   const balances = balancesResponse.ok ? await balancesResponse.json() : []
   const users = usersResponse.ok ? await usersResponse.json() : []
+  const payouts = payoutsResponse.ok ? await payoutsResponse.json() : []
 
   const userMap = new Map((users || []).map((user: any) => [String(user.telegram_id), user]))
   const balanceMap = new Map((balances || []).map((row: any) => [String(row.telegram_id), row]))
@@ -68,5 +70,35 @@ export async function GET(request: Request) {
       pendingRub: Number((balances || []).reduce((sum: number, row: any) => sum + Number(row.pending_rub || 0), 0).toFixed(2)),
     },
     referrals: rows,
+    payouts,
   })
+}
+
+export async function POST(request: Request) {
+  if (!requireAdmin(request)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!hasDatabase()) return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+
+  const body = await request.json().catch(() => ({}))
+  const requestId = String(body?.requestId || '')
+  const nextStatus = String(body?.status || '')
+  const note = String(body?.note || '').trim().slice(0, 500)
+
+  if (!requestId || !['approved','paid','rejected','canceled'].includes(nextStatus)) {
+    return NextResponse.json({ error: 'Invalid payout update' }, { status: 400 })
+  }
+
+  const response = await supabaseFetch('rpc/process_referral_payout_request', {
+    method: 'POST',
+    body: JSON.stringify({
+      p_request_id: requestId,
+      p_next_status: nextStatus,
+      p_admin_note: note || null,
+    }),
+  })
+
+  if (!response.ok) {
+    return NextResponse.json({ error: await response.text() }, { status: 500 })
+  }
+
+  return NextResponse.json({ ok: true })
 }
