@@ -116,7 +116,7 @@ export const MODEL_CATALOG: ModelToolDefinition[] = [
     id: 'elevenlabs-tts',
     category: 'audio',
     provider: 'apimodels',
-    model: 'eleven-tts-v4',
+    model: 'eleven-tts-v3',
     displayName: 'ElevenLabs',
     descriptionRu: 'Озвучка и естественная речь для роликов и контента.',
     descriptionEn: 'Natural speech and voice-over for videos and content.',
