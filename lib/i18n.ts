@@ -1,5 +1,5 @@
 export const en = {
-  'app.name': 'Shein AI',
+  'app.name': 'Banana Zero',
   'app.tagline': 'Create anything with AI',
 
   'tokens.unit': 'Tokens',
@@ -74,7 +74,7 @@ export const en = {
   'profile.language': 'Language',
   'profile.settings': 'Settings',
   'profile.help': 'Help & Support',
-  'profile.version': 'Shein AI · v{version}',
+  'profile.version': 'Banana Zero · v{version}',
 
   'language.title': 'Language',
   'language.english': 'English',
@@ -95,7 +95,7 @@ export const en = {
   'settings.telegram': 'Telegram Mini App',
 
   'help.title': 'Help & Support',
-  'help.care': 'Shein Care',
+  'help.care': 'Banana Zero Care',
   'help.intro': 'Choose a topic. We will show useful answers first, and you can contact the Care Team if they do not solve the issue.',
   'help.knowledge': 'Knowledge Base',
   'help.gettingStarted': 'Getting started',
@@ -136,7 +136,7 @@ export type MessageKey = keyof typeof en
 export type Locale = 'en' | 'ru'
 
 const ru: Record<MessageKey, string> = {
-  'app.name': 'Shein AI',
+  'app.name': 'Banana Zero',
   'app.tagline': 'Создавай с помощью AI',
 
   'tokens.unit': 'Токены',
@@ -211,7 +211,7 @@ const ru: Record<MessageKey, string> = {
   'profile.language': 'Язык',
   'profile.settings': 'Настройки',
   'profile.help': 'Помощь и поддержка',
-  'profile.version': 'Shein AI · v{version}',
+  'profile.version': 'Banana Zero · v{version}',
 
   'language.title': 'Язык',
   'language.english': 'English',
@@ -232,7 +232,7 @@ const ru: Record<MessageKey, string> = {
   'settings.telegram': 'Telegram Mini App',
 
   'help.title': 'Помощь и поддержка',
-  'help.care': 'Служба заботы Shein',
+  'help.care': 'Служба заботы Banana Zero',
   'help.intro': 'Выбери тему. Сначала покажем полезные ответы из базы знаний, а если они не помогут — можно написать в Службу заботы.',
   'help.knowledge': 'База знаний',
   'help.gettingStarted': 'Начало работы',
