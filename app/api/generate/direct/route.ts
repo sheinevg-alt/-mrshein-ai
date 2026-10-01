@@ -29,8 +29,8 @@ function safeResolution(value: unknown): ApiModelsResolution {
 
 function canonicalizeTags(prompt: string) {
   return prompt
-    .replace(/@video\s*(\d+)/gi, '@Video$1')
-    .replace(/@image\s*(\d+)/gi, '@Image$1')
+    .replace(/@video\s*(\d+)/gi, '@video$1')
+    .replace(/@image\s*(\d+)/gi, '@image$1')
 }
 
 export async function POST(request: Request) {
@@ -88,8 +88,8 @@ export async function POST(request: Request) {
         reference_paths: referencePaths,
         reference_count: referencePaths.length + (sourceVideoPath ? 1 : 0),
         reference_tags: [
-          ...(sourceVideoPath ? ['@Video1'] : []),
-          ...referencePaths.map((_, index) => `@Image${index + 1}`),
+          ...(sourceVideoPath ? ['@video1'] : []),
+          ...referencePaths.map((_, index) => `@image${index + 1}`),
         ],
         generate_audio: generateAudio,
         duration: mode === 'edit' ? -1 : duration,
