@@ -271,7 +271,7 @@ export default function AdminPage() {
   if (!authorized) {
     return (
       <main className="mx-auto min-h-dvh max-w-xl px-5 py-12">
-        <h1 className="text-2xl font-semibold">Shein AI Admin</h1>
+        <h1 className="text-2xl font-semibold">Banana Zero Admin</h1>
         <p className="mt-2 text-sm text-muted-foreground">Тренды, база знаний, Служба заботы и Telegram.</p>
         <label className="mt-8 block text-sm font-medium">Admin Secret</label>
         <input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} className="mt-2 h-12 w-full rounded-2xl border bg-card px-4" placeholder="Введите секрет из Vercel" />
@@ -284,8 +284,9 @@ export default function AdminPage() {
   return (
     <main className="mx-auto min-h-dvh max-w-3xl px-4 py-8">
       <div className="flex items-start justify-between gap-4">
-        <div><h1 className="text-2xl font-semibold">Shein AI Admin</h1><p className="text-sm text-muted-foreground">Одна панель для Telegram Mini App и будущего сайта.</p></div>
+        <div><h1 className="text-2xl font-semibold">Banana Zero Admin</h1><p className="text-sm text-muted-foreground">Тренды, база знаний и Служба заботы Banana Zero.</p></div>
         <div className="flex gap-2">
+          <Link href="/admin/control" className="rounded-full bg-foreground px-4 py-2 text-xs font-medium text-background">Control Center</Link>
           <Link href="/admin/referrals" className="rounded-full border px-4 py-2 text-xs font-medium">Рефералы</Link>
           <button type="button" disabled={busy} onClick={() => void setupWebhook()} className="rounded-full border px-4 py-2 text-xs font-medium">Подключить bot</button>
         </div>

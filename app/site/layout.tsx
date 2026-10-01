@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { SiteLocaleProvider } from '@/components/site/site-locale-provider'
 
 export const metadata: Metadata = {
   title: 'Banana Zero — AI-видео, изображения и готовые тренды',
@@ -16,5 +17,5 @@ export const metadata: Metadata = {
 }
 
 export default function SiteLayout({ children }: { children: React.ReactNode }) {
-  return children
+  return <SiteLocaleProvider>{children}</SiteLocaleProvider>
 }

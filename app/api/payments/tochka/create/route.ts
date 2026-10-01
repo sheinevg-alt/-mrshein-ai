@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   const tokenAmount = Number(body?.tokenAmount)
   const amount = PACKS.get(tokenAmount)
   const email = String(body?.email || '').trim().slice(0, 254)
-  const name = String(body?.name || '').trim().slice(0, 120) || 'Покупатель Shein AI'
+  const name = String(body?.name || '').trim().slice(0, 120) || 'Покупатель Banana Zero'
   if (!amount || !email.includes('@')) return NextResponse.json({ error: 'Invalid checkout data' }, { status: 400 })
 
   const orderId = randomUUID()
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     Data: {
       customerCode,
       amount,
-      purpose: `Пополнение Shein AI: ${tokenAmount} токенов`,
+      purpose: `Пополнение Banana Zero: ${tokenAmount} токенов`,
       redirectUrl: `${siteUrl}/pay/success?order=${orderId}`,
       failRedirectUrl: `${siteUrl}/pay?status=failed`,
       paymentMode: ['sbp', 'card', 'tinkoff'],
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       Client: { name, email },
       Items: [{
         vatType,
-        name: `${tokenAmount} токенов Shein AI`,
+        name: `${tokenAmount} токенов Banana Zero`,
         amount,
         quantity: 1,
         paymentMethod: 'full_payment',

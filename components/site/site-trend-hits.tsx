@@ -2,6 +2,7 @@
 
 import { ArrowRight, Check, ImagePlus, Sparkles, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { useSiteLocale } from './site-locale-provider'
 
 type TrendInput = {
   id: string
@@ -30,6 +31,7 @@ type UploadValue = {
 }
 
 export function SiteTrendHits() {
+  const { locale } = useSiteLocale()
   const [trends, setTrends] = useState<Trend[]>([])
   const [showAll, setShowAll] = useState(false)
   const [activeTrend, setActiveTrend] = useState<Trend | null>(null)
@@ -83,10 +85,10 @@ export function SiteTrendHits() {
           <div>
             <div className="inline-flex items-center gap-2 rounded-full bg-[#FFF3D6] px-3 py-1.5 text-xs font-bold text-[#8B5C00]">
               <Sparkles className="size-3.5" />
-              ХИТЫ
+              {locale === 'ru' ? 'ХИТЫ' : 'TRENDING'}
             </div>
-            <h2 className="mt-4 text-3xl font-black tracking-[-0.03em] md:text-4xl">Тренды, которые хочется повторить</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-[#66758E]">Выберите тренд — форма откроется прямо здесь. Никаких переходов в другой интерфейс.</p>
+            <h2 className="mt-4 text-3xl font-black tracking-[-0.03em] md:text-4xl">{locale === 'ru' ? 'Тренды, которые хочется повторить' : 'Trends worth recreating'}</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[#66758E]">{locale === 'ru' ? 'Выберите тренд — форма откроется прямо здесь. Никаких переходов в другой интерфейс.' : 'Choose a trend — the form opens right here without sending you to another interface.'}</p>
           </div>
           {trends.length > 3 && (
             <button
@@ -94,7 +96,7 @@ export function SiteTrendHits() {
               onClick={() => setShowAll((value) => !value)}
               className="inline-flex items-center gap-2 self-start rounded-full border border-[#CBD5F3] bg-white px-5 py-3 text-sm font-semibold text-[#1E3A8A] md:self-auto"
             >
-              {showAll ? 'Скрыть' : 'Все тренды'} <ArrowRight className={`size-4 transition ${showAll ? 'rotate-90' : ''}`} />
+              {showAll ? (locale === 'ru' ? 'Скрыть' : 'Show less') : (locale === 'ru' ? 'Все тренды' : 'All trends')} <ArrowRight className={`size-4 transition ${showAll ? 'rotate-90' : ''}`} />
             </button>
           )}
         </div>
@@ -105,25 +107,25 @@ export function SiteTrendHits() {
               <button type="button" onClick={() => openTrend(trend)} className="block w-full text-left">
                 <div className="relative aspect-[4/5] overflow-hidden bg-[#EDF2FF]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={trend.image} alt={trend.title.ru || trend.title.en} className="size-full object-cover" />
+                  <img src={trend.image} alt={locale === 'ru' ? (trend.title.ru || trend.title.en) : trend.title.en} className="size-full object-cover" />
                   <div className="absolute left-3 top-3 flex items-center gap-2">
                     {(trend.cardBadge || index === 0) && (
                       <span className="rounded-full bg-[#F6AB10] px-2.5 py-1 text-[10px] font-extrabold tracking-[0.08em] text-[#171A22] shadow-sm">
-                        {trend.cardBadge === 'new' ? 'NEW' : trend.cardBadge === 'popular' ? 'ПОПУЛЯРНО' : 'ХИТ'}
+                        {trend.cardBadge === 'new' ? 'NEW' : trend.cardBadge === 'popular' ? (locale === 'ru' ? 'ПОПУЛЯРНО' : 'POPULAR') : (locale === 'ru' ? 'ХИТ' : 'HIT')}
                       </span>
                     )}
-                    <span className="rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-semibold text-[#334155] backdrop-blur">Видео</span>
+                    <span className="rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-semibold text-[#334155] backdrop-blur">{locale === 'ru' ? 'Видео' : 'Video'}</span>
                   </div>
                 </div>
               </button>
               <div className="p-4">
-                <h3 className="text-base font-bold">{trend.title.ru || trend.title.en}</h3>
+                <h3 className="text-base font-bold">{locale === 'ru' ? (trend.title.ru || trend.title.en) : trend.title.en}</h3>
                 <button
                   type="button"
                   onClick={() => openTrend(trend)}
                   className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#1E3A8A] text-sm font-semibold text-white"
                 >
-                  Создать тренд <ArrowRight className="size-4" />
+                  {locale === 'ru' ? 'Создать тренд' : 'Create trend'} <ArrowRight className="size-4" />
                 </button>
               </div>
             </article>
@@ -138,6 +140,7 @@ export function SiteTrendHits() {
 
       {activeTrend && (
         <TrendModal
+          locale={locale}
           trend={activeTrend}
           uploads={uploads}
           resolution={resolution}
@@ -145,7 +148,7 @@ export function SiteTrendHits() {
           onClose={closeTrend}
           onFile={setFile}
           onResolution={setResolution}
-          onGenerate={() => setNotice('Форма готова. Следующий шаг — подключить вход через Telegram прямо на сайте, после чего генерация будет запускаться отсюда без перехода в Mini App.')}
+          onGenerate={() => setNotice(locale === 'ru' ? 'Форма готова. Для запуска на сайте нужен веб-вход в Banana Zero; до его подключения генерация запускается из Mini App.' : 'The form is ready. Web sign-in is required to run generation on the website; until it is connected, generation starts from the Mini App.')}
         />
       )}
     </>
@@ -153,6 +156,7 @@ export function SiteTrendHits() {
 }
 
 function TrendModal({
+  locale,
   trend,
   uploads,
   resolution,
@@ -162,6 +166,7 @@ function TrendModal({
   onResolution,
   onGenerate,
 }: {
+  locale: 'ru' | 'en'
   trend: Trend
   uploads: Record<string, UploadValue>
   resolution: string
@@ -179,12 +184,12 @@ function TrendModal({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-[#07101f]/55 p-0 backdrop-blur-sm md:items-center md:p-6" role="dialog" aria-modal="true">
-      <button type="button" aria-label="Закрыть" onClick={onClose} className="absolute inset-0 cursor-default" />
+      <button type="button" aria-label={locale === 'ru' ? 'Закрыть' : 'Close'} onClick={onClose} className="absolute inset-0 cursor-default" />
       <div className="relative z-10 max-h-[92dvh] w-full overflow-y-auto rounded-t-[2rem] bg-[#F8FAFF] p-5 shadow-2xl md:max-w-2xl md:rounded-[2rem] md:p-7">
         <div className="sticky top-0 z-20 -mx-1 flex items-start justify-between gap-4 bg-[#F8FAFF]/95 px-1 pb-4 backdrop-blur">
           <div>
-            <p className="text-xs font-bold tracking-[0.14em] text-[#1E3A8A]">СОЗДАТЬ ТРЕНД</p>
-            <h3 className="mt-1 text-2xl font-black tracking-tight">{trend.title.ru || trend.title.en}</h3>
+            <p className="text-xs font-bold tracking-[0.14em] text-[#1E3A8A]">{locale === 'ru' ? 'СОЗДАТЬ ТРЕНД' : 'CREATE TREND'}</p>
+            <h3 className="mt-1 text-2xl font-black tracking-tight">{locale === 'ru' ? (trend.title.ru || trend.title.en) : trend.title.en}</h3>
           </div>
           <button type="button" onClick={onClose} className="flex size-10 shrink-0 items-center justify-center rounded-full border border-[#DCE5F7] bg-white">
             <X className="size-5" />
@@ -203,15 +208,15 @@ function TrendModal({
             </div>
             {typeof trend.tokens === 'number' && (
               <div className="mt-3 rounded-2xl border border-[#E6EEFF] bg-white px-4 py-3">
-                <p className="text-xs text-[#7B899D]">Стоимость</p>
-                <p className="mt-1 text-sm font-bold">{trend.tokens} токенов</p>
+                <p className="text-xs text-[#7B899D]">{locale === 'ru' ? 'Стоимость' : 'Price'}</p>
+                <p className="mt-1 text-sm font-bold">{trend.tokens} {locale === 'ru' ? 'токенов' : 'Tokens'}</p>
               </div>
             )}
           </div>
 
           <div>
-            <p className="text-sm font-bold">Загрузите свои материалы</p>
-            <p className="mt-1 text-xs leading-5 text-[#7B899D]">Форма остаётся на BananaZero.ru — после выбора фото вас никуда не перебрасывает.</p>
+            <p className="text-sm font-bold">{locale === 'ru' ? 'Загрузите свои материалы' : 'Upload your media'}</p>
+            <p className="mt-1 text-xs leading-5 text-[#7B899D]">{locale === 'ru' ? 'Форма остаётся на BananaZero.ru — после выбора фото вас никуда не перебрасывает.' : 'The form stays on BananaZero.ru — selecting a file never sends you somewhere else.'}</p>
 
             <div className="mt-4 space-y-3">
               {inputs.map((input) => {
@@ -222,8 +227,8 @@ function TrendModal({
                 if (input.kind === 'text') {
                   return (
                     <label key={input.id} className="block rounded-2xl border border-[#E6EEFF] bg-white p-4">
-                      <span className="text-sm font-semibold">{input.label.ru || input.label.en}</span>
-                      {input.hint?.ru && <span className="mt-1 block text-xs text-[#7B899D]">{input.hint.ru}</span>}
+                      <span className="text-sm font-semibold">{locale === 'ru' ? (input.label.ru || input.label.en) : input.label.en}</span>
+                      {(locale === 'ru' ? input.hint?.ru : input.hint?.en) && <span className="mt-1 block text-xs text-[#7B899D]">{locale === 'ru' ? input.hint?.ru : input.hint?.en}</span>}
                       <textarea rows={3} className="mt-3 w-full resize-none rounded-xl border border-[#DCE5F7] bg-[#F8FAFF] p-3 text-sm" />
                     </label>
                   )
@@ -242,14 +247,14 @@ function TrendModal({
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="truncate text-sm font-semibold">{input.label.ru || input.label.en}</p>
-                          {!input.required && <span className="rounded-full bg-[#EEF3FF] px-2 py-0.5 text-[10px] text-[#66758E]">необязательно</span>}
+                          <p className="truncate text-sm font-semibold">{locale === 'ru' ? (input.label.ru || input.label.en) : input.label.en}</p>
+                          {!input.required && <span className="rounded-full bg-[#EEF3FF] px-2 py-0.5 text-[10px] text-[#66758E]">{locale === 'ru' ? 'необязательно' : 'optional'}</span>}
                         </div>
                         <p className="mt-1 text-xs leading-5 text-[#7B899D]">
-                          {upload ? upload.file.name : input.defaultAsset ? 'Уже добавлено — можно заменить' : input.hint?.ru || 'Добавьте файл'}
+                          {upload ? upload.file.name : input.defaultAsset ? (locale === 'ru' ? 'Уже добавлено — можно заменить' : 'Already included — you can replace it') : (locale === 'ru' ? (input.hint?.ru || input.hint?.en || 'Добавьте файл') : (input.hint?.en || 'Add a file'))}
                         </p>
                       </div>
-                      {readyAsset ? <Check className="size-5 shrink-0 text-[#1E3A8A]" /> : <span className="shrink-0 text-xs font-semibold text-[#1E3A8A]">Загрузить</span>}
+                      {readyAsset ? <Check className="size-5 shrink-0 text-[#1E3A8A]" /> : <span className="shrink-0 text-xs font-semibold text-[#1E3A8A]">{locale === 'ru' ? 'Загрузить' : 'Upload'}</span>}
                     </div>
                     <input
                       type="file"
@@ -268,7 +273,7 @@ function TrendModal({
 
             {(trend.resolutions?.length || 0) > 0 && (
               <label className="mt-4 block rounded-2xl border border-[#E6EEFF] bg-white p-4">
-                <span className="text-xs font-semibold text-[#66758E]">Качество</span>
+                <span className="text-xs font-semibold text-[#66758E]">{locale === 'ru' ? 'Качество' : 'Quality'}</span>
                 <select value={resolution} onChange={(e) => onResolution(e.target.value)} className="mt-2 h-11 w-full rounded-xl border border-[#DCE5F7] bg-[#F8FAFF] px-3 text-sm font-semibold">
                   {trend.resolutions!.map((value) => <option key={value} value={value}>{value}</option>)}
                 </select>
@@ -282,7 +287,7 @@ function TrendModal({
               className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#1E3A8A] text-sm font-semibold text-white shadow-[0_12px_28px_-16px_rgba(30,58,138,0.8)] disabled:opacity-40"
             >
               <Sparkles className="size-4" />
-              Запустить генерацию
+              {locale === 'ru' ? 'Запустить генерацию' : 'Start generation'}
             </button>
 
             {notice && <p className="mt-3 rounded-2xl bg-[#EEF3FF] px-4 py-3 text-xs leading-5 text-[#52627A]">{notice}</p>}

@@ -8,6 +8,7 @@ import {
   Clock,
   Globe,
   Gift,
+  ExternalLink,
   Copy,
   LifeBuoy,
   Monitor,
@@ -97,6 +98,17 @@ export function ProfileScreen() {
         </span>
         <ChevronRight className="size-4" aria-hidden="true" />
       </button>
+
+      <a
+        href={APP_CONFIG.website}
+        target="_blank"
+        rel="noreferrer"
+        className="glass mt-3 flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left active:bg-muted"
+      >
+        <Globe className="size-[18px] text-brand" strokeWidth={1.8} aria-hidden="true" />
+        <span className="flex-1 text-sm">{locale === 'ru' ? 'Перейти на сайт Banana Zero' : 'Open Banana Zero website'}</span>
+        <ExternalLink className="size-4 text-muted-foreground" aria-hidden="true" />
+      </a>
 
       <ul className="glass mt-6 divide-y overflow-hidden rounded-2xl">
         {menu.map(({ id, label, icon: Icon }) => {

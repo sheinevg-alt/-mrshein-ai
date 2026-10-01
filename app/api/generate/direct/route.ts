@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server'
 import {
+  createApiModelsCallbackToken,
   createApiModelsSeedance25EditTask,
   createApiModelsSeedance25Task,
   type ApiModelsResolution,
 } from '@/lib/server/apimodels'
+import { quoteTokens } from '@/lib/server/model-pricing'
 import {
   createStorageSignedDownloadUrl,
   hasDatabase,
@@ -15,6 +17,10 @@ export const dynamic = 'force-dynamic'
 
 const MODEL = 'seedance-2.5'
 const INPUT_BUCKET = 'generation-inputs'
+
+async function rpc(name: string, payload: Record<string, unknown>) {
+  return supabaseFetch(`rpc/${name}`, { method: 'POST', body: JSON.stringify(payload) })
+}
 
 function clampDuration(value: unknown) {
   const parsed = Math.round(Number(value || 12))
@@ -39,20 +45,17 @@ export async function POST(request: Request) {
   if (!hasDatabase()) return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
 
   const body = await request.json().catch(() => null)
-  if (!body || typeof body !== 'object') {
-    return NextResponse.json({ error: 'JSON_BODY_REQUIRED' }, { status: 415 })
-  }
+  if (!body || typeof body !== 'object') return NextResponse.json({ error: 'JSON_BODY_REQUIRED' }, { status: 415 })
 
   const payload = body as Record<string, unknown>
   const mode = String(payload.mode || 'generate') === 'edit' ? 'edit' : 'generate'
-  const rawPrompt = String(payload.prompt || '').trim()
-  const prompt = canonicalizeTags(rawPrompt)
+  const prompt = canonicalizeTags(String(payload.prompt || '').trim())
   const generateAudio = payload.generateAudio !== false
   const duration = clampDuration(payload.duration)
+  const sourceDuration = Math.max(4, Math.min(30, Number(payload.sourceDuration || duration)))
   const resolution = safeResolution(payload.resolution)
   const sourceVideoPath = String(payload.sourceVideoPath || '')
-  const rawReferencePaths = Array.isArray(payload.referencePaths) ? payload.referencePaths : []
-  const referencePaths = rawReferencePaths
+  const referencePaths = (Array.isArray(payload.referencePaths) ? payload.referencePaths : [])
     .map((value) => String(value || ''))
     .filter(Boolean)
     .slice(0, 30)
@@ -69,42 +72,52 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'INVALID_REFERENCE_PATH' }, { status: 400 })
   }
 
-  const historyResponse = await supabaseFetch('generation_history', {
-    method: 'POST',
-    headers: { Prefer: 'return=representation' },
-    body: JSON.stringify({
-      telegram_id: user.id,
-      type: 'tool',
-      source_id: mode === 'edit' ? 'seedance2-5-video-edit' : sourceVideoPath ? 'seedance2-5-reference-video' : 'seedance2-5-direct',
-      title: mode === 'edit' ? 'Seedance 2.5 · Video Edit' : sourceVideoPath ? 'Seedance 2.5 · Video reference' : 'Seedance 2.5',
-      status: 'queued',
-      token_cost: 0,
-      provider: 'apimodels',
-      model: MODEL,
-      input_payload: {
-        mode,
-        prompt,
-        source_video_path: sourceVideoPath || null,
-        reference_paths: referencePaths,
-        reference_count: referencePaths.length + (sourceVideoPath ? 1 : 0),
-        reference_tags: [
-          ...(sourceVideoPath ? ['@video1'] : []),
-          ...referencePaths.map((_, index) => `@image${index + 1}`),
-        ],
-        generate_audio: generateAudio,
-        duration: mode === 'edit' ? -1 : duration,
-        aspect_ratio: mode === 'edit' ? 'adaptive' : '9:16',
-        resolution,
-      },
-      queued_at: new Date().toISOString(),
-    }),
+  // Editing has input-token billing upstream, so reserve a conservative 20% buffer.
+  const quote = await quoteTokens({
+    toolId: 'seedance-2-5',
+    duration: mode === 'edit' ? sourceDuration : duration,
+    resolution,
+    generateAudio,
+  })
+  const tokenCost = mode === 'edit' ? Math.ceil((quote.tokenCost * 1.2) / 10) * 10 : quote.tokenCost
+
+  const createResponse = await rpc('create_generation', {
+    p_telegram_id: user.id,
+    p_type: 'tool',
+    p_source_id: mode === 'edit' ? 'seedance2-5-video-edit' : sourceVideoPath ? 'seedance2-5-reference-video' : 'seedance2-5-direct',
+    p_title: mode === 'edit' ? 'Seedance 2.5 · Video Edit' : sourceVideoPath ? 'Seedance 2.5 · Video reference' : 'Seedance 2.5',
+    p_token_cost: tokenCost,
+    p_provider: 'apimodels',
+    p_model: MODEL,
+    p_input_payload: {
+      mode,
+      prompt,
+      source_video_path: sourceVideoPath || null,
+      reference_paths: referencePaths,
+      reference_count: referencePaths.length + (sourceVideoPath ? 1 : 0),
+      reference_tags: [
+        ...(sourceVideoPath ? ['@video1'] : []),
+        ...referencePaths.map((_, index) => `@image${index + 1}`),
+      ],
+      generate_audio: generateAudio,
+      duration: mode === 'edit' ? -1 : duration,
+      source_duration: mode === 'edit' ? sourceDuration : null,
+      aspect_ratio: mode === 'edit' ? 'adaptive' : '9:16',
+      resolution,
+      quoted_provider_usd: quote.providerUsd,
+      quoted_usd_rub: quote.usdRub,
+    },
   })
 
-  if (!historyResponse.ok) {
-    const details = await historyResponse.text().catch(() => '')
-    return NextResponse.json({ error: 'Could not create generation job', details: details.slice(0, 500) }, { status: 500 })
+  if (!createResponse.ok) {
+    const details = await createResponse.text()
+    if (details.includes('INSUFFICIENT_TOKENS')) {
+      return NextResponse.json({ error: 'INSUFFICIENT_TOKENS', requiredTokens: tokenCost }, { status: 402 })
+    }
+    return NextResponse.json({ error: 'Could not create generation job' }, { status: 500 })
   }
-  const job = (await historyResponse.json())?.[0]
+
+  const jobId = String(await createResponse.json()).replace(/^"|"$/g, '')
 
   try {
     const references = await Promise.all(
@@ -113,7 +126,8 @@ export async function POST(request: Request) {
     const videoReferences = sourceVideoPath
       ? [await createStorageSignedDownloadUrl(INPUT_BUCKET, sourceVideoPath, 7200)]
       : []
-    const callbackUrl = `${new URL(request.url).origin}/api/generate/callback/apimodels?jobId=${encodeURIComponent(job.id)}`
+    const callbackToken = createApiModelsCallbackToken(jobId)
+    const callbackUrl = `${new URL(request.url).origin}/api/generate/callback/apimodels?jobId=${encodeURIComponent(jobId)}&token=${encodeURIComponent(callbackToken)}`
 
     const task = mode === 'edit'
       ? await createApiModelsSeedance25EditTask({
@@ -135,16 +149,18 @@ export async function POST(request: Request) {
           callbackUrl,
         })
 
-    await supabaseFetch(`generation_history?id=eq.${job.id}`, {
+    await rpc('mark_generation_processing', { p_generation_id: jobId })
+    await supabaseFetch(`generation_history?id=eq.${encodeURIComponent(jobId)}`, {
       method: 'PATCH',
       body: JSON.stringify({
-        status: 'processing',
-        processing_at: new Date().toISOString(),
         result_metadata: {
           apimodels_task_id: task.id,
+          apimodels_kind: 'video',
           apimodels_direct_tool: true,
           apimodels_mode: mode,
           apimodels_resolution: resolution,
+          quoted_provider_usd: quote.providerUsd,
+          quoted_usd_rub: quote.usdRub,
         },
         updated_at: new Date().toISOString(),
       }),
@@ -153,24 +169,17 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       status: 'processing',
-      jobId: job.id,
+      jobId,
       providerTaskId: task.id,
+      tokenCost,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'APIMODELS_CREATE_FAILED'
-    await supabaseFetch(`generation_history?id=eq.${job.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        status: 'failed',
-        error_code: message.slice(0, 240),
-        failed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }),
+    await rpc('fail_generation', {
+      p_generation_id: jobId,
+      p_error_code: message.slice(0, 240),
+      p_refund: true,
     })
-
-    return NextResponse.json({
-      error: 'APIMODELS_CREATE_FAILED',
-      details: message,
-    }, { status: 502 })
+    return NextResponse.json({ error: 'APIMODELS_CREATE_FAILED', details: message }, { status: 502 })
   }
 }

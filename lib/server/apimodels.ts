@@ -1,4 +1,5 @@
 import 'server-only'
+import { createHmac, timingSafeEqual } from 'node:crypto'
 
 const APIMODELS_BASE = 'https://api.apimodels.app/v1'
 const APIMODELS_MODEL = 'seedance-2.5'
@@ -16,6 +17,18 @@ async function apiModelsFetch(path: string, init: RequestInit = {}) {
   headers.set('Authorization', `Bearer ${apiKey()}`)
   if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   return fetch(`${APIMODELS_BASE}${path}`, { ...init, headers, cache: 'no-store' })
+}
+
+export function createApiModelsCallbackToken(jobId: string) {
+  return createHmac('sha256', apiKey()).update(`banana-zero:${jobId}`).digest('hex')
+}
+
+export function verifyApiModelsCallbackToken(jobId: string, token: string) {
+  if (!jobId || !token) return false
+  const expected = createApiModelsCallbackToken(jobId)
+  const left = Buffer.from(expected, 'utf8')
+  const right = Buffer.from(token, 'utf8')
+  return left.length === right.length && timingSafeEqual(left, right)
 }
 
 
@@ -117,6 +130,7 @@ export type ApiModelsTask = {
   failureCode?: string
   retryable?: boolean
   usage?: unknown
+  creditsUsd?: number | null
   raw?: unknown
 }
 
@@ -177,9 +191,18 @@ function parseTaskPayload(payload: Record<string, unknown>): ApiModelsTask {
     ...(Array.isArray(data.resultUrls) ? data.resultUrls : []),
     ...(Array.isArray(data.result_urls) ? data.result_urls : []),
     ...(Array.isArray(output?.video_urls) ? output.video_urls as unknown[] : []),
+    ...(Array.isArray(output?.image_urls) ? output.image_urls as unknown[] : []),
+    ...(Array.isArray(output?.audio_urls) ? output.audio_urls as unknown[] : []),
     ...(Array.isArray(output?.urls) ? output.urls as unknown[] : []),
+    ...(Array.isArray(data.images) ? data.images as unknown[] : []),
+    ...(Array.isArray(data.audios) ? data.audios as unknown[] : []),
     ...(typeof output?.video_url === 'string' ? [output.video_url] : []),
+    ...(typeof output?.image_url === 'string' ? [output.image_url] : []),
+    ...(typeof output?.audio_url === 'string' ? [output.audio_url] : []),
+    ...(typeof output?.url === 'string' ? [output.url] : []),
     ...(typeof data.video_url === 'string' ? [data.video_url] : []),
+    ...(typeof data.image_url === 'string' ? [data.image_url] : []),
+    ...(typeof data.audio_url === 'string' ? [data.audio_url] : []),
     ...(Array.isArray(resultJson?.resultUrls) ? resultJson!.resultUrls as unknown[] : []),
     ...(Array.isArray(resultJson?.result_urls) ? resultJson!.result_urls as unknown[] : []),
     ...(typeof resultJson?.video_url === 'string' ? [resultJson.video_url] : []),
@@ -221,12 +244,13 @@ function parseTaskPayload(payload: Record<string, unknown>): ApiModelsTask {
     failureCode,
     retryable,
     usage: data.usage || payload.usage || null,
+    creditsUsd: data.credits == null ? null : Number(data.credits),
     raw: payload,
   }
 }
 
-async function createTask(body: Record<string, unknown>) {
-  const response = await apiModelsFetch('/video/generations', {
+async function createTaskAt(path: string, body: Record<string, unknown>) {
+  const response = await apiModelsFetch(path, {
     method: 'POST',
     body: JSON.stringify(body),
   })
@@ -245,6 +269,10 @@ async function createTask(body: Record<string, unknown>) {
   }
 
   return task
+}
+
+async function createTask(body: Record<string, unknown>) {
+  return createTaskAt('/video/generations', body)
 }
 
 export async function createApiModelsSeedance25Task(params: {
@@ -293,8 +321,11 @@ export async function createApiModelsSeedance25EditTask(params: {
   })
 }
 
-export async function getApiModelsTask(id: string): Promise<ApiModelsTask> {
-  const response = await apiModelsFetch(`/video/generations?task_id=${encodeURIComponent(id)}`)
+export type ApiModelsTaskKind = 'video' | 'image' | 'audio'
+
+export async function getApiModelsGenerationTask(id: string, kind: ApiModelsTaskKind = 'video'): Promise<ApiModelsTask> {
+  const endpoint = kind === 'image' ? '/images/generations' : kind === 'audio' ? '/audio/generations' : '/video/generations'
+  const response = await apiModelsFetch(`${endpoint}?task_id=${encodeURIComponent(id)}`)
   const text = await response.text()
   let payload: Record<string, unknown> = {}
   try { payload = text ? JSON.parse(text) : {} } catch { payload = { raw: text } }
@@ -305,6 +336,10 @@ export async function getApiModelsTask(id: string): Promise<ApiModelsTask> {
   }
 
   return parseTaskPayload(payload)
+}
+
+export async function getApiModelsTask(id: string): Promise<ApiModelsTask> {
+  return getApiModelsGenerationTask(id, 'video')
 }
 
 
@@ -370,4 +405,130 @@ export async function createApiModelsKlingTask(params: {
     ...(params.negativePrompt ? { negative_prompt: params.negativePrompt } : {}),
     ...(params.callbackUrl ? { callback_url: params.callbackUrl } : {}),
   })
+}
+
+
+export type ApiModelsImageResolution = '1k' | '2k' | '4k'
+
+export async function createApiModelsImageTask(params: {
+  model: 'gemini-3.1-flash-image-preview' | 'gemini-3-pro-image' | 'gpt-image-2.5-flare' | 'gpt-image-2.5-sunburst'
+  promptText: string
+  ratio?: string
+  resolution?: ApiModelsImageResolution
+  references?: string[]
+  quality?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+  callbackUrl?: string
+}) {
+  const references = (params.references || []).filter(Boolean).slice(0, 16)
+  const isGptImage = params.model.startsWith('gpt-image-2.5')
+  return createTaskAt('/images/generations', {
+    model: params.model,
+    prompt: params.promptText,
+    aspect_ratio: params.ratio || '1:1',
+    resolution: String(params.resolution || '2k').toUpperCase(),
+    ...(references.length ? { image_urls: references } : {}),
+    ...(isGptImage ? { quality: params.quality || 'medium' } : {}),
+    ...(params.callbackUrl ? { callback_url: params.callbackUrl } : {}),
+  })
+}
+
+export async function createApiModelsAudioTask(params: {
+  model: 'suno-v5' | 'kling-sound-effects' | 'kling-video-to-audio'
+  promptText: string
+  duration?: number
+  videoUrl?: string
+  bgmPrompt?: string
+  callbackUrl?: string
+}) {
+  const body: Record<string, unknown> = { model: params.model }
+  if (params.model === 'suno-v5') {
+    body.description = params.promptText
+    body.mv = 'chirp-v5'
+  } else if (params.model === 'kling-video-to-audio') {
+    if (!params.videoUrl) throw new Error('VIDEO_REQUIRED')
+    body.video_url = params.videoUrl
+    body.sound_effect_prompt = params.promptText
+    body.bgm_prompt = params.bgmPrompt || ''
+    body.asmr_mode = false
+  } else {
+    body.prompt = params.promptText
+    if (params.model === 'kling-sound-effects') {
+      body.duration = String(Math.max(3, Math.min(10, Number(params.duration || 5))).toFixed(1))
+    }
+  }
+  if (params.callbackUrl) body.callback_url = params.callbackUrl
+  return createTaskAt('/audio/generations', body)
+}
+
+export async function createApiModelsChatCompletion(params: {
+  model: 'gpt-6-sol' | 'gpt-6-luna' | 'claude-sonnet-5'
+  promptText: string
+  reasoningEffort?: 'none' | 'low' | 'medium' | 'high'
+}) {
+  const isClaude = params.model === 'claude-sonnet-5'
+  const path = isClaude ? '/messages' : '/chat/completions'
+  const body = isClaude
+    ? {
+        model: params.model,
+        max_tokens: 2048,
+        messages: [{ role: 'user', content: params.promptText }],
+      }
+    : {
+        model: params.model,
+        messages: [{ role: 'user', content: params.promptText }],
+        stream: false,
+        reasoning_effort: params.reasoningEffort || 'medium',
+      }
+
+  const response = await apiModelsFetch(path, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+  const text = await response.text()
+  let payload: any = {}
+  try { payload = text ? JSON.parse(text) : {} } catch { payload = { raw: text } }
+  if (!response.ok) throw new Error(String(payload?.error?.message || payload?.message || `APIMODELS_CHAT_FAILED_${response.status}`))
+
+  const content = isClaude
+    ? String(payload?.content?.find?.((item: any) => item?.type === 'text')?.text || '')
+    : String(payload?.choices?.[0]?.message?.content || '')
+  const requestId = String(response.headers.get('x-apimodels-request-id') || payload?.apimodels?.request_id || payload?.id || '')
+  const costHeader = response.headers.get('x-apimodels-cost')
+  const cost = costHeader != null ? Number(costHeader) : payload?.apimodels?.cost == null ? null : Number(payload.apimodels.cost)
+  return {
+    text: content,
+    requestId,
+    creditsUsd: Number.isFinite(cost as number) ? cost : null,
+    usage: payload?.usage || null,
+  }
+}
+
+
+export async function createApiModelsElevenTts(params: {
+  text: string
+  voiceId?: string
+  model?: 'eleven-tts-flash' | 'eleven-tts-turbo' | 'eleven-tts-multilingual' | 'eleven-tts-v3'
+}) {
+  const response = await apiModelsFetch('/tts/stream', {
+    method: 'POST',
+    body: JSON.stringify({
+      model: params.model || 'eleven-tts-v3',
+      text: params.text,
+      voice_id: params.voiceId || 'EXAVITQu4vr4xnSDxMaL',
+    }),
+  })
+  if (!response.ok) {
+    const message = await response.text().catch(() => '')
+    throw new Error(message || `APIMODELS_TTS_FAILED_${response.status}`)
+  }
+  const audio = Buffer.from(await response.arrayBuffer())
+  const requestId = String(response.headers.get('x-apimodels-request-id') || '')
+  const costHeader = response.headers.get('x-apimodels-cost')
+  const cost = costHeader == null ? null : Number(costHeader)
+  return {
+    audio,
+    mimeType: response.headers.get('content-type') || 'audio/mpeg',
+    requestId,
+    creditsUsd: Number.isFinite(cost as number) ? cost : null,
+  }
 }

@@ -120,6 +120,11 @@ function InnerApp() {
 
   function openTool(tool: Tool) {
     haptics.impact('light')
+    if (tool.id === 'seedance-2-5') {
+      setActiveTool(null)
+      setSeedanceOpen(true)
+      return
+    }
     setActiveTool(tool)
   }
 
@@ -164,9 +169,9 @@ function InnerApp() {
           {tab === 'trends' && <TrendsScreen onOpenTrend={openTrend} onOpenCategory={openCategory} />}
           {tab === 'create' &&
             (category ? (
-              <CategoryScreen categoryId={category} onBack={() => setCategory(null)} onOpenTool={openTool} />
+              <CategoryScreen categoryId={category} onBack={() => setCategory(null)} onOpenTool={openTool} onOpenTrend={openTrend} />
             ) : (
-              <CreateScreen onOpenCategory={openCategory} onOpenSeedance={() => { haptics.impact('light'); setSeedanceOpen(true) }} />
+              <CreateScreen onOpenCategory={openCategory} />
             ))}
           {tab === 'works' && <WorksScreen onRepeatGeneration={(jobId) => setRepeatJobId(jobId)} />}
           {tab === 'favorites' && (
@@ -183,7 +188,7 @@ function InnerApp() {
               <CheckCircle2 className="size-5" />
             </span>
             <button type="button" onClick={openCompletedWork} className="min-w-0 flex-1 text-left">
-              <span className="block text-sm font-semibold">{locale === 'ru' ? 'Ваше видео готово' : 'Your video is ready'}</span>
+              <span className="block text-sm font-semibold">{locale === 'ru' ? 'Ваш результат готов' : 'Your result is ready'}</span>
               <span className="block truncate text-xs text-muted-foreground">{locale === 'ru' ? 'Нажмите, чтобы посмотреть результат' : 'Tap to view the result'}</span>
             </button>
             <button type="button" onClick={clearCompletionNotice} className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground" aria-label={locale === 'ru' ? 'Закрыть' : 'Close'}>
@@ -196,7 +201,7 @@ function InnerApp() {
       <BottomNav active={tab} onChange={changeTab} worksBadge={unreadWorks} />
       <SeedanceSheet open={seedanceOpen} onClose={() => setSeedanceOpen(false)} onGenerationStarted={openWorksAfterGeneration} />
       <RepeatGenerationSheet jobId={repeatJobId} onClose={() => setRepeatJobId(null)} onGenerationStarted={openWorksAfterGeneration} />
-      <ToolSheet tool={activeTool} onClose={() => setActiveTool(null)} />
+      <ToolSheet tool={activeTool} onClose={() => setActiveTool(null)} onGenerationStarted={openWorksAfterGeneration} />
       <TrendSheet
         trend={activeTrend}
         onClose={() => setActiveTrend(null)}

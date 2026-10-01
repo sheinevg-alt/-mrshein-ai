@@ -106,7 +106,7 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
   onGenerationStarted?: (jobId: string) => void
 }) {
   const { locale } = useI18n()
-  const { refreshUser } = useUserState()
+  const { tokenBalance, refreshUser } = useUserState()
   const videoInputRef = useRef<HTMLInputElement>(null)
   const videoUrlRef = useRef<string | null>(null)
   const promptRef = useRef<HTMLTextAreaElement>(null)
@@ -120,8 +120,39 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
   const [generateAudio, setGenerateAudio] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [message, setMessage] = useState('')
+  const [quotedTokens, setQuotedTokens] = useState<number | null>(null)
 
   useEffect(() => () => { if (videoUrlRef.current) URL.revokeObjectURL(videoUrlRef.current) }, [])
+
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      void fetch('/api/generate/model/quote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          toolId: 'seedance-2-5',
+          promptLength: prompt.length,
+          settings: {
+            mode,
+            duration,
+            sourceDuration: sourceVideo?.duration || duration,
+            resolution,
+            generateAudio,
+          },
+        }),
+      }).then(async (response) => {
+        const data = await response.json().catch(() => ({}))
+        if (!cancelled && response.ok) setQuotedTokens(Number(data.tokenCost || 0))
+      }).catch(() => undefined)
+    }, 200)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [open, mode, duration, sourceVideo?.duration, resolution, generateAudio, prompt.length])
+
   if (!open) return null
 
   const ready = prompt.trim().length >= 5 && !generating && (mode !== 'edit' || Boolean(sourceVideo))
@@ -268,6 +299,7 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
           mode,
           prompt: prompt.trim(),
           duration,
+          sourceDuration: sourceVideo?.duration || undefined,
           resolution,
           generateAudio,
           sourceVideoPath,
@@ -422,7 +454,24 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
 
       <button type="button" role="switch" aria-checked={generateAudio} onClick={() => { haptics.selection(); setGenerateAudio((value) => !value) }} className="mt-4 flex w-full items-center gap-3 rounded-2xl border bg-card px-4 py-3 text-left"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-tint text-brand"><Volume2 className="size-5" /></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{locale === 'ru' ? 'Со звуком' : 'With sound'}</span><span className="block text-xs text-muted-foreground">{mode === 'edit' ? (locale === 'ru' ? 'Сохраняем и синхронизируем звук исходного видео по промпту.' : 'Keep/sync source audio according to the edit prompt.') : (locale === 'ru' ? 'Синхронный звук Seedance.' : 'Seedance synchronized audio.')}</span></span><span className={`relative h-7 w-12 shrink-0 rounded-full transition ${generateAudio ? 'bg-brand' : 'bg-muted'}`}><span className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition ${generateAudio ? 'left-6' : 'left-1'}`} /></span></button>
 
-      <button type="button" onClick={() => void generate()} disabled={!ready} className="brand-gradient mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-white transition active:scale-[0.98] disabled:opacity-45">{generating ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}{generating ? (locale === 'ru' ? 'Запускаю…' : 'Starting…') : mode === 'edit' ? (locale === 'ru' ? 'Запустить Video Edit' : 'Start Video Edit') : (locale === 'ru' ? 'Создать видео' : 'Generate video')}</button>
+      <div className="mt-5 flex items-center justify-between rounded-2xl border bg-card px-4 py-3">
+        <div>
+          <p className="text-xs text-muted-foreground">{locale === 'ru' ? 'Стоимость запуска' : 'Generation price'}</p>
+          <p className="mt-0.5 text-lg font-black">{quotedTokens == null ? '…' : `${quotedTokens} Tokens`}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-muted-foreground">{locale === 'ru' ? 'Ваш баланс' : 'Your balance'}</p>
+          <p className="mt-0.5 text-sm font-semibold">{tokenBalance} Tokens</p>
+        </div>
+      </div>
+
+      <button type="button" onClick={() => void generate()} disabled={!ready} className="brand-gradient mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-white transition active:scale-[0.98] disabled:opacity-45">{generating ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}{generating
+        ? (locale === 'ru' ? 'Запускаю…' : 'Starting…')
+        : quotedTokens != null && tokenBalance < quotedTokens
+          ? (locale === 'ru' ? `Нужно ${quotedTokens} Tokens` : `Need ${quotedTokens} Tokens`)
+          : mode === 'edit'
+            ? (locale === 'ru' ? `Video Edit · ${quotedTokens ?? '…'} Tokens` : `Video Edit · ${quotedTokens ?? '…'} Tokens`)
+            : (locale === 'ru' ? `Создать · ${quotedTokens ?? '…'} Tokens` : `Generate · ${quotedTokens ?? '…'} Tokens`)}</button>
       <p className="mt-3 text-center text-xs text-muted-foreground" aria-live="polite">{message || (locale === 'ru' ? 'Для первого теста оставь 480p.' : 'Use 480p for the first test.')}</p>
     </BottomSheet>
   )

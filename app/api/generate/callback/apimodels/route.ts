@@ -1,17 +1,25 @@
 import { NextResponse } from 'next/server'
-import { getApiModelsTask } from '@/lib/server/apimodels'
+import { getApiModelsGenerationTask, verifyApiModelsCallbackToken } from '@/lib/server/apimodels'
 import { supabaseFetch } from '@/lib/server/supabase'
 import { telegramApi } from '@/lib/server/telegram-bot'
 
 export const dynamic = 'force-dynamic'
 
+async function rpc(name: string, payload: Record<string, unknown>) {
+  return supabaseFetch(`rpc/${name}`, { method: 'POST', body: JSON.stringify(payload) })
+}
+
 export async function POST(request: Request) {
   const url = new URL(request.url)
   const jobId = url.searchParams.get('jobId') || ''
+  const token = url.searchParams.get('token') || ''
   if (!jobId) return NextResponse.json({ ok: false, error: 'JOB_ID_REQUIRED' }, { status: 400 })
+  if (!verifyApiModelsCallbackToken(jobId, token)) {
+    return NextResponse.json({ ok: false, error: 'INVALID_CALLBACK_TOKEN' }, { status: 401 })
+  }
 
   const historyResponse = await supabaseFetch(
-    `generation_history?select=id,telegram_id,status,title,result_url,result_metadata,provider&id=eq.${encodeURIComponent(jobId)}&limit=1`,
+    `generation_history?select=id,telegram_id,status,title,type,source_id,token_cost,result_url,result_metadata,provider&id=eq.${encodeURIComponent(jobId)}&limit=1`,
   )
   const rows = historyResponse.ok ? await historyResponse.json() : []
   const job = rows?.[0]
@@ -20,10 +28,11 @@ export async function POST(request: Request) {
   }
 
   const taskId = String(job.result_metadata?.apimodels_task_id || '')
+  const kind = String(job.result_metadata?.apimodels_kind || 'video') as 'video' | 'image' | 'audio'
   if (!taskId) return NextResponse.json({ ok: false, error: 'TASK_ID_MISSING' }, { status: 409 })
 
   try {
-    const task = await getApiModelsTask(taskId)
+    const task = await getApiModelsGenerationTask(taskId, kind)
     const state = String(task.state || '').toLowerCase()
 
     if (state === 'completed' || state === 'succeeded' || state === 'success') {
@@ -34,19 +43,17 @@ export async function POST(request: Request) {
         ...(job.result_metadata || {}),
         apimodels_status: state,
         apimodels_usage: task.usage || null,
+        apimodels_credits_usd: task.creditsUsd ?? null,
+        result_urls: task.resultUrls || [],
       }
 
       if (job.status !== 'completed' || job.result_url !== resultUrl) {
-        await supabaseFetch(`generation_history?id=eq.${job.id}`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            status: 'completed',
-            result_url: resultUrl,
-            completed_at: new Date().toISOString(),
-            result_metadata: metadata,
-            updated_at: new Date().toISOString(),
-          }),
+        const completed = await rpc('complete_generation', {
+          p_generation_id: job.id,
+          p_result_url: resultUrl,
+          p_result_metadata: metadata,
         })
+        if (!completed.ok) throw new Error('GENERATION_COMPLETE_FAILED')
       }
 
       if (!job.result_metadata?.telegram_notified_at) {
@@ -58,16 +65,21 @@ export async function POST(request: Request) {
 
         if (botUser?.notifications_enabled !== false && botUser?.chat_id) {
           const ru = String(botUser.language_code || '').toLowerCase().startsWith('ru')
+          const labels = kind === 'image'
+            ? { ru: 'изображение', en: 'image' }
+            : kind === 'audio'
+              ? { ru: 'аудио', en: 'audio' }
+              : { ru: 'видео', en: 'video' }
           const appUrl = `${url.origin}/?work=${encodeURIComponent(job.id)}`
           await telegramApi('sendMessage', {
             chat_id: botUser.chat_id,
             text: ru
-              ? '✅ <b>Ваше видео готово</b>\n\nОткройте Shein One, чтобы посмотреть результат.'
-              : '✅ <b>Your video is ready</b>\n\nOpen Shein One to view the result.',
+              ? `✅ <b>Ваше ${labels.ru} готово</b>\n\nОткройте Banana Zero, чтобы посмотреть результат.`
+              : `✅ <b>Your ${labels.en} is ready</b>\n\nOpen Banana Zero to view the result.`,
             parse_mode: 'HTML',
             reply_markup: {
               inline_keyboard: [[{
-                text: ru ? 'Посмотреть видео' : 'View video',
+                text: ru ? 'Посмотреть результат' : 'View result',
                 web_app: { url: appUrl },
               }]],
             },
@@ -88,25 +100,13 @@ export async function POST(request: Request) {
 
     if (state === 'failed' || state === 'error' || state === 'canceled' || state === 'cancelled') {
       const technicalCode = [task.failureCode, task.error].filter(Boolean).join(': ') || `APIMODELS_${state.toUpperCase()}`
-      await supabaseFetch(`generation_history?id=eq.${job.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          status: 'failed',
-          error_code: technicalCode.slice(0, 240),
-          failed_at: new Date().toISOString(),
-          result_metadata: {
-            ...(job.result_metadata || {}),
-            apimodels_status: state,
-            apimodels_error: task.error || null,
-            apimodels_fail_code: task.failureCode || null,
-            apimodels_fail_message: task.error || null,
-            apimodels_retryable: typeof task.retryable === 'boolean' ? task.retryable : null,
-            apimodels_usage: task.usage || null,
-          },
-          updated_at: new Date().toISOString(),
-        }),
+      const failed = await rpc('fail_generation', {
+        p_generation_id: job.id,
+        p_error_code: technicalCode.slice(0, 240),
+        p_refund: true,
       })
-      return NextResponse.json({ ok: true, status: 'failed' })
+      if (!failed.ok) throw new Error('GENERATION_FAIL_REFUND_FAILED')
+      return NextResponse.json({ ok: true, status: 'failed', refunded: Number(job.token_cost || 0) > 0 })
     }
 
     return NextResponse.json({ ok: true, status: state || 'processing' })
