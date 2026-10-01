@@ -236,6 +236,8 @@ type ReferralData = {
   pendingRub: number
   totalEarnedRub: number
   referredRevenueRub: number
+  reservedPayoutRub: number
+  payouts: Array<{ id: string; payout_method: 'card' | 'crypto'; amount_rub: number; status: string; requested_at: string }>
   commissions: Array<{
     grossAmountRub: number
     commissionRub: number
@@ -254,6 +256,9 @@ function ReferralPanel() {
   const [busy, setBusy] = useState(false)
   const [giftRecipient, setGiftRecipient] = useState('')
   const [giftAmount, setGiftAmount] = useState('')
+  const [payoutMethod, setPayoutMethod] = useState<'card' | 'crypto'>('card')
+  const [payoutDestination, setPayoutDestination] = useState('')
+  const [payoutAmount, setPayoutAmount] = useState('')
 
   async function load() {
     const initData = getTelegramInitData()
@@ -340,6 +345,41 @@ function ReferralPanel() {
     }
   }
 
+
+  async function requestPayout() {
+    const amountRub = Number(payoutAmount)
+    if (!data || !payoutDestination.trim() || !Number.isFinite(amountRub) || amountRub <= 0 || busy) return
+    const initData = getTelegramInitData()
+    if (!initData) return
+    setBusy(true)
+    setStatus('')
+    try {
+      const response = await fetch('/api/referrals/me', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Telegram-Init-Data': initData,
+        },
+        body: JSON.stringify({
+          action: 'request_payout',
+          method: payoutMethod,
+          destination: payoutDestination.trim(),
+          amountRub,
+        }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(String(result?.error || 'PAYOUT_REQUEST_FAILED'))
+      setStatus(locale === 'ru' ? 'Заявка на вывод создана.' : 'Payout request created.')
+      setPayoutAmount('')
+      setPayoutDestination('')
+      await load()
+    } catch {
+      setStatus(locale === 'ru' ? 'Не удалось создать заявку на вывод.' : 'Could not create payout request.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (!data) {
     return <p className="pb-4 text-sm text-muted-foreground">{status || (locale === 'ru' ? 'Загрузка…' : 'Loading…')}</p>
   }
@@ -395,12 +435,32 @@ function ReferralPanel() {
           </button>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <button type="button" disabled className="h-10 rounded-full border text-xs font-semibold opacity-50">{locale === 'ru' ? 'На карту · скоро' : 'Card · soon'}</button>
-          <button type="button" disabled className="h-10 rounded-full border text-xs font-semibold opacity-50">{locale === 'ru' ? 'В крипту · скоро' : 'Crypto · soon'}</button>
+        <div className="mt-3 rounded-2xl bg-muted/50 p-3">
+          <p className="text-xs font-semibold">{locale === 'ru' ? 'Вывести рубли' : 'Withdraw earnings'}</p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setPayoutMethod('card')} className={`h-9 rounded-xl border text-xs font-medium ${payoutMethod === 'card' ? 'border-brand bg-brand-tint text-brand' : ''}`}>{locale === 'ru' ? 'На карту' : 'Card'}</button>
+            <button type="button" onClick={() => setPayoutMethod('crypto')} className={`h-9 rounded-xl border text-xs font-medium ${payoutMethod === 'crypto' ? 'border-brand bg-brand-tint text-brand' : ''}`}>{locale === 'ru' ? 'Крипта' : 'Crypto'}</button>
+          </div>
+          <input value={payoutDestination} onChange={(e) => setPayoutDestination(e.target.value)} placeholder={payoutMethod === 'card' ? (locale === 'ru' ? 'Реквизиты для выплаты' : 'Payout details') : (locale === 'ru' ? 'Сеть и адрес кошелька' : 'Network and wallet address')} className="mt-2 h-10 w-full rounded-xl border bg-background px-3 text-sm" />
+          <input value={payoutAmount} onChange={(e) => setPayoutAmount(e.target.value)} inputMode="decimal" placeholder={locale === 'ru' ? `Сумма, доступно ${data.availableRub.toFixed(2)} ₽` : `Amount, available ${data.availableRub.toFixed(2)} ₽`} className="mt-2 h-10 w-full rounded-xl border bg-background px-3 text-sm" />
+          <button type="button" disabled={!payoutDestination.trim() || Number(payoutAmount) <= 0 || busy} onClick={() => void requestPayout()} className="mt-2 h-10 w-full rounded-full border text-xs font-semibold disabled:opacity-40">{locale === 'ru' ? 'Создать заявку' : 'Create request'}</button>
+          <p className="mt-2 text-center text-[11px] text-muted-foreground">{locale === 'ru' ? 'Сумма заявки резервируется. Выплата проходит проверку перед отправкой.' : 'Requested funds are reserved and reviewed before payout.'}</p>
         </div>
-        <p className="mt-2 text-center text-[11px] text-muted-foreground">{locale === 'ru' ? 'Карта и крипта включатся после подключения безопасного payout/KYC-процесса.' : 'Card and crypto will activate after secure payout/KYC is connected.'}</p>
       </div>
+
+      {data.payouts?.length > 0 && (
+        <div className="mt-4 rounded-2xl border p-4">
+          <p className="text-sm font-semibold">{locale === 'ru' ? 'Заявки на вывод' : 'Payout requests'}</p>
+          <div className="mt-2 space-y-2">
+            {data.payouts.slice(0, 5).map((payout) => (
+              <div key={payout.id} className="flex items-center justify-between rounded-xl bg-muted/50 px-3 py-2 text-xs">
+                <span>{payout.payout_method === 'card' ? (locale === 'ru' ? 'Карта' : 'Card') : (locale === 'ru' ? 'Крипта' : 'Crypto')}</span>
+                <span className="font-semibold">{Number(payout.amount_rub).toFixed(2)} ₽ · {payout.status}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 rounded-2xl border p-4">
         <div className="flex items-center justify-between gap-3">
