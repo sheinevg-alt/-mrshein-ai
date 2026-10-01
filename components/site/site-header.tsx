@@ -3,7 +3,8 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { ChevronDown, Clapperboard, ImageIcon, MessageSquareText, Music2, Sparkles, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useSiteLocale } from './site-locale-provider'
 
 const menuItems = [
   { ru: 'Тренды', en: 'Trends', href: '/app?tab=trends', icon: Sparkles },
@@ -15,18 +16,7 @@ const menuItems = [
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false)
-  const [locale, setLocale] = useState<'ru' | 'en'>('ru')
-
-  useEffect(() => {
-    const saved = window.localStorage.getItem('banana-zero.site-locale')
-    if (saved === 'en' || saved === 'ru') setLocale(saved)
-  }, [])
-
-  function toggleLocale() {
-    const next = locale === 'ru' ? 'en' : 'ru'
-    setLocale(next)
-    window.localStorage.setItem('banana-zero.site-locale', next)
-  }
+  const { locale, toggleLocale } = useSiteLocale()
 
   return (
     <header className="sticky top-0 z-40 border-b border-[#E6EEFF]/80 bg-[#F8FAFF]/90 backdrop-blur-xl">
