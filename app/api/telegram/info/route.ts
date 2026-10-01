@@ -13,6 +13,17 @@ export async function GET() {
 
     let webhook = await telegramApi('getWebhookInfo', {})
 
+    const menuButton = await telegramApi('getChatMenuButton', {})
+    if (menuButton?.type !== 'web_app' || menuButton?.text !== 'Создать контент' || menuButton?.web_app?.url !== appUrl) {
+      await telegramApi('setChatMenuButton', {
+        menu_button: {
+          type: 'web_app',
+          text: 'Создать контент',
+          web_app: { url: appUrl },
+        },
+      })
+    }
+
     if (webhook?.url !== expectedWebhook) {
       const payload: Record<string, unknown> = {
         url: expectedWebhook,
