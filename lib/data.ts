@@ -82,6 +82,7 @@ export type Trend = {
   inputs: TrendInput[]
   resolutions?: Array<'480p' | '720p' | '1080p'>
   executionMode?: 'direct'
+  cardBadge?: 'hit' | 'new' | 'popular'
 }
 
 export const TOKEN_BALANCE = 120
