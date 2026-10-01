@@ -28,9 +28,9 @@ export function LegalPage({
             </span>
             <span className="font-bold">Banana <span className="text-[#1E3A8A]">Zero</span></span>
           </Link>
-          <a href="https://mrshein-ai-v3.vercel.app" className="rounded-full bg-[#1E3A8A] px-4 py-2 text-sm font-semibold text-white">
-            Открыть приложение
-          </a>
+          <Link href="https://bananazero.ru" className="rounded-full bg-[#1E3A8A] px-4 py-2 text-sm font-semibold text-white">
+            На главную
+          </Link>
         </div>
       </header>
 
