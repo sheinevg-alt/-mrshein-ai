@@ -398,7 +398,7 @@ export async function createApiModelsKlingTask(params: {
 export type ApiModelsImageResolution = '1k' | '2k' | '4k'
 
 export async function createApiModelsImageTask(params: {
-  model: 'gemini-3.1-flash-image' | 'gemini-3-pro-image' | 'gpt-image-2.5-flare' | 'gpt-image-2.5-sunburst'
+  model: 'gemini-3.1-flash-image-preview' | 'gemini-3-pro-image' | 'gpt-image-2.5-flare' | 'gpt-image-2.5-sunburst'
   promptText: string
   ratio?: string
   resolution?: ApiModelsImageResolution
