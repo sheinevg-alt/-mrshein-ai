@@ -80,6 +80,7 @@ export function RepeatGenerationSheet({
   const [copied, setCopied] = useState(false)
   const [message, setMessage] = useState('')
   const objectUrls = useRef<string[]>([])
+  const promptRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     return () => {
@@ -259,15 +260,24 @@ export function RepeatGenerationSheet({
             </div>
 
             <textarea
+              ref={promptRef}
               id="repeat-prompt"
-              rows={16}
               value={prompt}
               onChange={(event) => {
                 setPrompt(event.target.value)
                 setCopied(false)
               }}
+              onFocus={(event) => {
+                const scroller = event.currentTarget.closest('[data-bottom-sheet-scroll]') as HTMLElement | null
+                if (!scroller) return
+                const top = scroller.scrollTop
+                requestAnimationFrame(() => { scroller.scrollTop = top })
+                window.setTimeout(() => { scroller.scrollTop = top }, 80)
+                window.setTimeout(() => { scroller.scrollTop = top }, 260)
+              }}
               spellCheck={false}
-              className="mt-2 w-full resize-y rounded-2xl border bg-card p-4 font-mono text-[12px] leading-relaxed outline-none focus:border-brand/40"
+              className="mt-2 h-[260px] w-full resize-none overflow-y-auto overscroll-contain rounded-2xl border bg-card p-4 font-mono text-[12px] leading-relaxed outline-none focus:border-brand/40"
+              style={{ WebkitOverflowScrolling: 'touch' }}
             />
             <p className="mt-2 text-[11px] text-muted-foreground">
               {prompt === template.prompt
