@@ -12,6 +12,17 @@ type Summary = {
   pendingRub: number
 }
 
+type PayoutRow = {
+  id: string
+  telegram_id: number
+  payout_method: 'card' | 'crypto'
+  amount_rub: number
+  status: string
+  requested_at: string
+  processed_at?: string | null
+  admin_note?: string | null
+}
+
 type ReferralRow = {
   telegramId: number
   referralCode: string
@@ -33,6 +44,7 @@ export default function ReferralAdminPage() {
   const [authorized, setAuthorized] = useState(false)
   const [summary, setSummary] = useState<Summary | null>(null)
   const [rows, setRows] = useState<ReferralRow[]>([])
+  const [payouts, setPayouts] = useState<PayoutRow[]>([])
   const [status, setStatus] = useState('')
   const [search, setSearch] = useState('')
 
@@ -57,6 +69,7 @@ export default function ReferralAdminPage() {
     setAuthorized(true)
     setSummary(data.summary || null)
     setRows(data.referrals || [])
+    setPayouts(data.payouts || [])
     setStatus('')
   }
 
@@ -70,6 +83,24 @@ export default function ReferralAdminPage() {
       String(row.telegramId).includes(q),
     )
   }, [rows, search])
+
+  async function updatePayout(requestId: string, nextStatus: 'approved' | 'paid' | 'rejected') {
+    setStatus('Обновляю заявку…')
+    const response = await fetch('/api/admin/referrals', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${secret}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ requestId, status: nextStatus }),
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      setStatus(data?.error || 'Ошибка обновления выплаты')
+      return
+    }
+    await load()
+  }
 
   if (!authorized) {
     return (
@@ -120,6 +151,34 @@ export default function ReferralAdminPage() {
       <div className="mt-6 rounded-2xl border bg-card p-3">
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Поиск: имя, username, код, Telegram ID" className="h-11 w-full rounded-xl border bg-background px-4 text-sm" />
       </div>
+
+      {payouts.length > 0 && (
+        <section className="mt-6 rounded-2xl border bg-card p-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Заявки на вывод</h2>
+            <span className="text-xs text-muted-foreground">Проверка вручную до подключения автоматических выплат</span>
+          </div>
+          <div className="mt-3 space-y-2">
+            {payouts.map((payout) => (
+              <div key={payout.id} className="flex flex-wrap items-center gap-3 rounded-xl bg-muted/50 p-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">Telegram {payout.telegram_id} · {payout.payout_method === 'card' ? 'Карта' : 'Крипта'}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{Number(payout.amount_rub).toFixed(2)} ₽ · {payout.status} · {new Date(payout.requested_at).toLocaleString('ru-RU')}</p>
+                </div>
+                {payout.status === 'pending' && (
+                  <>
+                    <button type="button" onClick={() => void updatePayout(payout.id, 'approved')} className="rounded-full border px-3 py-2 text-xs font-medium">Одобрить</button>
+                    <button type="button" onClick={() => void updatePayout(payout.id, 'rejected')} className="rounded-full border px-3 py-2 text-xs font-medium">Отклонить</button>
+                  </>
+                )}
+                {payout.status === 'approved' && (
+                  <button type="button" onClick={() => void updatePayout(payout.id, 'paid')} className="rounded-full bg-foreground px-3 py-2 text-xs font-medium text-background">Отметить выплаченной</button>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="mt-4 overflow-hidden rounded-2xl border bg-card">
         <div className="overflow-x-auto">
