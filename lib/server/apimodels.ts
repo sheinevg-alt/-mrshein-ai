@@ -446,22 +446,34 @@ export async function createApiModelsChatCompletion(params: {
   promptText: string
   reasoningEffort?: 'none' | 'low' | 'medium' | 'high'
 }) {
-  const response = await apiModelsFetch('/chat/completions', {
+  const isClaude = params.model === 'claude-sonnet-5'
+  const path = isClaude ? '/messages' : '/chat/completions'
+  const body = isClaude
+    ? {
+        model: params.model,
+        max_tokens: 2048,
+        messages: [{ role: 'user', content: params.promptText }],
+      }
+    : {
+        model: params.model,
+        messages: [{ role: 'user', content: params.promptText }],
+        stream: false,
+        reasoning_effort: params.reasoningEffort || 'medium',
+      }
+
+  const response = await apiModelsFetch(path, {
     method: 'POST',
-    body: JSON.stringify({
-      model: params.model,
-      messages: [{ role: 'user', content: params.promptText }],
-      stream: false,
-      ...(params.model.startsWith('gpt-6') ? { reasoning_effort: params.reasoningEffort || 'medium' } : {}),
-    }),
+    body: JSON.stringify(body),
   })
   const text = await response.text()
   let payload: any = {}
   try { payload = text ? JSON.parse(text) : {} } catch { payload = { raw: text } }
   if (!response.ok) throw new Error(String(payload?.error?.message || payload?.message || `APIMODELS_CHAT_FAILED_${response.status}`))
 
-  const content = String(payload?.choices?.[0]?.message?.content || '')
-  const requestId = String(response.headers.get('x-apimodels-request-id') || payload?.apimodels?.request_id || '')
+  const content = isClaude
+    ? String(payload?.content?.find?.((item: any) => item?.type === 'text')?.text || '')
+    : String(payload?.choices?.[0]?.message?.content || '')
+  const requestId = String(response.headers.get('x-apimodels-request-id') || payload?.apimodels?.request_id || payload?.id || '')
   const costHeader = response.headers.get('x-apimodels-cost')
   const cost = costHeader != null ? Number(costHeader) : payload?.apimodels?.cost == null ? null : Number(payload.apimodels.cost)
   return {
