@@ -34,10 +34,10 @@ export default function SitePage() {
             <Link href="/contacts" className="transition hover:text-[#171A22]">Контакты</Link>
           </nav>
           <a
-            href="https://mrshein-ai-v3.vercel.app"
+            href="#features"
             className="rounded-full bg-[#1E3A8A] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-12px_rgba(30,58,138,0.75)] transition hover:bg-[#173276]"
           >
-            Открыть приложение
+            Возможности
           </a>
         </div>
       </header>
@@ -59,8 +59,8 @@ export default function SitePage() {
                 Видео, изображения и готовые тренды в одном сервисе. Banana Zero прячет сложные настройки и оставляет только то, что нужно для результата.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <a href="https://mrshein-ai-v3.vercel.app" className="inline-flex items-center gap-2 rounded-full bg-[#1E3A8A] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_12px_32px_-16px_rgba(30,58,138,0.85)]">
-                  Попробовать Banana Zero <ArrowRight className="size-4" />
+                <a href="#how" className="inline-flex items-center gap-2 rounded-full bg-[#1E3A8A] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_12px_32px_-16px_rgba(30,58,138,0.85)]">
+                  Как работает Banana Zero <ArrowRight className="size-4" />
                 </a>
                 <a href="#how" className="rounded-full border border-[#CBD5F3] bg-white px-6 py-3.5 text-sm font-semibold text-[#334155]">
                   Как это работает
