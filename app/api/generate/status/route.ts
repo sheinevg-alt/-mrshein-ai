@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getApiModelsTask } from '@/lib/server/apimodels'
+import { getApiModelsGenerationTask } from '@/lib/server/apimodels'
 import { getBytePlusTask } from '@/lib/server/byteplus'
 import { getRunwayTask } from '@/lib/server/runway'
 import { hasDatabase, supabaseFetch } from '@/lib/server/supabase'
@@ -59,7 +59,7 @@ export async function GET(request: Request) {
   const apiModelsTaskId = String(job.result_metadata?.apimodels_task_id || '')
   if (apiModelsTaskId) {
     try {
-      const task = await getApiModelsTask(apiModelsTaskId)
+      const task = await getApiModelsGenerationTask(apiModelsTaskId, (job.result_metadata?.apimodels_kind || 'video') as 'video' | 'image' | 'audio')
       const status = String(task.state || '').toLowerCase()
 
       if (status === 'completed' || status === 'succeeded' || status === 'success') {
@@ -76,6 +76,7 @@ export async function GET(request: Request) {
               ...(job.result_metadata || {}),
               apimodels_status: status,
               apimodels_usage: task.usage || null,
+              apimodels_credits_usd: task.creditsUsd ?? null,
             },
             updated_at: new Date().toISOString(),
           }),
@@ -92,6 +93,7 @@ export async function GET(request: Request) {
           apimodels_fail_message: task.error || null,
           apimodels_retryable: typeof task.retryable === 'boolean' ? task.retryable : null,
           apimodels_usage: task.usage || null,
+              apimodels_credits_usd: task.creditsUsd ?? null,
         })
         return NextResponse.json({ ok: false, status: 'failed', jobId: job.id, error: 'GENERATION_FAILED', retryable: task.retryable === true, ...refund })
       }
