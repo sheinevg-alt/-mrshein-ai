@@ -200,6 +200,7 @@ export async function POST(request: Request) {
         ratio: String(settings.ratio || '1:1'),
         resolution: (['1k','2k','4k'].includes(resolution) ? resolution : '2k') as '1k' | '2k' | '4k',
         references,
+        quality: (['low','medium','high','xhigh','max'].includes(quality) ? quality : 'medium') as 'low' | 'medium' | 'high' | 'xhigh' | 'max',
         callbackUrl,
       })
     } else if (toolId === 'suno-v5') {
