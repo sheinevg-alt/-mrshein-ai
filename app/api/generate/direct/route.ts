@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import {
+  createApiModelsCallbackToken,
   createApiModelsSeedance25EditTask,
   createApiModelsSeedance25Task,
   type ApiModelsResolution,
@@ -51,6 +52,7 @@ export async function POST(request: Request) {
   const prompt = canonicalizeTags(String(payload.prompt || '').trim())
   const generateAudio = payload.generateAudio !== false
   const duration = clampDuration(payload.duration)
+  const sourceDuration = Math.max(4, Math.min(30, Number(payload.sourceDuration || duration)))
   const resolution = safeResolution(payload.resolution)
   const sourceVideoPath = String(payload.sourceVideoPath || '')
   const referencePaths = (Array.isArray(payload.referencePaths) ? payload.referencePaths : [])
@@ -73,7 +75,7 @@ export async function POST(request: Request) {
   // Editing has input-token billing upstream, so reserve a conservative 20% buffer.
   const quote = await quoteTokens({
     toolId: 'seedance-2-5',
-    duration: mode === 'edit' ? Math.max(4, duration) : duration,
+    duration: mode === 'edit' ? sourceDuration : duration,
     resolution,
     generateAudio,
   })
@@ -99,6 +101,7 @@ export async function POST(request: Request) {
       ],
       generate_audio: generateAudio,
       duration: mode === 'edit' ? -1 : duration,
+      source_duration: mode === 'edit' ? sourceDuration : null,
       aspect_ratio: mode === 'edit' ? 'adaptive' : '9:16',
       resolution,
       quoted_provider_usd: quote.providerUsd,
@@ -123,7 +126,8 @@ export async function POST(request: Request) {
     const videoReferences = sourceVideoPath
       ? [await createStorageSignedDownloadUrl(INPUT_BUCKET, sourceVideoPath, 7200)]
       : []
-    const callbackUrl = `${new URL(request.url).origin}/api/generate/callback/apimodels?jobId=${encodeURIComponent(jobId)}`
+    const callbackToken = createApiModelsCallbackToken(jobId)
+    const callbackUrl = `${new URL(request.url).origin}/api/generate/callback/apimodels?jobId=${encodeURIComponent(jobId)}&token=${encodeURIComponent(callbackToken)}`
 
     const task = mode === 'edit'
       ? await createApiModelsSeedance25EditTask({
