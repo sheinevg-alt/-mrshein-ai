@@ -18,6 +18,97 @@ async function apiModelsFetch(path: string, init: RequestInit = {}) {
   return fetch(`${APIMODELS_BASE}${path}`, { ...init, headers, cache: 'no-store' })
 }
 
+
+const PEOPLE_GROUP_NAME = 'shein-ai-people'
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function extractGroupList(payload: unknown): Record<string, unknown>[] {
+  if (Array.isArray(payload)) return payload.filter((item) => objectRecord(item)) as Record<string, unknown>[]
+  const root = objectRecord(payload)
+  if (!root) return []
+  const data = root.data
+  if (Array.isArray(data)) return data.filter((item) => objectRecord(item)) as Record<string, unknown>[]
+  const dataRecord = objectRecord(data)
+  for (const key of ['items', 'groups', 'data']) {
+    const value = dataRecord?.[key] ?? root[key]
+    if (Array.isArray(value)) return value.filter((item) => objectRecord(item)) as Record<string, unknown>[]
+  }
+  return []
+}
+
+async function ensurePeopleGroupId(): Promise<string | number> {
+  const listResponse = await apiModelsFetch('/assets/groups')
+  const listText = await listResponse.text()
+  let listPayload: unknown = {}
+  try { listPayload = listText ? JSON.parse(listText) : {} } catch { listPayload = {} }
+
+  if (listResponse.ok) {
+    const existing = extractGroupList(listPayload).find((group) => {
+      const name = String(group.name || group.group_name || group.title || '')
+      return name === PEOPLE_GROUP_NAME
+    })
+    const existingId = existing?.id ?? existing?.group_id
+    if (typeof existingId === 'string' || typeof existingId === 'number') return existingId
+  }
+
+  const createResponse = await apiModelsFetch('/assets/groups', {
+    method: 'POST',
+    body: JSON.stringify({ name: PEOPLE_GROUP_NAME }),
+  })
+  const createText = await createResponse.text()
+  let createPayload: Record<string, unknown> = {}
+  try { createPayload = createText ? JSON.parse(createText) : {} } catch { createPayload = { raw: createText } }
+
+  const data = objectRecord(createPayload.data) || createPayload
+  const groupId = data.id ?? data.group_id
+  if (!createResponse.ok || (typeof groupId !== 'string' && typeof groupId !== 'number')) {
+    throw new Error(`APIMODELS_ASSET_GROUP_FAILED_${createResponse.status}`)
+  }
+  return groupId
+}
+
+export async function registerApiModelsPortrait(imageUrl: string, name?: string) {
+  const groupId = await ensurePeopleGroupId()
+  const response = await apiModelsFetch('/assets', {
+    method: 'POST',
+    body: JSON.stringify({
+      url: imageUrl,
+      asset_type: 'Image',
+      group_id: groupId,
+      ...(name ? { name } : {}),
+    }),
+  })
+
+  const text = await response.text()
+  let payload: Record<string, unknown> = {}
+  try { payload = text ? JSON.parse(text) : {} } catch { payload = { raw: text } }
+
+  const data = objectRecord(payload.data) || payload
+  const assetUrl = String(data.asset_url || data.assetUrl || '')
+  const status = String(data.status || '').toLowerCase()
+  if (!response.ok || !assetUrl.startsWith('asset://') || (status && status !== 'active')) {
+    const message = firstString(
+      data.message,
+      data.error,
+      payload.message,
+      payload.error,
+    ) || `APIMODELS_PORTRAIT_REGISTER_FAILED_${response.status}`
+    throw new Error(message)
+  }
+
+  return {
+    assetUrl,
+    id: String(data.id || ''),
+    status: String(data.status || 'Active'),
+    groupId,
+  }
+}
+
 export type ApiModelsTask = {
   id?: string
   state: string
