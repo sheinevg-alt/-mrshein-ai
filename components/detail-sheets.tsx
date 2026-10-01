@@ -69,7 +69,6 @@ function ModelToolFlow({ tool, onGenerationStarted }: { tool: Tool; onGeneration
   const [generateAudio, setGenerateAudio] = useState(false)
   const [reasoningEffort, setReasoningEffort] = useState('medium')
   const [quotedTokens, setQuotedTokens] = useState<number | null>(null)
-  const [providerEstimate, setProviderEstimate] = useState<number | null>(null)
   const [generating, setGenerating] = useState(false)
   const [message, setMessage] = useState('')
   const [textResult, setTextResult] = useState('')
@@ -97,7 +96,6 @@ function ModelToolFlow({ tool, onGenerationStarted }: { tool: Tool; onGeneration
         const data = await response.json().catch(() => ({}))
         if (!cancelled && response.ok) {
           setQuotedTokens(Number(data.tokenCost || 0))
-          setProviderEstimate(data.providerUsdEstimate == null ? null : Number(data.providerUsdEstimate))
         }
       }).catch(() => undefined)
     }, 200)
@@ -356,9 +354,6 @@ function ModelToolFlow({ tool, onGenerationStarted }: { tool: Tool; onGeneration
           <p className="mt-0.5 text-sm font-semibold">{tokenBalance} Tokens</p>
         </div>
       </div>
-      {providerEstimate != null && (
-        <p className="mt-1 text-right text-[10px] text-muted-foreground">{locale === 'ru' ? 'Оценка себестоимости' : 'Provider estimate'}: ${providerEstimate.toFixed(4)}</p>
-      )}
 
       <button type="button" onClick={() => void generate()} disabled={generating || prompt.trim().length < 2} className="brand-gradient mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-white disabled:opacity-45">
         <Sparkles className="size-4" />
