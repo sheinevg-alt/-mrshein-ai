@@ -227,6 +227,16 @@ function ProfilePanel({ panel, onClose }: { panel: Panel; onClose: () => void })
 }
 
 
+type ReferralClient = {
+  telegramId: number
+  name: string
+  username?: string | null
+  purchasesCount: number
+  purchasesRub: number
+  earnedRub: number
+  lastPurchaseAt?: string | null
+}
+
 type ReferralData = {
   referralCode: string
   referralLink: string | null
@@ -234,8 +244,11 @@ type ReferralData = {
   invitedCount: number
   availableRub: number
   pendingRub: number
+  reservedPayoutRub: number
   totalEarnedRub: number
   referredRevenueRub: number
+  clients: ReferralClient[]
+  payouts: Array<{ id: string; payout_method: 'card' | 'crypto'; amount_rub: number; status: string; requested_at: string }>
 }
 
 function ReferralPanel() {
@@ -244,6 +257,11 @@ function ReferralPanel() {
   const [data, setData] = useState<ReferralData | null>(null)
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
+  const [giftRecipient, setGiftRecipient] = useState('')
+  const [giftAmount, setGiftAmount] = useState('')
+  const [payoutMethod, setPayoutMethod] = useState<'card' | 'crypto'>('card')
+  const [payoutDestination, setPayoutDestination] = useState('')
+  const [payoutAmount, setPayoutAmount] = useState('')
 
   async function load() {
     const initData = getTelegramInitData()
@@ -272,32 +290,63 @@ function ReferralPanel() {
     setStatus(t('referral.copied'))
   }
 
+  async function postReferral(payload: Record<string, unknown>) {
+    const initData = getTelegramInitData()
+    if (!initData) throw new Error('NO_TELEGRAM')
+    const response = await fetch('/api/referrals/me', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Telegram-Init-Data': initData,
+      },
+      body: JSON.stringify(payload),
+    })
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(String(result?.error || 'REQUEST_FAILED'))
+    return result
+  }
+
   async function convertAll() {
     if (!data || data.availableRub <= 0 || busy) return
-    const initData = getTelegramInitData()
-    if (!initData) return
-    setBusy(true)
-    setStatus('')
+    setBusy(true); setStatus('')
     try {
-      const response = await fetch('/api/referrals/me', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Telegram-Init-Data': initData,
-        },
-        body: JSON.stringify({ action: 'convert_to_tokens', amountRub: data.availableRub }),
-      })
-      const result = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(String(result?.error || 'CONVERSION_FAILED'))
-      setStatus(locale === 'ru'
-        ? `Начислено токенов: ${Number(result.tokensAdded || 0)}`
-        : `Tokens added: ${Number(result.tokensAdded || 0)}`)
+      const result = await postReferral({ action: 'convert_to_tokens', amountRub: data.availableRub })
+      setStatus(locale === 'ru' ? `Начислено токенов: ${Number(result.tokensAdded || 0)}` : `Tokens added: ${Number(result.tokensAdded || 0)}`)
       await Promise.all([load(), refreshUser()])
     } catch {
       setStatus(locale === 'ru' ? 'Не удалось перевести баланс в токены.' : 'Could not convert the balance to Tokens.')
-    } finally {
-      setBusy(false)
-    }
+    } finally { setBusy(false) }
+  }
+
+  async function giftTokens() {
+    const amount = Number(giftAmount)
+    if (!giftRecipient.trim() || !Number.isFinite(amount) || amount <= 0 || busy) return
+    setBusy(true); setStatus('')
+    try {
+      const result = await postReferral({ action: 'gift_tokens', recipient: giftRecipient.trim(), amountRub: amount })
+      setStatus(locale === 'ru' ? `Подарено токенов: ${Number(result.tokensAdded || 0)}` : `Tokens gifted: ${Number(result.tokensAdded || 0)}`)
+      setGiftAmount(''); setGiftRecipient('')
+      await load()
+    } catch (error) {
+      const code = error instanceof Error ? error.message : ''
+      setStatus(code === 'RECIPIENT_NOT_FOUND'
+        ? (locale === 'ru' ? 'Пользователь не найден. Он должен хотя бы один раз открыть Banana Zero.' : 'User not found. They must open Banana Zero at least once.')
+        : (locale === 'ru' ? 'Не удалось подарить токены.' : 'Could not gift Tokens.'))
+    } finally { setBusy(false) }
+  }
+
+  async function requestPayout() {
+    const amount = Number(payoutAmount)
+    if (!payoutDestination.trim() || !Number.isFinite(amount) || amount <= 0 || busy) return
+    setBusy(true); setStatus('')
+    try {
+      await postReferral({ action: 'request_payout', method: payoutMethod, amountRub: amount, destination: payoutDestination.trim() })
+      setStatus(locale === 'ru' ? 'Заявка на вывод создана.' : 'Payout request created.')
+      setPayoutAmount(''); setPayoutDestination('')
+      await load()
+    } catch {
+      setStatus(locale === 'ru' ? 'Не удалось создать заявку на вывод.' : 'Could not create payout request.')
+    } finally { setBusy(false) }
   }
 
   if (!data) {
@@ -311,7 +360,7 @@ function ReferralPanel() {
           <span className="flex size-11 items-center justify-center rounded-2xl bg-banana text-[#171A22]"><Gift className="size-5" /></span>
           <div>
             <p className="text-base font-semibold">{t('referral.intro')}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{locale === 'ru' ? 'Комиссия начисляется с успешных покупок приглашённых пользователей.' : 'Commission is credited from successful purchases by referred users.'}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{locale === 'ru' ? '20% с успешных покупок приглашённых пользователей.' : '20% from successful purchases by referred users.'}</p>
           </div>
         </div>
       </div>
@@ -338,10 +387,76 @@ function ReferralPanel() {
         </button>
       </div>
 
-      <button type="button" disabled={data.availableRub <= 0 || busy} onClick={() => void convertAll()} className="brand-gradient mt-3 h-11 w-full rounded-full text-sm font-semibold text-white disabled:opacity-40">
-        {busy ? (locale === 'ru' ? 'Перевожу…' : 'Converting…') : t('referral.convertAll')}
-      </button>
-      <p className="mt-2 text-center text-[11px] text-muted-foreground">{locale === 'ru' ? 'Вывод рублей подключим отдельно после настройки выплат и проверки реквизитов.' : 'Cash withdrawals will be enabled separately after payout verification is configured.'}</p>
+      <section className="mt-4 rounded-2xl border p-4">
+        <h3 className="text-sm font-semibold">{locale === 'ru' ? 'Мои приглашённые' : 'My referrals'}</h3>
+        {data.clients.length === 0 ? (
+          <p className="mt-2 text-xs text-muted-foreground">{locale === 'ru' ? 'Пока никто не пришёл по вашей ссылке.' : 'No referrals yet.'}</p>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {data.clients.slice(0, 20).map((client) => (
+              <div key={client.telegramId} className="rounded-xl bg-muted/55 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{client.name}</p>
+                    <p className="text-[11px] text-muted-foreground">{client.username ? `@${client.username} · ` : ''}{locale === 'ru' ? 'покупок' : 'purchases'}: {client.purchasesCount}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold">{client.purchasesRub.toFixed(0)} ₽</p>
+                    <p className="text-[11px] text-brand">+{client.earnedRub.toFixed(0)} ₽</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="mt-4 rounded-2xl border p-4">
+        <h3 className="text-sm font-semibold">{locale === 'ru' ? 'Использовать заработок' : 'Use earnings'}</h3>
+        <button type="button" disabled={data.availableRub <= 0 || busy} onClick={() => void convertAll()} className="brand-gradient mt-3 h-11 w-full rounded-full text-sm font-semibold text-white disabled:opacity-40">
+          {busy ? (locale === 'ru' ? 'Обрабатываю…' : 'Processing…') : (locale === 'ru' ? 'На внутренний баланс · в токены' : 'To internal balance · Tokens')}
+        </button>
+
+        <div className="mt-4 rounded-xl bg-muted/50 p-3">
+          <p className="text-xs font-semibold">{locale === 'ru' ? 'Подарить токены пользователю' : 'Gift Tokens to a user'}</p>
+          <div className="mt-2 grid grid-cols-[1fr_110px] gap-2">
+            <input value={giftRecipient} onChange={(e) => setGiftRecipient(e.target.value)} placeholder="@username или Telegram ID" className="h-10 rounded-xl border bg-background px-3 text-xs" />
+            <input value={giftAmount} onChange={(e) => setGiftAmount(e.target.value)} inputMode="decimal" placeholder="₽" className="h-10 rounded-xl border bg-background px-3 text-xs" />
+          </div>
+          <button type="button" onClick={() => void giftTokens()} disabled={busy || !giftRecipient || !giftAmount} className="mt-2 h-9 w-full rounded-full border text-xs font-semibold disabled:opacity-40">
+            {locale === 'ru' ? 'Подарить' : 'Gift'}
+          </button>
+        </div>
+
+        <div className="mt-3 rounded-xl bg-muted/50 p-3">
+          <p className="text-xs font-semibold">{locale === 'ru' ? 'Вывести рубли' : 'Withdraw earnings'}</p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setPayoutMethod('card')} className={`h-9 rounded-xl border text-xs font-medium ${payoutMethod === 'card' ? 'border-brand bg-brand-tint text-brand' : ''}`}>{locale === 'ru' ? 'На карту' : 'Card'}</button>
+            <button type="button" onClick={() => setPayoutMethod('crypto')} className={`h-9 rounded-xl border text-xs font-medium ${payoutMethod === 'crypto' ? 'border-brand bg-brand-tint text-brand' : ''}`}>{locale === 'ru' ? 'Крипта' : 'Crypto'}</button>
+          </div>
+          <input value={payoutDestination} onChange={(e) => setPayoutDestination(e.target.value)} placeholder={payoutMethod === 'card' ? (locale === 'ru' ? 'Реквизиты для выплаты' : 'Payout details') : (locale === 'ru' ? 'Сеть и адрес кошелька' : 'Network and wallet address')} className="mt-2 h-10 w-full rounded-xl border bg-background px-3 text-xs" />
+          <input value={payoutAmount} onChange={(e) => setPayoutAmount(e.target.value)} inputMode="decimal" placeholder={locale === 'ru' ? `Сумма, доступно ${data.availableRub.toFixed(2)} ₽` : `Amount, available ${data.availableRub.toFixed(2)} ₽`} className="mt-2 h-10 w-full rounded-xl border bg-background px-3 text-xs" />
+          <button type="button" onClick={() => void requestPayout()} disabled={busy || !payoutDestination || !payoutAmount} className="mt-2 h-9 w-full rounded-full border text-xs font-semibold disabled:opacity-40">
+            {locale === 'ru' ? 'Создать заявку' : 'Create request'}
+          </button>
+          <p className="mt-2 text-[10px] leading-4 text-muted-foreground">{locale === 'ru' ? 'Выплаты на карту и крипту проходят отдельную проверку. Сумма заявки резервируется, чтобы её нельзя было потратить дважды.' : 'Card and crypto payouts are reviewed separately. Requested funds are reserved to prevent double spending.'}</p>
+        </div>
+      </section>
+
+      {data.payouts.length > 0 && (
+        <section className="mt-4 rounded-2xl border p-4">
+          <h3 className="text-sm font-semibold">{locale === 'ru' ? 'Заявки на вывод' : 'Payout requests'}</h3>
+          <div className="mt-2 space-y-2">
+            {data.payouts.slice(0, 5).map((payout) => (
+              <div key={payout.id} className="flex items-center justify-between rounded-xl bg-muted/50 px-3 py-2 text-xs">
+                <span>{payout.payout_method === 'card' ? (locale === 'ru' ? 'Карта' : 'Card') : (locale === 'ru' ? 'Крипта' : 'Crypto')}</span>
+                <span className="font-semibold">{Number(payout.amount_rub).toFixed(2)} ₽ · {payout.status}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {status && <p className="mt-3 text-center text-xs text-brand">{status}</p>}
     </div>
   )
