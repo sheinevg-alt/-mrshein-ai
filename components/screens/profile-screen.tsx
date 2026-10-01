@@ -236,6 +236,14 @@ type ReferralData = {
   pendingRub: number
   totalEarnedRub: number
   referredRevenueRub: number
+  commissions: Array<{
+    grossAmountRub: number
+    commissionRub: number
+    status: string
+    createdAt: string
+    referredName: string
+    referredUsername?: string | null
+  }>
 }
 
 function ReferralPanel() {
@@ -244,6 +252,8 @@ function ReferralPanel() {
   const [data, setData] = useState<ReferralData | null>(null)
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
+  const [giftRecipient, setGiftRecipient] = useState('')
+  const [giftAmount, setGiftAmount] = useState('')
 
   async function load() {
     const initData = getTelegramInitData()
@@ -300,6 +310,36 @@ function ReferralPanel() {
     }
   }
 
+  async function giftTokens() {
+    const amountRub = Number(giftAmount)
+    if (!data || !giftRecipient.trim() || !Number.isFinite(amountRub) || amountRub <= 0 || busy) return
+    const initData = getTelegramInitData()
+    if (!initData) return
+    setBusy(true)
+    setStatus('')
+    try {
+      const response = await fetch('/api/referrals/me', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Telegram-Init-Data': initData,
+        },
+        body: JSON.stringify({ action: 'gift_tokens', recipient: giftRecipient.trim(), amountRub }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(String(result?.error || 'GIFT_FAILED'))
+      setStatus(locale === 'ru'
+        ? `Подарено токенов: ${Number(result.tokensAdded || 0)}`
+        : `Tokens gifted: ${Number(result.tokensAdded || 0)}`)
+      setGiftAmount('')
+      await load()
+    } catch {
+      setStatus(locale === 'ru' ? 'Не удалось подарить токены. Проверьте @username и сумму.' : 'Could not gift Tokens. Check the @username and amount.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (!data) {
     return <p className="pb-4 text-sm text-muted-foreground">{status || (locale === 'ru' ? 'Загрузка…' : 'Loading…')}</p>
   }
@@ -338,10 +378,55 @@ function ReferralPanel() {
         </button>
       </div>
 
-      <button type="button" disabled={data.availableRub <= 0 || busy} onClick={() => void convertAll()} className="brand-gradient mt-3 h-11 w-full rounded-full text-sm font-semibold text-white disabled:opacity-40">
-        {busy ? (locale === 'ru' ? 'Перевожу…' : 'Converting…') : t('referral.convertAll')}
-      </button>
-      <p className="mt-2 text-center text-[11px] text-muted-foreground">{locale === 'ru' ? 'Вывод рублей подключим отдельно после настройки выплат и проверки реквизитов.' : 'Cash withdrawals will be enabled separately after payout verification is configured.'}</p>
+      <div className="mt-4 rounded-2xl border p-4">
+        <p className="text-sm font-semibold">{locale === 'ru' ? 'Что сделать с заработком' : 'Use your earnings'}</p>
+        <button type="button" disabled={data.availableRub <= 0 || busy} onClick={() => void convertAll()} className="brand-gradient mt-3 h-11 w-full rounded-full text-sm font-semibold text-white disabled:opacity-40">
+          {busy ? (locale === 'ru' ? 'Обрабатываю…' : 'Processing…') : (locale === 'ru' ? 'На внутренний баланс' : 'Convert to internal balance')}
+        </button>
+
+        <div className="mt-3 rounded-2xl bg-muted/50 p-3">
+          <p className="text-xs font-semibold">{locale === 'ru' ? 'Подарить токены в Telegram' : 'Gift Tokens in Telegram'}</p>
+          <div className="mt-2 grid grid-cols-[1fr_110px] gap-2">
+            <input value={giftRecipient} onChange={(e) => setGiftRecipient(e.target.value)} placeholder="@username" className="h-10 rounded-xl border bg-background px-3 text-sm" />
+            <input value={giftAmount} onChange={(e) => setGiftAmount(e.target.value)} inputMode="decimal" placeholder="₽" className="h-10 rounded-xl border bg-background px-3 text-sm" />
+          </div>
+          <button type="button" disabled={!giftRecipient.trim() || Number(giftAmount) <= 0 || busy} onClick={() => void giftTokens()} className="mt-2 h-10 w-full rounded-full border text-xs font-semibold disabled:opacity-40">
+            {locale === 'ru' ? 'Подарить' : 'Gift'}
+          </button>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button type="button" disabled className="h-10 rounded-full border text-xs font-semibold opacity-50">{locale === 'ru' ? 'На карту · скоро' : 'Card · soon'}</button>
+          <button type="button" disabled className="h-10 rounded-full border text-xs font-semibold opacity-50">{locale === 'ru' ? 'В крипту · скоро' : 'Crypto · soon'}</button>
+        </div>
+        <p className="mt-2 text-center text-[11px] text-muted-foreground">{locale === 'ru' ? 'Карта и крипта включатся после подключения безопасного payout/KYC-процесса.' : 'Card and crypto will activate after secure payout/KYC is connected.'}</p>
+      </div>
+
+      <div className="mt-4 rounded-2xl border p-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold">{locale === 'ru' ? 'Покупки приглашённых' : 'Referral purchases'}</p>
+          <span className="text-xs text-muted-foreground">{data.commissions?.length || 0}</span>
+        </div>
+        {data.commissions?.length ? (
+          <div className="mt-3 divide-y">
+            {data.commissions.slice(0, 10).map((item, index) => (
+              <div key={`${item.createdAt}-${index}`} className="flex items-center justify-between gap-3 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{item.referredUsername ? `@${item.referredUsername}` : item.referredName}</p>
+                  <p className="text-[11px] text-muted-foreground">{new Date(item.createdAt).toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US')} · {item.status === 'pending' ? (locale === 'ru' ? 'ожидает' : 'pending') : item.status}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold">{item.grossAmountRub.toFixed(2)} ₽</p>
+                  <p className="text-[11px] text-brand">+{item.commissionRub.toFixed(2)} ₽</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-muted-foreground">{locale === 'ru' ? 'Покупок по твоей ссылке пока нет.' : 'No purchases from your referral link yet.'}</p>
+        )}
+      </div>
+
       {status && <p className="mt-3 text-center text-xs text-brand">{status}</p>}
     </div>
   )
