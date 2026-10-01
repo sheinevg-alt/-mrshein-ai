@@ -122,6 +122,7 @@ export async function POST(request: Request) {
   const trendConfig = trend.generation_config && typeof trend.generation_config === 'object'
     ? trend.generation_config as Record<string, unknown>
     : {}
+  const effectiveGenerateAudio = trendConfig.lock_audio ? false : generateAudio
   if (String(trendConfig.execution_mode || '') === 'direct') {
     return NextResponse.json({ error: 'DIRECT_TREND_REQUIRES_DIRECT_FLOW' }, { status: 409 })
   }
@@ -134,6 +135,7 @@ export async function POST(request: Request) {
 
   const inputSchema: InputSchemaItem[] = Array.isArray(trend.input_schema) ? trend.input_schema : []
   const references: string[] = []
+  const referenceTags: string[] = []
 
   if (form) {
     try {
@@ -157,7 +159,10 @@ export async function POST(request: Request) {
         if (!uri && input.required) {
           return NextResponse.json({ error: `MISSING_REFERENCE:${id}` }, { status: 400 })
         }
-        if (uri) references.push(uri)
+        if (uri) {
+          references.push(uri)
+          referenceTags.push(String(input.tag || `@image${references.length}`))
+        }
       }
     } catch (error) {
       const code = error instanceof Error ? error.message : 'INVALID_REFERENCE'
@@ -196,8 +201,8 @@ export async function POST(request: Request) {
       model: trend.model || 'mock-success',
       input_payload: {
         reference_count: references.length,
-        reference_tags: inputSchema.filter((item) => item.kind === 'photo' || !item.kind).map((item) => item.tag).filter(Boolean),
-        generate_audio: generateAudio,
+        reference_tags: referenceTags,
+        generate_audio: effectiveGenerateAudio,
         resolution,
       },
       queued_at: isRunway || isBytePlus || isApiModels ? new Date().toISOString() : null,
@@ -228,20 +233,45 @@ export async function POST(request: Request) {
         ? trend.generation_config as Record<string, unknown>
         : {}
       const sourceVideoPath = String(config.source_video_path || '')
-      if (!sourceVideoPath) throw new Error('TREND_SOURCE_VIDEO_MISSING')
+      const promptVariants = config.prompt_variants && typeof config.prompt_variants === 'object'
+        ? config.prompt_variants as Record<string, unknown>
+        : {}
+      const variantPrompt = String(promptVariants[String(references.length)] || '').trim()
+      const promptText = variantPrompt || String(trend.hidden_prompt || '').trim()
+      if (!promptText) throw new Error('TREND_PROMPT_MISSING')
 
-      const videoUrl = await createStorageSignedDownloadUrl(INPUT_BUCKET, sourceVideoPath, 7200)
+      const videoReferences = sourceVideoPath
+        ? [await createStorageSignedDownloadUrl(INPUT_BUCKET, sourceVideoPath, 7200)]
+        : []
       const callbackUrl = `${new URL(request.url).origin}/api/generate/callback/apimodels?jobId=${encodeURIComponent(job.id)}`
       const apiResolution: ApiModelsResolution = resolution === '720p' ? '720p' : '480p'
       const task = await createApiModelsSeedance25Task({
-        promptText: String(trend.hidden_prompt || ''),
+        promptText,
         duration: Math.max(4, Math.min(30, Number(trend.duration_seconds || 12))),
         ratio: ratioForBytePlus(trend.aspect_ratio),
         references,
-        videoReferences: [videoUrl],
+        videoReferences,
         resolution: apiResolution,
-        generateAudio,
+        effectiveGenerateAudio,
         callbackUrl,
+      })
+
+      await supabaseFetch(`generation_history?id=eq.${job.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          input_payload: {
+            prompt: promptText,
+            reference_count: references.length,
+            reference_tags: referenceTags,
+            generate_audio: effectiveGenerateAudio,
+            resolution: apiResolution,
+            duration: Math.max(4, Math.min(30, Number(trend.duration_seconds || 12))),
+            aspect_ratio: ratioForBytePlus(trend.aspect_ratio),
+            source_video_path: sourceVideoPath || null,
+            execution_mode: String(config.execution_mode || 'recipe'),
+          },
+          updated_at: new Date().toISOString(),
+        }),
       })
 
       await supabaseFetch(`generation_history?id=eq.${job.id}`, {
@@ -282,7 +312,7 @@ export async function POST(request: Request) {
         ratio: ratioForBytePlus(trend.aspect_ratio),
         references,
         resolution,
-        generateAudio,
+        effectiveGenerateAudio,
       })
 
       await supabaseFetch(`generation_history?id=eq.${job.id}`, {
@@ -317,7 +347,7 @@ export async function POST(request: Request) {
         duration: Math.max(4, Math.min(30, Number(trend.duration_seconds || 11))),
         ratio: ratioForRunway(trend.aspect_ratio),
         references,
-        audio: generateAudio,
+        audio: effectiveGenerateAudio,
       })
 
       await supabaseFetch(`generation_history?id=eq.${job.id}`, {
