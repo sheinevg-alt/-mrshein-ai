@@ -35,7 +35,20 @@ export function TrendCard({ trend, onOpen, featured = false, className }: TrendC
         {/* eslint-disable-next-line @next/next/no-img-element -- trends may come from remote admin URLs */}
         <img src={trend.image} alt={`${title} example`} className="absolute inset-0 size-full object-cover" />
         <button type="button" tabIndex={-1} aria-hidden="true" onClick={() => onOpen(trend)} className="absolute inset-0 transition active:bg-white/10" />
-        <span className="glass absolute top-2 left-2 rounded-full px-2 py-0.5 text-[10px] font-medium text-foreground">{category}</span>
+        {trend.cardBadge ? (
+          <div className="absolute top-2 left-2 flex flex-col items-start gap-1.5">
+            <span className="rounded-full border border-white/35 bg-foreground/90 px-2.5 py-1 text-[10px] font-extrabold tracking-[0.08em] text-background shadow-lg">
+              {trend.cardBadge === 'hit'
+                ? (locale === 'ru' ? 'ХИТ' : 'HIT')
+                : trend.cardBadge === 'new'
+                  ? 'NEW'
+                  : (locale === 'ru' ? 'ПОПУЛЯРНО' : 'POPULAR')}
+            </span>
+            <span className="glass rounded-full px-2 py-0.5 text-[10px] font-medium text-foreground">{category}</span>
+          </div>
+        ) : (
+          <span className="glass absolute top-2 left-2 rounded-full px-2 py-0.5 text-[10px] font-medium text-foreground">{category}</span>
+        )}
         <button
           type="button"
           onClick={() => toggleFavorite(trend.id)}
