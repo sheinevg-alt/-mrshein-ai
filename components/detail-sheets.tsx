@@ -275,15 +275,16 @@ function TrendFlow({ trend, onGenerationStarted }: { trend: Trend; onGenerationS
       let response: Response
 
       if (trend.executionMode === 'direct') {
-        const referencePaths: string[] = []
-        for (const input of trend.inputs) {
-          if (input.kind !== 'photo') continue
-          const value = values[input.id]
-          if (typeof value !== 'object' || !value?.file) {
-            throw new Error(`DIRECT_INPUT_FILE_REQUIRED:${input.id}`)
-          }
-          referencePaths.push(await uploadTrendInputFile(value.file, initData))
-        }
+        const photoInputs = trend.inputs.filter((input) => input.kind === 'photo')
+        const referencePaths = await Promise.all(
+          photoInputs.map(async (input) => {
+            const value = values[input.id]
+            if (typeof value !== 'object' || !value?.file) {
+              throw new Error(`DIRECT_INPUT_FILE_REQUIRED:${input.id}`)
+            }
+            return uploadTrendInputFile(value.file, initData)
+          }),
+        )
 
         response = await fetch('/api/generate/trend-direct', {
           method: 'POST',
