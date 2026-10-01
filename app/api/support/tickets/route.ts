@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { hasDatabase, supabaseFetch } from '@/lib/server/supabase'
 import { verifyTelegramInitData } from '@/lib/server/telegram-auth'
+import { notifyOperatorAboutMiniAppTicket } from '@/lib/server/support-telegram'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,9 +40,19 @@ export async function POST(request: Request) {
       topic,
       message,
       status: 'open',
+      source: 'miniapp',
     }),
   })
   if (!response.ok) return NextResponse.json({ error: await response.text() }, { status: 500 })
   const ticket = (await response.json())?.[0]
+
+  if (ticket) {
+    try {
+      await notifyOperatorAboutMiniAppTicket(ticket)
+    } catch (error) {
+      console.error('Could not notify Banana Zero Care operator chat', error)
+    }
+  }
+
   return NextResponse.json({ ticket })
 }

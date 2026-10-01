@@ -102,6 +102,46 @@ create table if not exists public.support_tickets (
 create index if not exists support_tickets_user_idx on public.support_tickets(telegram_id, created_at desc);
 create index if not exists support_tickets_status_idx on public.support_tickets(status, created_at desc);
 
+alter table public.support_tickets
+  add column if not exists source text not null default 'miniapp';
+
+alter table public.support_tickets
+  drop constraint if exists support_tickets_source_check;
+
+alter table public.support_tickets
+  add constraint support_tickets_source_check
+  check (source in ('miniapp','telegram'));
+
+create table if not exists public.support_chat_threads (
+  telegram_id bigint primary key,
+  user_chat_id bigint not null,
+  operator_thread_id bigint unique,
+  first_name text,
+  last_name text,
+  username text,
+  language_code text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists support_chat_threads_operator_thread_idx
+  on public.support_chat_threads(operator_thread_id);
+
+create table if not exists public.support_messages (
+  id uuid primary key default gen_random_uuid(),
+  telegram_id bigint not null,
+  direction text not null check (direction in ('user','operator')),
+  text text,
+  telegram_message_id bigint,
+  operator_thread_id bigint,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists support_messages_user_idx
+  on public.support_messages(telegram_id, created_at desc);
+create index if not exists support_messages_thread_idx
+  on public.support_messages(operator_thread_id, created_at desc);
+
 create table if not exists public.token_ledger (
   id uuid primary key default gen_random_uuid(),
   telegram_id bigint not null,
@@ -189,6 +229,8 @@ $$;
 
 alter table public.knowledge_articles enable row level security;
 alter table public.support_tickets enable row level security;
+alter table public.support_chat_threads enable row level security;
+alter table public.support_messages enable row level security;
 alter table public.token_ledger enable row level security;
 
 -- Starter knowledge-base articles. These are original MrShein AI copy and can be edited later in Admin.
