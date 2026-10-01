@@ -34,7 +34,7 @@ export function TrendsScreen({ onOpenTrend, onOpenCategory }: TrendsScreenProps)
     <div className="animate-in fade-in duration-300">
       <header className="flex items-center justify-between gap-3 pt-4 pb-5">
         <div className="flex min-w-0 items-center gap-3">
-          <BrandLogo className="size-10 shrink-0 drop-shadow-[0_6px_14px_oklch(0.5_0.21_264/0.3)]" />
+          <BrandLogo className="size-10 shrink-0 drop-shadow-[0_6px_14px_oklch(0.55_0.16_78/0.28)]" />
           <div className="min-w-0">
             <h1 className="truncate text-xl leading-tight font-semibold tracking-tight">{t('app.name')}</h1>
             <p className="truncate text-xs text-muted-foreground">{t('app.tagline')}</p>
