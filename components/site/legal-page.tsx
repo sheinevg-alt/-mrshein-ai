@@ -1,5 +1,6 @@
 import Image from 'next/image'
 import Link from 'next/link'
+import { MERCHANT } from '@/lib/merchant'
 
 type Section = {
   title: string
@@ -51,9 +52,18 @@ export function LegalPage({
 
         <div className="mt-10 rounded-3xl bg-[#0B0F1A] p-6 text-white">
           <p className="text-sm font-semibold">Реквизиты продавца</p>
-          <p className="mt-2 text-sm leading-6 text-[#A8B3C7]">
-            Полные реквизиты индивидуального предпринимателя, ИНН, ОГРНИП, юридический адрес и контактный e-mail будут опубликованы здесь до запуска приёма платежей.
-          </p>
+          <dl className="mt-4 grid gap-3 text-sm leading-6 text-[#D7DEEA] sm:grid-cols-[150px_1fr]">
+            <dt className="text-[#8F9DB3]">Продавец</dt><dd>{MERCHANT.legalName}</dd>
+            <dt className="text-[#8F9DB3]">ИНН</dt><dd>{MERCHANT.inn}</dd>
+            <dt className="text-[#8F9DB3]">ОГРНИП</dt><dd>{MERCHANT.ogrnip}</dd>
+            <dt className="text-[#8F9DB3]">Адрес</dt><dd>{MERCHANT.address}</dd>
+            <dt className="text-[#8F9DB3]">Банк</dt><dd>{MERCHANT.bankName}</dd>
+            <dt className="text-[#8F9DB3]">Расчётный счёт</dt><dd>{MERCHANT.settlementAccount}</dd>
+            <dt className="text-[#8F9DB3]">БИК</dt><dd>{MERCHANT.bik}</dd>
+            <dt className="text-[#8F9DB3]">Корр. счёт</dt><dd>{MERCHANT.correspondentAccount}</dd>
+            <dt className="text-[#8F9DB3]">Сайт</dt><dd>bananazero.ru</dd>
+            <dt className="text-[#8F9DB3]">Поддержка</dt><dd>{MERCHANT.telegramLabel}</dd>
+          </dl>
         </div>
       </main>
 
