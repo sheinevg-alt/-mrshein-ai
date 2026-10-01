@@ -40,10 +40,16 @@ export async function POST(request: Request) {
           chat_id: message.chat.id,
           text: welcomeText(message.from?.language_code),
           reply_markup: {
-            inline_keyboard: [[{
-              text: 'Открыть Banana Zero',
-              web_app: { url: appUrl },
-            }]],
+            inline_keyboard: [
+              [{
+                text: 'Создать контент',
+                web_app: { url: appUrl },
+              }],
+              [{
+                text: '🌐 BananaZero.ru',
+                url: APP_CONFIG.website,
+              }],
+            ],
           },
         })
       }
