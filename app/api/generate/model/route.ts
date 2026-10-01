@@ -195,7 +195,7 @@ export async function POST(request: Request) {
     } else if (tool.category === 'image') {
       kind = 'image'
       task = await createApiModelsImageTask({
-        model: tool.model as 'gemini-3.1-flash-image' | 'gemini-3-pro-image' | 'gpt-image-2.5-flare' | 'gpt-image-2.5-sunburst',
+        model: tool.model as 'gemini-3.1-flash-image-preview' | 'gemini-3-pro-image' | 'gpt-image-2.5-flare' | 'gpt-image-2.5-sunburst',
         promptText: prompt,
         ratio: String(settings.ratio || '1:1'),
         resolution: (['1k','2k','4k'].includes(resolution) ? resolution : '2k') as '1k' | '2k' | '4k',
