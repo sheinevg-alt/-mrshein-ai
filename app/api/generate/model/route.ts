@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import {
   createApiModelsAudioTask,
+  createApiModelsCallbackToken,
   createApiModelsChatCompletion,
   createApiModelsElevenTts,
   createApiModelsGeminiOmniFlashTask,
@@ -101,7 +102,8 @@ export async function POST(request: Request) {
   }
 
   const jobId = String(await generationResponse.json()).replace(/^"|"$/g, '')
-  const callbackUrl = `${new URL(request.url).origin}/api/generate/callback/apimodels?jobId=${encodeURIComponent(jobId)}`
+  const callbackToken = createApiModelsCallbackToken(jobId)
+  const callbackUrl = `${new URL(request.url).origin}/api/generate/callback/apimodels?jobId=${encodeURIComponent(jobId)}&token=${encodeURIComponent(callbackToken)}`
 
   try {
     const references = await Promise.all(
