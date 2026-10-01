@@ -56,6 +56,9 @@ export type Tool = {
   description: LocalizedValue
   icon: LucideIcon
   badge?: Badge
+  kind?: 'model' | 'quick'
+  modelId?: string
+  provider?: 'apimodels'
 }
 
 export type TrendInput = {
@@ -103,6 +106,22 @@ export const categories: Category[] = [
 const categoryTokens: Record<CategoryId, number> = { video: 40, image: 12, audio: 8, text: 2 }
 
 export const tools: Tool[] = [
+  { id: 'seedance-2-5', category: 'video', name: { en: 'Seedance 2.5', ru: 'Seedance 2.5' }, description: { en: 'Generate, reference and edit video up to 30 sec', ru: 'Генерация, референсы и редактирование видео до 30 сек' }, icon: Clapperboard, badge: 'Popular', kind: 'model', modelId: 'seedance-2.5', provider: 'apimodels' },
+  { id: 'omni-flash', category: 'video', name: { en: 'Omni Flash', ru: 'Omni Flash' }, description: { en: 'Fast generation, keyframes and video editing', ru: 'Быстрая генерация, keyframes и video edit' }, icon: Play, badge: 'New', kind: 'model', modelId: 'gemini-omni-1.1-flash', provider: 'apimodels' },
+  { id: 'kling-v3', category: 'video', name: { en: 'Kling V3', ru: 'Kling V3' }, description: { en: 'Cinematic video with optional synced audio', ru: 'Кинематографичное видео с опциональным звуком' }, icon: Film, kind: 'model', modelId: 'kling-v3', provider: 'apimodels' },
+
+  { id: 'nano-banana-2', category: 'image', name: { en: 'Nano Banana 2', ru: 'Nano Banana 2' }, description: { en: 'Generate and edit images with references', ru: 'Генерация и редактирование изображений с референсами' }, icon: WandSparkles, badge: 'Popular', kind: 'model', modelId: 'gemini-3.1-flash-image', provider: 'apimodels' },
+  { id: 'nano-banana-pro', category: 'image', name: { en: 'Nano Banana Pro', ru: 'Nano Banana Pro' }, description: { en: 'Premium image generation and complex references', ru: 'Премиум-генерация и сложные референсы' }, icon: ImageIcon, badge: 'Pro', kind: 'model', modelId: 'gemini-3-pro-image', provider: 'apimodels' },
+  { id: 'gpt-image-2-5', category: 'image', name: { en: 'GPT Image 2.5', ru: 'GPT Image 2.5' }, description: { en: 'Precise edits, text, products and transparent PNG', ru: 'Точный edit, текст, товары и прозрачный PNG' }, icon: Brush, badge: 'New', kind: 'model', modelId: 'gpt-image-2.5-flare', provider: 'apimodels' },
+
+  { id: 'suno-v5', category: 'audio', name: { en: 'Suno v5', ru: 'Suno v5' }, description: { en: 'Songs, instrumentals and music concepts', ru: 'Песни, инструменталы и музыкальные идеи' }, icon: Music, badge: 'Popular', kind: 'model', modelId: 'suno-v5', provider: 'apimodels' },
+  { id: 'elevenlabs-tts', category: 'audio', name: { en: 'ElevenLabs', ru: 'ElevenLabs' }, description: { en: 'Natural text-to-speech and voice-over', ru: 'Естественная озвучка и voice-over' }, icon: Mic, kind: 'model', modelId: 'eleven-tts-v4', provider: 'apimodels' },
+  { id: 'kling-audio', category: 'audio', name: { en: 'Kling Audio', ru: 'Kling Audio' }, description: { en: 'Sound effects and video-to-audio', ru: 'Звуковые эффекты и озвучивание видео' }, icon: AudioWaveform, kind: 'model', modelId: 'kling-sound-effects', provider: 'apimodels' },
+
+  { id: 'gpt-6-sol', category: 'text', name: { en: 'GPT-6 Sol', ru: 'GPT-6 Sol' }, description: { en: 'Prompts, scripts and advanced writing', ru: 'Промпты, сценарии и сложные тексты' }, icon: MessageSquare, badge: 'Popular', kind: 'model', modelId: 'gpt-6-sol', provider: 'apimodels' },
+  { id: 'gpt-6-luna', category: 'text', name: { en: 'GPT-6 Luna', ru: 'GPT-6 Luna' }, description: { en: 'Fast captions, translations and rewrites', ru: 'Быстрые подписи, переводы и рерайт' }, icon: Type, kind: 'model', modelId: 'gpt-6-luna', provider: 'apimodels' },
+  { id: 'claude-sonnet-5', category: 'text', name: { en: 'Claude Sonnet 5', ru: 'Claude Sonnet 5' }, description: { en: 'Long documents and creative writing', ru: 'Длинные документы и креативное письмо' }, icon: FileText, badge: 'Pro', kind: 'model', modelId: 'claude-sonnet-5', provider: 'apimodels' },
+
   { id: 'text-to-video', category: 'video', name: { en: 'Text to Video', ru: 'Текст в видео' }, description: { en: 'Turn a prompt into a short clip', ru: 'Создай короткое видео по описанию' }, icon: Clapperboard, badge: 'Popular' },
   { id: 'image-to-video', category: 'video', name: { en: 'Image to Video', ru: 'Фото в видео' }, description: { en: 'Bring a still photo to life', ru: 'Оживи статичное изображение' }, icon: Play, badge: 'New' },
   { id: 'lip-sync', category: 'video', name: { en: 'Lip Sync', ru: 'Lip Sync' }, description: { en: 'Match lips to any voice track', ru: 'Синхронизация губ с аудио' }, icon: ScanFace },
@@ -159,6 +178,14 @@ export function getCategory(id: CategoryId) {
 
 export function getToolsByCategory(id: CategoryId) {
   return tools.filter((tool) => tool.category === id)
+}
+
+export function getModelToolsByCategory(id: CategoryId) {
+  return tools.filter((tool) => tool.category === id && tool.kind === 'model')
+}
+
+export function getQuickToolsByCategory(id: CategoryId) {
+  return tools.filter((tool) => tool.category === id && tool.kind !== 'model')
 }
 
 export function getToolTokens(tool: Tool) {
