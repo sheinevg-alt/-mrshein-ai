@@ -8,8 +8,8 @@ const geistSans = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
 const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' })
 
 export const metadata: Metadata = {
-  title: 'Shein AI',
-  description: 'AI tools for video, image, audio and text — plus ready-made trends and prompts. A Telegram Mini App.',
+  title: 'Banana Zero',
+  description: 'Banana Zero — AI tools for video, image, audio and text, plus ready-made trends and prompts.',
   generator: 'v0.app',
   icons: {
     icon: [
@@ -28,7 +28,7 @@ export const viewport: Viewport = {
   userScalable: false,
   viewportFit: 'cover',
   colorScheme: 'light',
-  themeColor: '#F5F8FC',
+  themeColor: '#FFF8DF',
 }
 
 export default function RootLayout({
