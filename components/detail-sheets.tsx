@@ -241,7 +241,7 @@ function TrendFlow({ trend, onGenerationStarted }: { trend: Trend; onGenerationS
       { url: input.defaultAsset!.url, isVideo: false, isAudio: false, name: input.defaultAsset!.name || 'Default', isDefault: true } satisfies FileUpload,
     ]),
   ))
-  const [generateAudio, setGenerateAudio] = useState(true)
+  const [generateAudio, setGenerateAudio] = useState(trend.generateAudioDefault ?? true)
   const [resolution, setResolution] = useState<'480p' | '720p' | '1080p'>('480p')
   const resolutionOptions: Array<'480p' | '720p' | '1080p'> = trend.resolutions?.length
     ? trend.resolutions
