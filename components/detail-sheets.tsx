@@ -124,6 +124,32 @@ async function compressImageIfNeeded(file: File): Promise<File> {
   }
 }
 
+async function uploadTrendInputFile(file: File, initData: string) {
+  const signResponse = await fetch('/api/uploads/sign', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Telegram-Init-Data': initData,
+    },
+    body: JSON.stringify({ contentType: file.type, size: file.size }),
+  })
+  const signed = await signResponse.json().catch(() => ({}))
+  if (!signResponse.ok || !signed?.signedUrl || !signed?.path) {
+    throw new Error(String(signed?.error || 'UPLOAD_SIGN_FAILED'))
+  }
+
+  const body = new FormData()
+  body.append('cacheControl', '3600')
+  body.append('', file)
+  const uploadResponse = await fetch(String(signed.signedUrl), {
+    method: 'PUT',
+    headers: { 'x-upsert': 'false' },
+    body,
+  })
+  if (!uploadResponse.ok) throw new Error(`UPLOAD_FAILED_${uploadResponse.status}`)
+  return String(signed.path)
+}
+
 function FileInput({
   input,
   value,
@@ -246,26 +272,55 @@ function TrendFlow({ trend, onGenerationStarted }: { trend: Trend; onGenerationS
     setSubmitted(false)
     setResultMessage(t('generation.starting'))
     try {
-      const form = new FormData()
-      form.append('trendId', trend.id)
-      form.append('generateAudio', generateAudio ? 'true' : 'false')
-      form.append('resolution', resolution)
-      for (const input of trend.inputs) {
-        const value = values[input.id]
-        if (typeof value === 'string') {
-          form.append(input.id, value)
-        } else if (value?.file) {
-          form.append(input.id, value.file, value.file.name)
-        } else if (value?.url) {
-          form.append(`${input.id}_url`, value.url)
+      let response: Response
+
+      if (trend.executionMode === 'direct') {
+        const referencePaths: string[] = []
+        for (const input of trend.inputs) {
+          if (input.kind !== 'photo') continue
+          const value = values[input.id]
+          if (typeof value !== 'object' || !value?.file) {
+            throw new Error(`DIRECT_INPUT_FILE_REQUIRED:${input.id}`)
+          }
+          referencePaths.push(await uploadTrendInputFile(value.file, initData))
         }
+
+        response = await fetch('/api/generate/trend-direct', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Telegram-Init-Data': initData,
+          },
+          body: JSON.stringify({
+            trendId: trend.id,
+            referencePaths,
+            generateAudio,
+            resolution,
+          }),
+        })
+      } else {
+        const form = new FormData()
+        form.append('trendId', trend.id)
+        form.append('generateAudio', generateAudio ? 'true' : 'false')
+        form.append('resolution', resolution)
+        for (const input of trend.inputs) {
+          const value = values[input.id]
+          if (typeof value === 'string') {
+            form.append(input.id, value)
+          } else if (value?.file) {
+            form.append(input.id, value.file, value.file.name)
+          } else if (value?.url) {
+            form.append(`${input.id}_url`, value.url)
+          }
+        }
+
+        response = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'X-Telegram-Init-Data': initData },
+          body: form,
+        })
       }
 
-      const response = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'X-Telegram-Init-Data': initData },
-        body: form,
-      })
       const data = await response.json().catch(() => ({}))
 
       if (response.ok && data?.ok && (data?.status === 'processing' || data?.status === 'completed')) {
