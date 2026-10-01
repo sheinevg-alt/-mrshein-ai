@@ -44,7 +44,7 @@ export function estimateProviderUsd(input: ToolQuoteInput) {
       return duration * rate
     }
     case 'nano-banana-2':
-      return resolution === '4k' ? 0.10 : 0.06
+      return resolution === '4k' ? 0.08 : 0.05
     case 'nano-banana-pro':
       return resolution === '4k' ? 0.15 : 0.10
     case 'gpt-image-2-5': {
