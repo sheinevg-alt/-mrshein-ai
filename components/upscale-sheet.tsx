@@ -207,7 +207,7 @@ export function UpscaleSheet({
           <input
             ref={inputRef}
             type="file"
-            accept={mediaType === 'video' ? 'video/mp4,video/quicktime,.mp4,.mov' : 'image/*'}
+            accept={mediaType === 'video' ? 'video/mp4,.mp4' : 'image/*'}
             className="sr-only"
             onChange={(event) => void chooseFile(event)}
           />
