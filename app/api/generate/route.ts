@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
-import { createApiModelsSeedance25Task, type ApiModelsResolution } from '@/lib/server/apimodels'
+import { createApiModelsSeedance25Task, type ApiModelsResolution, createApiModelsCallbackToken } from '@/lib/server/apimodels'
 import { createBytePlusSeedance25Task, type BytePlusResolution } from '@/lib/server/byteplus'
 import { createSeedance25Task } from '@/lib/server/runway'
 import {
@@ -268,7 +268,8 @@ export async function POST(request: Request) {
       const videoReferences = sourceVideoPath
         ? [await createStorageSignedDownloadUrl(INPUT_BUCKET, sourceVideoPath, 7200)]
         : []
-      const callbackUrl = `${new URL(request.url).origin}/api/generate/callback/apimodels?jobId=${encodeURIComponent(job.id)}`
+      const callbackToken = createApiModelsCallbackToken(job.id)
+    const callbackUrl = `${new URL(request.url).origin}/api/generate/callback/apimodels?jobId=${encodeURIComponent(job.id)}&token=${encodeURIComponent(callbackToken)}`
       const apiResolution: ApiModelsResolution = resolution === '720p' ? '720p' : '480p'
       const task = await createApiModelsSeedance25Task({
         promptText,
