@@ -42,6 +42,7 @@ export function estimateProviderUsd(input: ToolQuoteInput) {
     case 'seedance-2-5':
       return duration * (resolution === '720p' ? 0.27 : 0.12)
     case 'omni-flash':
+      if (mode === 'video-edit') return resolution === '4k' ? 1.05 : 0.70
       return duration * (resolution === '4k' ? 0.20 : resolution === '1080p' ? 0.10 : 0.07)
     case 'kling-v3': {
       const rate = mode === 'pro'
@@ -49,6 +50,10 @@ export function estimateProviderUsd(input: ToolQuoteInput) {
         : (input.generateAudio ? 0.18 : 0.12)
       return duration * rate
     }
+    case 'kling-v3-omni':
+      return duration * 0.15
+    case 'kling-motion-control':
+      return duration * (resolution === '1080p' ? 0.10 : 0.06)
     case 'nano-banana-2':
       return resolution === '4k' ? 0.08 : 0.05
     case 'nano-banana-pro':
