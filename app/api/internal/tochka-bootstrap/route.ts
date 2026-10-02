@@ -51,6 +51,34 @@ export async function GET() {
     return NextResponse.json({ ok: false, stage: 'environment', hasJwt: false, hasClientId: Boolean(clientId) }, { status: 503 })
   }
 
+  if (!clientId) {
+    try {
+      const introspect = await tochkaRequest('/connect/introspect', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({ access_token: token }).toString(),
+      })
+      if (introspect.ok) {
+        let raw = typeof introspect.json === 'string'
+          ? introspect.json
+          : String(introspect.json?.token || introspect.json?.jwt || introspect.text || '')
+        raw = raw.trim().replace(/^"|"$/g, '')
+        const parts = raw.split('.')
+        if (parts.length === 3) {
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'))
+          const aud = Array.isArray(payload?.aud) ? payload.aud[0] : payload?.aud
+          const candidate = String(aud || '')
+          if (/^[A-Za-z0-9_-]{20,100}$/.test(candidate)) clientId = candidate
+        }
+      }
+    } catch {
+      // JWT integrations may not support introspection; continue without client_id.
+    }
+  }
+
   const customers = await tochkaRequest('/uapi/open-banking/v1.0/customers', { headers: tochkaAuthHeaders(token) })
   if (!customers.ok) {
     return NextResponse.json({ ok: false, stage: 'customers', status: customers.status }, { status: 502 })
