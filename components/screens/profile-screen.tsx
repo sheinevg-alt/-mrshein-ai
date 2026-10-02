@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import {
   Bell,
@@ -233,8 +234,68 @@ function ProfilePanel({ panel, onClose }: { panel: Panel; onClose: () => void })
       {panel === 'help' && <SupportPanel />}
       {panel === 'referral' && <ReferralPanel />}
 
-      {panel === 'tokens' && <p className="pb-4 text-sm leading-relaxed text-muted-foreground">{t('tokens.soon')}</p>}
+      {panel === 'tokens' && <TokensPanel />}
     </BottomSheet>
+  )
+}
+
+
+const tokenPlans = [
+  { name: 'Beginner', price: 1490, tokens: 630, discount: 5 },
+  { name: 'Creator', price: 2990, tokens: 1330, discount: 10 },
+  { name: 'Professional', price: 4990, tokens: 2350, discount: 15 },
+] as const
+
+const tokenPacks = [
+  { tokens: 200, price: 500 },
+  { tokens: 500, price: 1250 },
+  { tokens: 1000, price: 2500 },
+  { tokens: 2000, price: 5000 },
+] as const
+
+function TokensPanel() {
+  const { locale } = useI18n()
+  const ru = locale === 'ru'
+
+  return (
+    <div className="pb-3">
+      <p className="text-sm leading-6 text-muted-foreground">
+        {ru
+          ? 'Выберите тариф на 30 дней или купите Tokens отдельно. Все цены фиксированы и показываются до оплаты.'
+          : 'Choose a 30-day plan or buy Tokens separately. All prices are fixed and shown before payment.'}
+      </p>
+
+      <div className="mt-4 space-y-2">
+        {tokenPlans.map((plan) => (
+          <div key={plan.name} className="rounded-2xl border bg-card p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold">{plan.name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{plan.tokens.toLocaleString(ru ? 'ru-RU' : 'en-US')} Tokens · {ru ? '30 дней' : '30 days'}</p>
+              </div>
+              <p className="text-base font-black">{plan.price.toLocaleString(ru ? 'ru-RU' : 'en-US')} ₽</p>
+            </div>
+            <p className="mt-2 text-xs text-brand">{ru ? 'Скидка на пополнение' : 'Top-up discount'}: {plan.discount}%</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{ru ? 'Разовые пакеты' : 'One-time packs'}</p>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {tokenPacks.map((pack) => (
+            <div key={pack.tokens} className="rounded-2xl border bg-card p-3">
+              <p className="text-sm font-bold">{pack.tokens.toLocaleString(ru ? 'ru-RU' : 'en-US')} Tokens</p>
+              <p className="mt-1 text-sm">{pack.price.toLocaleString(ru ? 'ru-RU' : 'en-US')} ₽</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <Link href="/pay" className="brand-gradient mt-5 flex h-12 w-full items-center justify-center rounded-full text-sm font-semibold text-white">
+        {ru ? 'Перейти к покупке' : 'Continue to purchase'}
+      </Link>
+    </div>
   )
 }
 
