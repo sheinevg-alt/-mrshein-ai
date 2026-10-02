@@ -126,7 +126,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Could not download result' }, { status: 502 })
   }
 
-  const contentType = upstream.headers.get('content-type') || 'application/octet-stream'
+  const resultHref = resultUrl.toString()
+  const isVideoResult = /\.(mp4|webm|mov)(\?|$)/i.test(resultHref) || resultHref.includes('/videos/')
+  const upstreamContentType = upstream.headers.get('content-type') || ''
+  const contentType = isVideoResult
+    ? (resultHref.match(/\.webm(\?|$)/i) ? 'video/webm' : resultHref.match(/\.mov(\?|$)/i) ? 'video/quicktime' : 'video/mp4')
+    : (upstreamContentType.startsWith('image/') ? upstreamContentType : 'image/png')
   const filename = safeFilename(contentType, String(job.title || 'Banana-Zero-result'))
   const headers = new Headers()
   headers.set('Content-Type', contentType)
