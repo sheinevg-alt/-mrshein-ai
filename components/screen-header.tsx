@@ -2,6 +2,7 @@
 
 import { ChevronLeft } from 'lucide-react'
 import { useI18n } from './i18n-provider'
+import { AnnouncementsBell } from './announcements-bell'
 
 type ScreenHeaderProps = {
   title: string
@@ -11,7 +12,7 @@ type ScreenHeaderProps = {
 }
 
 export function ScreenHeader({ title, subtitle, onBack, trailing }: ScreenHeaderProps) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   return (
     <header className="flex items-center justify-between gap-3 pt-4 pb-5">
       <div className="flex min-w-0 items-center gap-3">
@@ -30,7 +31,10 @@ export function ScreenHeader({ title, subtitle, onBack, trailing }: ScreenHeader
           {subtitle && <p className="mt-0.5 truncate text-sm text-muted-foreground">{subtitle}</p>}
         </div>
       </div>
-      {trailing}
+      <div className="flex shrink-0 items-center gap-2">
+        <AnnouncementsBell locale={locale} />
+        {trailing}
+      </div>
     </header>
   )
 }
