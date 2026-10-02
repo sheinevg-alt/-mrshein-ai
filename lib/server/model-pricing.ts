@@ -82,6 +82,6 @@ export async function quoteTokens(input: ToolQuoteInput) {
     const tokenCost = Number(await response.json())
     if (Number.isFinite(tokenCost) && tokenCost >= 0) return { tokenCost, providerUsd, usdRub }
   }
-  const tokenCost = Math.max(10, Math.ceil((providerRub * 2.5) / 10) * 10)
+  const tokenCost = Math.max(10, Math.ceil((providerRub * 3.1) / 10) * 10)
   return { tokenCost, providerUsd, usdRub }
 }

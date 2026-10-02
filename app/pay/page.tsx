@@ -11,9 +11,9 @@ export default function PayPage() {
     <main className="min-h-dvh px-4 py-8 sm:px-6">
       <div className="mx-auto max-w-3xl">
         <header className="flex items-center gap-3">
-          <Image src="/mrshein-ai-logo.png" alt="Shein AI" width={44} height={44} className="rounded-2xl" />
+          <Image src="/banana-zero-cake.jpg" alt="Banana Zero" width={44} height={44} className="rounded-2xl" />
           <div>
-            <h1 className="text-xl font-bold">Shein AI</h1>
+            <h1 className="text-xl font-bold">Banana Zero</h1>
             <p className="text-sm text-muted-foreground">Пополнение баланса в рублях</p>
           </div>
         </header>
@@ -22,7 +22,7 @@ export default function PayPage() {
           <div className="max-w-2xl">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">Web checkout</p>
             <h2 className="mt-2 text-3xl font-bold tracking-tight">Оплата российскими картами и через СБП</h2>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">Рублёвая оплата работает на сайте. Внутри Telegram цифровые услуги оплачиваются по правилам Telegram.</p>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">Выберите пакет Tokens. Стоимость фиксирована и указана до оплаты. Оплата будет доступна после подключения интернет-эквайринга.</p>
           </div>
           <div className="mt-7"><PaymentForm enabled={enabled} /></div>
         </section>

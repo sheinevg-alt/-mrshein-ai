@@ -39,6 +39,7 @@ export function SiteHeader() {
           <Link href="/app?tab=create&category=video" className="transition hover:text-[#171A22]">{locale === 'ru' ? 'Видео' : 'Video'}</Link>
           <Link href="/app?tab=create&category=image" className="transition hover:text-[#171A22]">{locale === 'ru' ? 'Изображения' : 'Images'}</Link>
           <a href="#how" className="transition hover:text-[#171A22]">{locale === 'ru' ? 'Как работает' : 'How it works'}</a>
+          <a href="#pricing" className="transition hover:text-[#171A22]">{locale === 'ru' ? 'Тарифы' : 'Pricing'}</a>
         </nav>
 
         <div className="flex items-center gap-2">

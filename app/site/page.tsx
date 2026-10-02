@@ -5,6 +5,7 @@ import { ArrowRight, Clapperboard, ImageIcon, MessageSquareText, Music2, Sparkle
 import { MERCHANT } from '@/lib/merchant'
 import { SiteHeader } from '@/components/site/site-header'
 import { SiteTrendHits } from '@/components/site/site-trend-hits'
+import { SitePricing } from '@/components/site/site-pricing'
 import { useSiteLocale } from '@/components/site/site-locale-provider'
 
 const copy = {
@@ -21,8 +22,8 @@ const copy = {
     howLabel: 'КАК ЭТО РАБОТАЕТ',
     threeSteps: 'Три шага до результата',
     pricing: 'ТАРИФЫ',
-    pricingTitle: 'Оплачивайте только нужные генерации',
-    pricingText: 'Пакеты токенов и рублёвая оплата будут доступны после подключения интернет-эквайринга. Международная оплата будет добавлена отдельным способом.',
+    pricingTitle: 'Понятные тарифы и Tokens',
+    pricingText: 'Можно пользоваться без тарифа и покупать Tokens отдельно. Тарифы действуют 30 дней, включают Tokens и дают скидку на пополнение баланса.',
     openCreate: 'Открыть создание',
     privacy: 'Политика конфиденциальности',
     offer: 'Публичная оферта',
@@ -42,8 +43,8 @@ const copy = {
     howLabel: 'HOW IT WORKS',
     threeSteps: 'Three steps to your result',
     pricing: 'PRICING',
-    pricingTitle: 'Pay only for the generations you need',
-    pricingText: 'Token packages and RUB checkout will be available after acquiring is activated. International checkout will be added as a separate payment option.',
+    pricingTitle: 'Simple plans and Tokens',
+    pricingText: 'Use Banana Zero without a plan and buy Tokens separately, or choose a 30-day plan with included Tokens and a top-up discount.',
     openCreate: 'Start creating',
     privacy: 'Privacy Policy',
     offer: 'Public Offer',
@@ -187,20 +188,7 @@ export default function SitePage() {
           </div>
         </section>
 
-        <section id="pricing" className="mx-auto max-w-6xl px-5 py-16 md:px-8">
-          <div className="rounded-[2rem] bg-[#0B0F1A] px-6 py-10 text-white md:px-10 md:py-12">
-            <div className="grid items-end gap-8 md:grid-cols-[1fr_auto]">
-              <div>
-                <p className="text-xs font-bold tracking-[0.16em] text-[#F6AB10]">{t.pricing}</p>
-                <h2 className="mt-3 text-3xl font-bold tracking-tight">{t.pricingTitle}</h2>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-[#A8B3C7]">{t.pricingText}</p>
-              </div>
-              <Link href="/app?tab=create" className="rounded-full border border-white/15 bg-white/10 px-5 py-3 text-sm font-semibold text-white">
-                {t.openCreate}
-              </Link>
-            </div>
-          </div>
-        </section>
+        <SitePricing />
       </main>
 
       <footer className="border-t border-[#E6EEFF] bg-white">
