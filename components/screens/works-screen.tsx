@@ -139,49 +139,33 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
     setDownloadErrorId(null)
 
     try {
-      const app = getWebApp()
-      const isAppleMobile =
-        app?.platform === 'ios' ||
-        /iPad|iPhone|iPod/.test(navigator.userAgent)
+      const video = isVideoUrl(item.resultUrl)
+      const isAppleMobile = /iPad|iPhone|iPod/.test(navigator.userAgent)
+      const shareNavigator = navigator as Navigator & {
+        canShare?: (data?: ShareData) => boolean
+        share?: (data: ShareData) => Promise<void>
+      }
 
       if (isAppleMobile) {
-        const controller = new AbortController()
-        const timeout = window.setTimeout(() => controller.abort(), 60_000)
+        const response = await fetch(`/api/download?jobId=${encodeURIComponent(item.id)}`, {
+          headers: { 'X-Telegram-Init-Data': initData },
+          cache: 'no-store',
+        })
+        if (!response.ok) throw new Error(`DOWNLOAD_${response.status}`)
 
-        try {
-          const response = await fetch(`/api/download?jobId=${encodeURIComponent(item.id)}`, {
-            headers: { 'X-Telegram-Init-Data': initData },
-            cache: 'no-store',
-            signal: controller.signal,
-          })
-          if (!response.ok) throw new Error(`DOWNLOAD_${response.status}`)
+        const blob = await response.blob()
+        const mimeType = video ? 'video/mp4' : (blob.type || response.headers.get('content-type') || 'image/png')
+        const ext = extensionForType(mimeType, video)
+        const filename = `Banana-Zero-${video ? 'video' : 'image'}-${item.id.slice(0, 8)}.${ext}`
+        const file = new File([blob], filename, { type: mimeType })
 
-          const sourceBlob = await response.blob()
-          const video = isVideoUrl(item.resultUrl)
-          const forcedType = video ? 'video/mp4' : (sourceBlob.type || 'image/png')
-          const blob = sourceBlob.type === forcedType
-            ? sourceBlob
-            : new Blob([sourceBlob], { type: forcedType })
-          const ext = video ? 'mp4' : extensionForType(forcedType, false)
-          const filename = `Banana-Zero-${video ? 'video' : 'image'}-${item.id.slice(0, 8)}.${ext}`
-          const file = new File([blob], filename, { type: forcedType })
-
-          const shareNavigator = navigator as Navigator & {
-            canShare?: (data?: ShareData) => boolean
-            share?: (data: ShareData) => Promise<void>
-          }
-
-          if (!shareNavigator.share) throw new Error('IOS_SHARE_UNAVAILABLE')
-          if (shareNavigator.canShare && !shareNavigator.canShare({ files: [file] })) {
-            throw new Error('IOS_FILE_SHARE_UNAVAILABLE')
-          }
-
-          await shareNavigator.share({ files: [file], title: filename })
-          haptics.success()
-          return
-        } finally {
-          window.clearTimeout(timeout)
+        if (!shareNavigator.share || (shareNavigator.canShare && !shareNavigator.canShare({ files: [file] }))) {
+          throw new Error('IOS_SHARE_UNAVAILABLE')
         }
+
+        await shareNavigator.share({ files: [file], title: filename })
+        haptics.success()
+        return
       }
 
       const prepare = await fetch(`/api/download?prepare=1&jobId=${encodeURIComponent(item.id)}`, {
@@ -191,6 +175,7 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
       const data = await prepare.json().catch(() => ({}))
       if (!prepare.ok || !data?.url || !data?.fileName) throw new Error('DOWNLOAD_PREPARE_FAILED')
 
+      const app = getWebApp()
       const supportsNativeDownload = Boolean(
         app?.downloadFile &&
         (!app.isVersionAtLeast || app.isVersionAtLeast('9.0')),
