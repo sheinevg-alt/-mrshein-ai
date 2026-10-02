@@ -8,6 +8,7 @@ import { BottomSheet } from './bottom-sheet'
 import { useI18n } from './i18n-provider'
 import { TokenCost } from './tokens'
 import { useUserState } from './user-provider'
+import { KlingMotionFlow, KlingOmniFlow, OmniFlashFlow } from './video-model-flows'
 
 type FileUpload = { url: string; isVideo: boolean; isAudio: boolean; name: string; isDefault?: boolean; file?: File }
 type InputValue = FileUpload | string
@@ -25,9 +26,16 @@ export function ToolSheet({
   if (!tool) return null
 
   if (tool.kind === 'model') {
+    const flow = tool.id === 'omni-flash'
+      ? <OmniFlashFlow onGenerationStarted={onGenerationStarted} />
+      : tool.id === 'kling-v3-omni'
+        ? <KlingOmniFlow onGenerationStarted={onGenerationStarted} />
+        : tool.id === 'kling-motion-control'
+          ? <KlingMotionFlow onGenerationStarted={onGenerationStarted} />
+          : <ModelToolFlow tool={tool} onGenerationStarted={onGenerationStarted} />
     return (
       <BottomSheet open title={localize(tool.name, locale)} onClose={onClose}>
-        <ModelToolFlow tool={tool} onGenerationStarted={onGenerationStarted} />
+        {flow}
       </BottomSheet>
     )
   }
@@ -66,6 +74,8 @@ function ModelToolFlow({ tool, onGenerationStarted }: { tool: Tool; onGeneration
   const [ratio, setRatio] = useState(tool.category === 'image' ? '1:1' : '9:16')
   const [quality, setQuality] = useState('medium')
   const [mode, setMode] = useState('std')
+  const [generationMode, setGenerationMode] = useState<'text' | 'image'>('text')
+  const [sunoVersion, setSunoVersion] = useState('chirp-v5-5')
   const [generateAudio, setGenerateAudio] = useState(false)
   const [reasoningEffort, setReasoningEffort] = useState('medium')
   const [quotedTokens, setQuotedTokens] = useState<number | null>(null)
@@ -79,7 +89,7 @@ function ModelToolFlow({ tool, onGenerationStarted }: { tool: Tool; onGeneration
   const isText = tool.category === 'text'
   const isAudio = tool.category === 'audio'
   const wantsVideoInput = tool.id === 'kling-audio'
-  const wantsImageInput = isImage || tool.id === 'omni-flash' || tool.id === 'kling-v3'
+  const wantsImageInput = isImage || (tool.id === 'kling-v3' && generationMode === 'image')
 
   useEffect(() => {
     let cancelled = false
@@ -90,7 +100,7 @@ function ModelToolFlow({ tool, onGenerationStarted }: { tool: Tool; onGeneration
         body: JSON.stringify({
           toolId: tool.id,
           promptLength: prompt.length,
-          settings: { duration, resolution, ratio, quality, mode, generateAudio, reasoningEffort },
+          settings: { duration, resolution, ratio, quality, mode, generateAudio, reasoningEffort, sunoVersion },
         }),
       }).then(async (response) => {
         const data = await response.json().catch(() => ({}))
@@ -100,7 +110,7 @@ function ModelToolFlow({ tool, onGenerationStarted }: { tool: Tool; onGeneration
       }).catch(() => undefined)
     }, 200)
     return () => { cancelled = true; window.clearTimeout(timer) }
-  }, [tool.id, prompt.length, duration, resolution, ratio, quality, mode, generateAudio, reasoningEffort])
+  }, [tool.id, prompt.length, duration, resolution, ratio, quality, mode, generateAudio, reasoningEffort, sunoVersion])
 
   useEffect(() => () => {
     if (reference?.url) URL.revokeObjectURL(reference.url)
@@ -158,7 +168,7 @@ function ModelToolFlow({ tool, onGenerationStarted }: { tool: Tool; onGeneration
           prompt: prompt.trim(),
           referencePaths,
           sourceVideoPath,
-          settings: { duration, resolution, ratio, quality, mode, generateAudio, reasoningEffort },
+          settings: { duration, resolution, ratio, quality, mode, generateAudio, reasoningEffort, sunoVersion },
         }),
       })
       const data = await response.json().catch(() => ({}))
@@ -220,6 +230,34 @@ function ModelToolFlow({ tool, onGenerationStarted }: { tool: Tool; onGeneration
           <span className="rounded-full bg-card px-2.5 py-1">{locale === 'ru' ? 'Доступно всем' : 'Available to everyone'}</span>
         </div>
       </div>
+
+      {tool.id === 'kling-v3' && (
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-medium text-muted-foreground">{locale === 'ru' ? 'Режим' : 'Mode'}</p>
+          <div className="grid grid-cols-2 gap-2 rounded-2xl bg-muted/60 p-1">
+            <button type="button" onClick={() => { setGenerationMode('text'); setReference(null) }} className={'rounded-xl px-3 py-2 text-xs font-semibold ' + (generationMode === 'text' ? 'bg-background shadow-sm' : 'text-muted-foreground')}>
+              {locale === 'ru' ? 'Текст → видео' : 'Text → Video'}
+            </button>
+            <button type="button" onClick={() => setGenerationMode('image')} className={'rounded-xl px-3 py-2 text-xs font-semibold ' + (generationMode === 'image' ? 'bg-background shadow-sm' : 'text-muted-foreground')}>
+              {locale === 'ru' ? 'Фото → видео' : 'Image → Video'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {tool.id === 'suno-v5' && (
+        <label className="mt-4 block rounded-2xl border bg-card p-3 text-xs text-muted-foreground">
+          <span>{locale === 'ru' ? 'Версия Suno через текущий API' : 'Suno version via current API'}</span>
+          <select value={sunoVersion} onChange={(event) => setSunoVersion(event.target.value)} className="mt-2 h-10 w-full rounded-xl border bg-background px-2 text-sm font-semibold text-foreground">
+            <option value="chirp-v5-5">V5.5</option>
+            <option value="chirp-v5">V5</option>
+            <option value="chirp-v4-5">V4.5</option>
+          </select>
+          <span className="mt-2 block text-[10px] leading-4">
+            {locale === 'ru' ? 'Suno V6 уже вышел, но текущий API-провайдер пока не публикует V6.' : 'Suno V6 is released, but the current API provider has not published V6 yet.'}
+          </span>
+        </label>
+      )}
 
       <label className="mt-5 block text-xs font-medium text-muted-foreground">
         {isText ? (locale === 'ru' ? 'Задача / текст' : 'Task / text') : isAudio ? (locale === 'ru' ? 'Описание / текст' : 'Description / text') : (locale === 'ru' ? 'Промпт' : 'Prompt')}
