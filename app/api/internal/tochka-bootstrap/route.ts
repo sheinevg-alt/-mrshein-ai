@@ -24,7 +24,7 @@ export async function GET() {
   const token = process.env.TOCHKA_JWT
   const clientId = process.env.TOCHKA_CLIENT_ID
   if (!token || !clientId) {
-    return NextResponse.json({ ok: false, stage: 'environment' }, { status: 503 })
+    return NextResponse.json({ ok: false, stage: 'environment', hasJwt: Boolean(token), hasClientId: Boolean(clientId) }, { status: 503 })
   }
 
   const customers = await tochka('/open-banking/v1.0/customers', token)
