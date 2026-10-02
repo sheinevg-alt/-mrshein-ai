@@ -18,6 +18,30 @@ async function tochka(path: string, token: string, init: RequestInit = {}) {
   return { response, data }
 }
 
+async function saveConfig(value: Record<string, unknown>) {
+  const existing = await supabaseFetch(
+    'app_settings?select=key&key=eq.tochka_acquiring_config&limit=1',
+  )
+  const rows = existing.ok ? await existing.json() : []
+  return rows?.length
+    ? supabaseFetch('app_settings?key=eq.tochka_acquiring_config', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          value,
+          description: 'Internal Tochka internet acquiring configuration.',
+          updated_at: new Date().toISOString(),
+        }),
+      })
+    : supabaseFetch('app_settings', {
+        method: 'POST',
+        body: JSON.stringify({
+          key: 'tochka_acquiring_config',
+          value,
+          description: 'Internal Tochka internet acquiring configuration.',
+        }),
+      })
+}
+
 export async function GET() {
   if (!hasDatabase()) return NextResponse.json({ ok: false, stage: 'database' }, { status: 503 })
 
@@ -33,8 +57,8 @@ export async function GET() {
     }
   }
 
-  if (!token || !clientId) {
-    return NextResponse.json({ ok: false, stage: 'environment', hasJwt: Boolean(token), hasClientId: Boolean(clientId) }, { status: 503 })
+  if (!token) {
+    return NextResponse.json({ ok: false, stage: 'environment', hasJwt: false, hasClientId: Boolean(clientId) }, { status: 503 })
   }
 
   const customers = await tochka('/open-banking/v1.0/customers', token)
@@ -81,71 +105,69 @@ export async function GET() {
   }
 
   const merchantId = String(selected.merchantId)
+  let webhookConfigured = false
+  let webhookVerified = false
 
-  const webhook = await tochka(`/webhook/v1.0/${encodeURIComponent(clientId)}`, token, {
-    method: 'PUT',
-    body: JSON.stringify({
-      webhooksList: ['acquiringInternetPayment'],
-      url: WEBHOOK_URL,
-    }),
-  })
+  if (clientId) {
+    const webhook = await tochka(`/webhook/v1.0/${encodeURIComponent(clientId)}`, token, {
+      method: 'PUT',
+      body: JSON.stringify({
+        webhooksList: ['acquiringInternetPayment'],
+        url: WEBHOOK_URL,
+      }),
+    })
 
-  if (!webhook.response.ok) {
-    return NextResponse.json({
-      ok: false,
-      stage: 'webhook',
-      status: webhook.response.status,
-      code: webhook.data?.code || webhook.data?.errorCode || null,
-    }, { status: 502 })
+    if (!webhook.response.ok) {
+      await saveConfig({
+        customerCode,
+        merchantId,
+        clientId,
+        webhookUrl: WEBHOOK_URL,
+        webhookEvent: 'acquiringInternetPayment',
+        webhookConfigured: false,
+        taxSystemCode: 'usn_income',
+        vatType: 'none',
+        configuredAt: new Date().toISOString(),
+      })
+      return NextResponse.json({
+        ok: false,
+        stage: 'webhook',
+        customerConfigured: true,
+        retailerConfigured: true,
+        status: webhook.response.status,
+        code: webhook.data?.code || webhook.data?.errorCode || null,
+      }, { status: 502 })
+    }
+
+    webhookConfigured = true
+    const verifyWebhook = await tochka(`/webhook/v1.0/${encodeURIComponent(clientId)}`, token)
+    webhookVerified = verifyWebhook.response.ok
   }
 
   const configValue = {
     customerCode,
     merchantId,
-    clientId,
+    clientId: clientId || null,
     webhookUrl: WEBHOOK_URL,
     webhookEvent: 'acquiringInternetPayment',
+    webhookConfigured,
+    webhookVerified,
     taxSystemCode: 'usn_income',
     vatType: 'none',
-    setupComplete: true,
+    setupComplete: Boolean(clientId && webhookConfigured && webhookVerified),
     configuredAt: new Date().toISOString(),
   }
 
-  const existing = await supabaseFetch(
-    'app_settings?select=key&key=eq.tochka_acquiring_config&limit=1',
-  )
-  const existingRows = existing.ok ? await existing.json() : []
-
-  const save = existingRows?.length
-    ? await supabaseFetch('app_settings?key=eq.tochka_acquiring_config', {
-        method: 'PATCH',
-        body: JSON.stringify({
-          value: configValue,
-          description: 'Internal Tochka internet acquiring configuration.',
-          updated_at: new Date().toISOString(),
-        }),
-      })
-    : await supabaseFetch('app_settings', {
-        method: 'POST',
-        body: JSON.stringify({
-          key: 'tochka_acquiring_config',
-          value: configValue,
-          description: 'Internal Tochka internet acquiring configuration.',
-        }),
-      })
-
-  if (!save.ok) {
-    return NextResponse.json({ ok: false, stage: 'save_config' }, { status: 500 })
-  }
-
-  const verifyWebhook = await tochka(`/webhook/v1.0/${encodeURIComponent(clientId)}`, token)
+  const save = await saveConfig(configValue)
+  if (!save.ok) return NextResponse.json({ ok: false, stage: 'save_config' }, { status: 500 })
 
   return NextResponse.json({
     ok: true,
     customerConfigured: true,
     retailerConfigured: true,
-    webhookConfigured: webhook.response.ok,
-    webhookVerified: verifyWebhook.response.ok,
+    clientIdConfigured: Boolean(clientId),
+    webhookConfigured,
+    webhookVerified,
     fiscalization: '54-FZ',
     taxSystem: 'usn_income',
     vat: 'none',
