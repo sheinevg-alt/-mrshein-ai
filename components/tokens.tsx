@@ -22,7 +22,7 @@ export function TokenBalancePill() {
   const { tokenBalance } = useUserState()
   return (
     <Link
-      href="/pay"
+      href="/app?tab=pricing"
       className="glass inline-flex items-center gap-1.5 rounded-full py-1 pr-3 pl-1 text-xs transition active:scale-95"
       aria-label={t('tokens.balance', { count: tokenBalance })}
     >
