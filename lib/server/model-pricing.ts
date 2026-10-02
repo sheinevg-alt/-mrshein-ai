@@ -2,7 +2,7 @@ import 'server-only'
 
 import { supabaseFetch } from './supabase'
 
-const FALLBACK_USD_RUB = 84
+const FALLBACK_USD_RUB = 90
 
 async function configuredUsdRub() {
   try {
@@ -82,6 +82,6 @@ export async function quoteTokens(input: ToolQuoteInput) {
     const tokenCost = Number(await response.json())
     if (Number.isFinite(tokenCost) && tokenCost >= 0) return { tokenCost, providerUsd, usdRub }
   }
-  const tokenCost = Math.max(10, Math.ceil((providerRub * 3.1) / 10) * 10)
+  const tokenCost = Math.max(5, Math.ceil(((providerRub * 3.1) / 2.5) / 5) * 5)
   return { tokenCost, providerUsd, usdRub }
 }
