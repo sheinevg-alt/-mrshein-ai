@@ -1,22 +1,10 @@
 import { NextResponse } from 'next/server'
 import { hasDatabase, supabaseFetch } from '@/lib/server/supabase'
+import { tochkaAuthHeaders, tochkaRequest } from '@/lib/server/tochka-http'
 
 export const dynamic = 'force-dynamic'
 
-const API = 'https://enter.tochka.com/uapi'
 const WEBHOOK_URL = 'https://bananazero.ru/api/payments/tochka/webhook'
-
-async function tochka(path: string, token: string, init: RequestInit = {}) {
-  const headers = new Headers(init.headers)
-  headers.set('Accept', 'application/json')
-  headers.set('Authorization', `Bearer ${token}`)
-  if (init.body) headers.set('Content-Type', 'application/json')
-  const response = await fetch(`${API}${path}`, { ...init, headers, cache: 'no-store' })
-  const text = await response.text()
-  let data: any = {}
-  try { data = text ? JSON.parse(text) : {} } catch { data = { raw: text } }
-  return { response, data }
-}
 
 async function saveConfig(value: Record<string, unknown>) {
   const existing = await supabaseFetch(
@@ -61,13 +49,13 @@ export async function GET() {
     return NextResponse.json({ ok: false, stage: 'environment', hasJwt: false, hasClientId: Boolean(clientId) }, { status: 503 })
   }
 
-  const customers = await tochka('/open-banking/v1.0/customers', token)
-  if (!customers.response.ok) {
-    return NextResponse.json({ ok: false, stage: 'customers', status: customers.response.status }, { status: 502 })
+  const customers = await tochkaRequest('/uapi/open-banking/v1.0/customers', { headers: tochkaAuthHeaders(token) })
+  if (!customers.ok) {
+    return NextResponse.json({ ok: false, stage: 'customers', status: customers.status }, { status: 502 })
   }
 
   const rawCustomers =
-    customers.data?.Data?.Customer ||
+    customers.json?.Data?.Customer ||
     customers.data?.Data?.Customers ||
     customers.data?.Data?.customers ||
     customers.data?.customers ||
@@ -81,16 +69,16 @@ export async function GET() {
 
   const customerCode = String(businesses[0].customerCode)
 
-  const retailers = await tochka(
-    `/acquiring/v1.0/retailers?customerCode=${encodeURIComponent(customerCode)}`,
-    token,
+  const retailers = await tochkaRequest(
+    `/uapi/acquiring/v1.0/retailers?customerCode=${encodeURIComponent(customerCode)}`,
+    { headers: tochkaAuthHeaders(token) },
   )
-  if (!retailers.response.ok) {
-    return NextResponse.json({ ok: false, stage: 'retailers', status: retailers.response.status }, { status: 502 })
+  if (!retailers.ok) {
+    return NextResponse.json({ ok: false, stage: 'retailers', status: retailers.status }, { status: 502 })
   }
 
   const rawRetailers =
-    retailers.data?.Data?.Retailer ||
+    retailers.json?.Data?.Retailer ||
     retailers.data?.Data?.Retailers ||
     retailers.data?.Data?.retailers ||
     []
@@ -109,15 +97,16 @@ export async function GET() {
   let webhookVerified = false
 
   if (clientId) {
-    const webhook = await tochka(`/webhook/v1.0/${encodeURIComponent(clientId)}`, token, {
+    const webhook = await tochkaRequest(`/uapi/webhook/v1.0/${encodeURIComponent(clientId)}`, {
       method: 'PUT',
+      headers: tochkaAuthHeaders(token, true),
       body: JSON.stringify({
         webhooksList: ['acquiringInternetPayment'],
         url: WEBHOOK_URL,
       }),
     })
 
-    if (!webhook.response.ok) {
+    if (!webhook.ok) {
       await saveConfig({
         customerCode,
         merchantId,
@@ -134,14 +123,14 @@ export async function GET() {
         stage: 'webhook',
         customerConfigured: true,
         retailerConfigured: true,
-        status: webhook.response.status,
-        code: webhook.data?.code || webhook.data?.errorCode || null,
+        status: webhook.status,
+        code: webhook.json?.code || webhook.data?.errorCode || null,
       }, { status: 502 })
     }
 
     webhookConfigured = true
-    const verifyWebhook = await tochka(`/webhook/v1.0/${encodeURIComponent(clientId)}`, token)
-    webhookVerified = verifyWebhook.response.ok
+    const verifyWebhook = await tochkaRequest(`/uapi/webhook/v1.0/${encodeURIComponent(clientId)}`, { headers: tochkaAuthHeaders(token) })
+    webhookVerified = verifyWebhook.ok
   }
 
   const configValue = {
