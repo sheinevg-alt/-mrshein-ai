@@ -65,7 +65,7 @@ export default async function PayPage({ searchParams }: { searchParams: Promise<
           <Link href="/offer" className="underline underline-offset-4">Оферта</Link>
           <Link href="/privacy" className="underline underline-offset-4">Конфиденциальность</Link>
           <Link href="/refund" className="underline underline-offset-4">Возвраты</Link>
-          <Link href="/contacts" className="underline underline-offset-4">Контакты и реквизиты</Link>
+          <Link href="/contacts" className="underline underline-offset-4">Контакты</Link>
         </footer>
       </div>
     </main>
