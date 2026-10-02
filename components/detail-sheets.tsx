@@ -819,7 +819,9 @@ function TrendFlow({ trend, onGenerationStarted }: { trend: Trend; onGenerationS
             <span className="block text-xs text-muted-foreground">{
               trend.generateAudioLocked
                 ? (locale === 'ru' ? 'Для этого тренда звук отключён.' : 'Audio is disabled for this trend.')
-                : (locale === 'ru' ? 'Seedance создаст синхронный звук вместе с видео.' : 'Seedance will create synchronized audio with the video.')
+                : trend.sourceAudioMode === 'preserve_source'
+                  ? (locale === 'ru' ? 'Сохранить оригинальную музыку и звук тренда.' : 'Keep the trend’s original music and audio.')
+                  : (locale === 'ru' ? 'Seedance создаст синхронный звук вместе с видео.' : 'Seedance will create synchronized audio with the video.')
             }</span>
           </span>
           <span className={`relative h-7 w-12 shrink-0 rounded-full transition ${generateAudio ? 'bg-brand' : 'bg-muted'}`}>
