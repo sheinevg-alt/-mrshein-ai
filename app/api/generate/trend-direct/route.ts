@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server'
 import {
   createApiModelsSeedance25Task,
   registerApiModelsPortrait,
-  type ApiModelsResolution,
-} from '@/lib/server/apimodels'
+  type ApiModelsResolution,, createApiModelsCallbackToken } from '@/lib/server/apimodels'
 import {
   createStorageSignedDownloadUrl,
   hasDatabase,
@@ -164,7 +163,8 @@ export async function POST(request: Request) {
     ]
 
     const videoUrl = await createStorageSignedDownloadUrl(INPUT_BUCKET, sourceVideoPath, 7200)
-    const callbackUrl = `${new URL(request.url).origin}/api/generate/callback/apimodels?jobId=${encodeURIComponent(job.id)}`
+    const callbackToken = createApiModelsCallbackToken(job.id)
+    const callbackUrl = `${new URL(request.url).origin}/api/generate/callback/apimodels?jobId=${encodeURIComponent(job.id)}&token=${encodeURIComponent(callbackToken)}`
 
     await supabaseFetch(`generation_history?id=eq.${job.id}`, {
       method: 'PATCH',
