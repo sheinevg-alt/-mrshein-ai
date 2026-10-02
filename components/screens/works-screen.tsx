@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { AlertCircle, CheckCircle2, Clock3, Download, Expand, ExternalLink, FolderOpen, LoaderCircle, RefreshCw, RotateCcw } from 'lucide-react'
-import { getTelegramInitData, haptics } from '@/lib/telegram'
+import { getTelegramInitData, getWebApp, haptics, openExternalLink } from '@/lib/telegram'
 import { useI18n } from '../i18n-provider'
 import { useUserState, type HistoryItem } from '../user-provider'
 import type { UpscaleSource } from '../upscale-sheet'
@@ -137,37 +137,46 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
     if (!initData || !item.resultUrl) return
     setDownloadingId(item.id)
     setDownloadErrorId(null)
+
     try {
-      const response = await fetch(`/api/download?jobId=${encodeURIComponent(item.id)}`, {
+      const prepare = await fetch(`/api/download?prepare=1&jobId=${encodeURIComponent(item.id)}`, {
         headers: { 'X-Telegram-Init-Data': initData },
         cache: 'no-store',
       })
-      if (!response.ok) throw new Error(`DOWNLOAD_${response.status}`)
+      const data = await prepare.json().catch(() => ({}))
+      if (!prepare.ok || !data?.url || !data?.fileName) throw new Error('DOWNLOAD_PREPARE_FAILED')
 
-      const blob = await response.blob()
-      const video = isVideoUrl(item.resultUrl)
-      const ext = extensionForType(response.headers.get('content-type') || blob.type || '', video)
-      const filename = `Banana-Zero-${video ? 'video' : 'image'}-${item.id.slice(0, 8)}.${ext}`
-      const file = new File([blob], filename, { type: blob.type || response.headers.get('content-type') || undefined })
+      const app = getWebApp()
+      const supportsNativeDownload = Boolean(
+        app?.downloadFile &&
+        (!app.isVersionAtLeast || app.isVersionAtLeast('9.0')),
+      )
 
-      const shareNavigator = navigator as Navigator & {
-        canShare?: (data?: ShareData) => boolean
-        share?: (data: ShareData) => Promise<void>
-      }
-      const isAppleMobile = /iPad|iPhone|iPod/.test(navigator.userAgent)
-      if (isAppleMobile && shareNavigator.share && shareNavigator.canShare?.({ files: [file] })) {
-        await shareNavigator.share({ files: [file], title: filename })
+      if (supportsNativeDownload && app?.downloadFile) {
+        await new Promise<void>((resolve, reject) => {
+          let settled = false
+          const timeout = window.setTimeout(() => {
+            if (!settled) {
+              settled = true
+              reject(new Error('DOWNLOAD_DIALOG_TIMEOUT'))
+            }
+          }, 15_000)
+
+          app.downloadFile?.(
+            { url: String(data.url), file_name: String(data.fileName) },
+            (accepted) => {
+              if (settled) return
+              settled = true
+              window.clearTimeout(timeout)
+              if (accepted) resolve()
+              else reject(new Error('DOWNLOAD_DECLINED'))
+            },
+          )
+        })
       } else {
-        const objectUrl = URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = objectUrl
-        link.download = filename
-        link.style.display = 'none'
-        document.body.appendChild(link)
-        link.click()
-        link.remove()
-        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000)
+        openExternalLink(String(data.url))
       }
+
       haptics.success()
     } catch {
       setDownloadErrorId(item.id)
