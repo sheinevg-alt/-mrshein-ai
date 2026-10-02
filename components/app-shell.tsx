@@ -197,7 +197,7 @@ function InnerApp() {
         </main>
       </div>
 
-      {completionNotice && tab !== 'works' && (
+      {completionNotice && (
         <div className="fixed inset-x-0 z-50 mx-auto w-full max-w-md px-4" style={{ bottom: 'calc(var(--app-safe-bottom) + var(--nav-height) + 0.75rem)' }}>
           <div className="glass-strong flex items-center gap-3 rounded-2xl p-3 shadow-xl">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-700">
