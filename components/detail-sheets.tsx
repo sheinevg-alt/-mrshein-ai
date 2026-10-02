@@ -211,8 +211,7 @@ function ModelToolFlow({ tool, onGenerationStarted }: { tool: Tool; onGeneration
         <p className="text-sm font-semibold">{localize(tool.name, locale)}</p>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">{localize(tool.description, locale)}</p>
         <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
-          <span className="rounded-full bg-card px-2.5 py-1 font-semibold">APIMODELS</span>
-          <span className="rounded-full bg-card px-2.5 py-1">{locale === 'ru' ? 'Доступно всем' : 'Visible to everyone'}</span>
+          <span className="rounded-full bg-card px-2.5 py-1">{locale === 'ru' ? 'Доступно всем' : 'Available to everyone'}</span>
         </div>
       </div>
 
