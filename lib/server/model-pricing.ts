@@ -33,6 +33,12 @@ export function estimateProviderUsd(input: ToolQuoteInput) {
   const mode = String(input.mode || 'std').toLowerCase()
 
   switch (input.toolId) {
+    case 'video-upscale': {
+      const rate = resolution === '4k' ? 0.06 : resolution === '2k' ? 0.035 : resolution === '1080p' ? 0.03 : 0.02
+      return duration * rate
+    }
+    case 'image-upscale':
+      return 0.004
     case 'seedance-2-5':
       return duration * (resolution === '720p' ? 0.27 : 0.12)
     case 'omni-flash':
