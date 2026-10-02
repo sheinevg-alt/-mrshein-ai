@@ -111,14 +111,14 @@ export async function POST(request: Request) {
 
   const data = response.json
   if (!response.ok || !data?.Data?.paymentLink) {
-    if (hasDatabase()) await supabaseFetch(`payment_orders?id=eq.${orderId}`, { method: 'PATCH', body: JSON.stringify({ status: 'failed', metadata: { email, name, offer_version: '2026-10-02-v2', pricing_version: 'commercial_model_v4_slider', purchase_snapshot: { token_amount: tokenAmount, amount_rub: amount }, provider_error: data } }) })
+    if (hasDatabase()) await supabaseFetch(`payment_orders?id=eq.${orderId}`, { method: 'PATCH', body: JSON.stringify({ status: 'failed', metadata: { email, name, offer_version: '2026-10-02-v2', pricing_version: 'commercial_model_v4_slider', purchase_snapshot: { token_amount: tokenAmount, amount_rub: amount, regular_rub: quote.regularRub, discount_pct: quote.discountPct, savings_rub: quote.savingsRub }, provider_error: data } }) })
     return NextResponse.json({ error: 'Payment provider error' }, { status: 502 })
   }
 
   if (hasDatabase()) {
     await supabaseFetch(`payment_orders?id=eq.${orderId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ external_payment_id: data.Data.operationId, payment_method: 'payment_link', metadata: { email, name, offer_version: '2026-10-02-v2', pricing_version: 'commercial_model_v4_slider', purchase_snapshot: { token_amount: tokenAmount, amount_rub: amount }, payment_link_id: paymentLinkId } }),
+      body: JSON.stringify({ external_payment_id: data.Data.operationId, payment_method: 'payment_link', metadata: { email, name, offer_version: '2026-10-02-v2', pricing_version: 'commercial_model_v4_slider', purchase_snapshot: { token_amount: tokenAmount, amount_rub: amount, regular_rub: quote.regularRub, discount_pct: quote.discountPct, savings_rub: quote.savingsRub }, payment_link_id: paymentLinkId } }),
     })
   }
 
