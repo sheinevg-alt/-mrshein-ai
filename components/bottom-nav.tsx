@@ -1,15 +1,16 @@
 'use client'
 
-import { Clapperboard, Flame, Heart, Sparkles, User, type LucideIcon } from 'lucide-react'
+import { Clapperboard, Flame, Heart, Sparkles, User, WalletCards, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useI18n } from './i18n-provider'
 
-export type TabId = 'trends' | 'create' | 'works' | 'favorites' | 'profile'
+export type TabId = 'trends' | 'create' | 'works' | 'pricing' | 'favorites' | 'profile'
 
 const items: { id: TabId; en: string; ru: string; icon: LucideIcon }[] = [
   { id: 'trends', en: 'Trends', ru: 'Тренды', icon: Flame },
   { id: 'create', en: 'Create', ru: 'Создать', icon: Sparkles },
   { id: 'works', en: 'My works', ru: 'Мои работы', icon: Clapperboard },
+  { id: 'pricing', en: 'Pricing', ru: 'Тарифы', icon: WalletCards },
   { id: 'favorites', en: 'Favorites', ru: 'Избранное', icon: Heart },
   { id: 'profile', en: 'Profile', ru: 'Профиль', icon: User },
 ]
@@ -26,7 +27,7 @@ export function BottomNav({ active, onChange, worksBadge = false }: {
       className="glass-strong fixed inset-x-0 bottom-0 z-40 border-x-0 border-b-0"
       style={{ paddingBottom: 'var(--app-safe-bottom)' }}
     >
-      <ul className="mx-auto grid h-[var(--nav-height)] w-full max-w-md grid-cols-5">
+      <ul className="mx-auto grid h-[var(--nav-height)] w-full max-w-md grid-cols-6">
         {items.map(({ id, en, ru, icon: Icon }) => {
           const isActive = active === id
           return (

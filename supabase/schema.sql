@@ -418,9 +418,9 @@ values (
       {"tokens":2000,"price_rub":5000}
     ],
     "plans":[
-      {"code":"beginner","name":"Beginner","period_days":30,"price_rub":1490,"included_tokens":630,"topup_discount_pct":5},
-      {"code":"creator","name":"Creator","period_days":30,"price_rub":2990,"included_tokens":1330,"topup_discount_pct":10},
-      {"code":"professional","name":"Professional","period_days":30,"price_rub":4990,"included_tokens":2350,"topup_discount_pct":15}
+      {"code":"beginner","name":"Beginner","period_days":30,"price_rub":1490,"regular_value_rub":1650,"included_tokens":660,"discount_pct":10,"discount_is_already_applied":true},
+      {"code":"creator","name":"Creator","period_days":30,"price_rub":2990,"regular_value_rub":3525,"included_tokens":1410,"discount_pct":15,"discount_is_already_applied":true},
+      {"code":"professional","name":"Professional","period_days":30,"price_rub":4990,"regular_value_rub":6250,"included_tokens":2500,"discount_pct":20,"discount_is_already_applied":true}
     ],
     "pricing_rule":{"usd_rub":90,"provider_cost_multiplier":3.1,"token_reference_value_rub":2.5,"round_generation_tokens_to":5,"tax_pct":7,"payment_and_fiscal_reserve_pct":5}
   }'::jsonb,

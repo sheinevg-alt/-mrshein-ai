@@ -2,22 +2,17 @@
 
 import { useMemo, useState } from 'react'
 import { CreditCard, QrCode, ShieldCheck } from 'lucide-react'
+import { PUBLIC_TOKEN_PACKS } from '@/lib/public-pricing'
 
-const PACKS = [
-  { tokens: 200, rub: 500, label: '200 Tokens' },
-  { tokens: 500, rub: 1250, label: '500 Tokens', featured: true },
-  { tokens: 1000, rub: 2500, label: '1 000 Tokens' },
-  { tokens: 2000, rub: 5000, label: '2 000 Tokens' },
-]
-
-export function PaymentForm({ enabled }: { enabled: boolean }) {
-  const [selected, setSelected] = useState(500)
+export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean; initialTokens?: number }) {
+  const initialIndex = Math.max(0, PUBLIC_TOKEN_PACKS.findIndex((item) => item.tokens === initialTokens))
+  const [packIndex, setPackIndex] = useState(initialIndex)
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  const pack = useMemo(() => PACKS.find((item) => item.tokens === selected) || PACKS[1], [selected])
+  const pack = useMemo(() => PUBLIC_TOKEN_PACKS[packIndex] || PUBLIC_TOKEN_PACKS[1], [packIndex])
 
   async function checkout() {
     setError('')
@@ -48,25 +43,30 @@ export function PaymentForm({ enabled }: { enabled: boolean }) {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" id="tokens">
       <div>
         <p className="text-sm font-semibold">Разовая покупка Tokens</p>
-        <p className="mt-1 text-xs text-muted-foreground">Тариф не требуется. Разовые пакеты доступны отдельно от тарифов. Купленные Tokens не сгорают, пока аккаунт активен.</p>
+        <p className="mt-1 text-xs text-muted-foreground">Без тарифа и без подписки. Выберите количество Tokens бегунком.</p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {PACKS.map((item) => (
-          <button
-            key={item.tokens}
-            type="button"
-            onClick={() => setSelected(item.tokens)}
-            className={`rounded-3xl border p-4 text-left transition ${selected === item.tokens ? 'border-brand bg-brand-tint shadow-sm' : 'bg-card'}`}
-          >
-            <p className="text-sm font-semibold">{item.label}</p>
-            <p className="mt-1 text-2xl font-bold">{item.rub.toLocaleString('ru-RU')} ₽</p>
-            {item.featured && <p className="mt-1 text-xs text-brand">Популярный пакет</p>}
-          </button>
-        ))}
+      <div className="rounded-3xl border bg-card p-5">
+        <div className="text-center">
+          <p className="text-3xl font-black">{pack.tokens.toLocaleString('ru-RU')} Tokens</p>
+          <p className="mt-1 text-xl font-semibold">{pack.priceRub.toLocaleString('ru-RU')} ₽</p>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={PUBLIC_TOKEN_PACKS.length - 1}
+          step={1}
+          value={packIndex}
+          onChange={(event) => setPackIndex(Number(event.target.value))}
+          className="mt-5 w-full"
+          aria-label="Количество Tokens"
+        />
+        <div className="mt-2 flex justify-between text-[10px] text-muted-foreground">
+          {PUBLIC_TOKEN_PACKS.map((item) => <span key={item.tokens}>{item.tokens}</span>)}
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -87,7 +87,7 @@ export function PaymentForm({ enabled }: { enabled: boolean }) {
       </div>
 
       <button type="button" onClick={() => void checkout()} disabled={busy} className="brand-gradient h-12 w-full rounded-full font-semibold text-white disabled:opacity-50">
-        {busy ? 'Создаём платёж…' : `Оплатить ${pack.rub.toLocaleString('ru-RU')} ₽`}
+        {busy ? 'Создаём платёж…' : `Оплатить ${pack.priceRub.toLocaleString('ru-RU')} ₽`}
       </button>
       {error && <p className="text-center text-sm text-destructive">{error}</p>}
       <p className="text-center text-xs text-muted-foreground">После подтверждения оплаты Tokens зачисляются на баланс Banana Zero.</p>
