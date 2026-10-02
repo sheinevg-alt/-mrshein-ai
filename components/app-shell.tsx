@@ -143,6 +143,7 @@ function InnerApp() {
   }
 
   function openWorksAfterGeneration() {
+    setUpscaleSource(null)
     setRepeatJobId(null)
     setSeedanceOpen(false)
     setActiveTool(null)
