@@ -357,13 +357,14 @@ export async function createApiModelsGeminiOmniFlashTask(params: {
   firstFrameUrl?: string
   lastFrameUrl?: string
   references?: string[]
+  sourceVideoUrl?: string
   callbackUrl?: string
 }) {
   const references = (params.references || []).filter(Boolean).slice(0, 7)
   if (params.lastFrameUrl && !params.firstFrameUrl) {
     throw new Error('OMNI_LAST_FRAME_REQUIRES_FIRST_FRAME')
   }
-  if ((params.firstFrameUrl || params.lastFrameUrl) && references.length > 0) {
+  if ((params.firstFrameUrl || params.lastFrameUrl) && (references.length > 0 || params.sourceVideoUrl)) {
     throw new Error('OMNI_KEYFRAMES_CANNOT_COMBINE_WITH_REFERENCES')
   }
 
@@ -376,6 +377,49 @@ export async function createApiModelsGeminiOmniFlashTask(params: {
     ...(params.firstFrameUrl ? { first_frame_url: params.firstFrameUrl } : {}),
     ...(params.lastFrameUrl ? { last_frame_url: params.lastFrameUrl } : {}),
     ...(references.length ? { images: references } : {}),
+    ...(params.sourceVideoUrl ? { video_list: [{ url: params.sourceVideoUrl }] } : {}),
+    ...(params.callbackUrl ? { callback_url: params.callbackUrl } : {}),
+  })
+}
+
+export async function createApiModelsKlingOmniTask(params: {
+  promptText: string
+  duration: number
+  ratio: string
+  imageUrls?: string[]
+  sourceVideoUrl?: string
+  keepOriginalSound?: boolean
+  generateAudio?: boolean
+  callbackUrl?: string
+}) {
+  const imageUrls = (params.imageUrls || []).filter(Boolean).slice(0, 4)
+  return createTask({
+    model: 'kling-v3-omni',
+    prompt: params.promptText,
+    duration: String(Math.max(3, Math.min(15, Math.round(params.duration)))),
+    aspect_ratio: params.ratio,
+    sound: params.generateAudio ? 'on' : 'off',
+    ...(imageUrls.length ? { image_list: imageUrls.map((image_url) => ({ image_url, type: 'first_frame' })) } : {}),
+    ...(params.sourceVideoUrl
+      ? { video_list: [{ video_url: params.sourceVideoUrl, refer_type: 'base', keep_original_sound: params.keepOriginalSound === false ? 'no' : 'yes' }] }
+      : {}),
+    ...(params.callbackUrl ? { callback_url: params.callbackUrl } : {}),
+  })
+}
+
+export async function createApiModelsKlingMotionControlTask(params: {
+  imageUrl: string
+  motionVideoUrl: string
+  resolution?: '720p' | '1080p'
+  characterOrientation?: 'video' | 'image'
+  callbackUrl?: string
+}) {
+  return createTask({
+    model: 'kling-motion-control',
+    input_urls: [params.imageUrl],
+    video_urls: [params.motionVideoUrl],
+    mode: params.resolution || '720p',
+    character_orientation: params.characterOrientation || 'video',
     ...(params.callbackUrl ? { callback_url: params.callbackUrl } : {}),
   })
 }
