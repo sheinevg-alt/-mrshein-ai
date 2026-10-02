@@ -281,6 +281,7 @@ export async function createApiModelsSeedance25Task(params: {
   ratio: string
   references: string[]
   videoReferences?: string[]
+  audioReferences?: string[]
   resolution?: ApiModelsResolution
   generateAudio?: boolean
   callbackUrl?: string
@@ -295,7 +296,8 @@ export async function createApiModelsSeedance25Task(params: {
     output_format: 'mp4',
     task_type: 'generate',
     reference_image_urls: params.references,
-    reference_video_urls: params.videoReferences || [],
+    reference_video_urls: (params.videoReferences || []).slice(0, 10),
+    reference_audio_urls: (params.audioReferences || []).slice(0, 10),
     ...(params.callbackUrl ? { callback_url: params.callbackUrl } : {}),
   })
 }
