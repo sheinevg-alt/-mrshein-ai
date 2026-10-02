@@ -167,11 +167,13 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
 
             const blob = await response.blob()
             const video = isVideoUrl(item.resultUrl || '')
-            const ext = extensionForType(response.headers.get('content-type') || blob.type || '', video)
+            const detectedType = response.headers.get('content-type') || blob.type || ''
+            const ext = extensionForType(detectedType, video)
             const filename = `Banana-Zero-${video ? 'video' : 'image'}-${item.id.slice(0, 8)}.${ext}`
-            const file = new File([blob], filename, {
-              type: blob.type || response.headers.get('content-type') || undefined,
-            })
+            const mediaType = video
+              ? (ext === 'webm' ? 'video/webm' : ext === 'mov' ? 'video/quicktime' : 'video/mp4')
+              : (detectedType.startsWith('image/') ? detectedType : 'image/png')
+            const file = new File([blob], filename, { type: mediaType })
 
             if (shareNavigator.canShare?.({ files: [file] })) {
               await shareNavigator.share({ files: [file], title: filename })
