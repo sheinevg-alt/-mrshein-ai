@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer'
+import { hasAppAccess } from '@/lib/server/access-control'
 import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { createApiModelsSeedance25Task, type ApiModelsResolution, createApiModelsCallbackToken } from '@/lib/server/apimodels'
@@ -109,6 +110,7 @@ export async function POST(request: Request) {
   const user = verifyTelegramInitData(request.headers.get('x-telegram-init-data') || '')
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!hasDatabase()) return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+  if (!(await hasAppAccess(user.id))) return NextResponse.json({ error: 'CLOSED_BETA' }, { status: 403 })
 
   const { form, body, trendId, generateAudio, resolution: requestedResolution } = await readRequest(request)
   const resolution: BytePlusResolution = requestedResolution === '1080p' ? '1080p' : requestedResolution === '720p' ? '720p' : '480p'
