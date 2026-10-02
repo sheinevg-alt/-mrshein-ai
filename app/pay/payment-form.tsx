@@ -1,19 +1,18 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { CreditCard, QrCode, ShieldCheck } from 'lucide-react'
-import { PUBLIC_TOKEN_PACKS } from '@/lib/public-pricing'
+import { TOKEN_PURCHASE_MAX, TOKEN_PURCHASE_MIN, TOKEN_PURCHASE_STEP, getTokenPurchaseQuote, normalizeTokenPurchaseAmount } from '@/lib/public-pricing'
 import { getTelegramInitData } from '@/lib/telegram'
 
 export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean; initialTokens?: number }) {
-  const initialIndex = Math.max(0, PUBLIC_TOKEN_PACKS.findIndex((item) => item.tokens === initialTokens))
-  const [packIndex, setPackIndex] = useState(initialIndex)
+  const [tokenAmount, setTokenAmount] = useState(normalizeTokenPurchaseAmount(initialTokens))
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  const pack = useMemo(() => PUBLIC_TOKEN_PACKS[packIndex] || PUBLIC_TOKEN_PACKS[1], [packIndex])
+  const pack = getTokenPurchaseQuote(tokenAmount)
 
   async function checkout() {
     setError('')
@@ -56,20 +55,30 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
       <div className="rounded-3xl border bg-card p-5">
         <div className="text-center">
           <p className="text-3xl font-black">{pack.tokens.toLocaleString('ru-RU')} Tokens</p>
-          <p className="mt-1 text-xl font-semibold">{pack.priceRub.toLocaleString('ru-RU')} ₽</p>
+          <div className="mt-1 flex items-center justify-center gap-2">
+            {pack.discountPct > 0 && <span className="text-sm text-muted-foreground line-through">{pack.regularRub.toLocaleString('ru-RU')} ₽</span>}
+            <span className="text-xl font-black">{pack.priceRub.toLocaleString('ru-RU')} ₽</span>
+            {pack.discountPct > 0 && <span className="rounded-full bg-emerald-500/12 px-2 py-1 text-[11px] font-black text-emerald-700">−{pack.discountPct}%</span>}
+          </div>
+          {pack.savingsRub > 0 && <p className="mt-1 text-xs font-medium text-emerald-700">Экономия {pack.savingsRub.toLocaleString('ru-RU')} ₽</p>}
         </div>
         <input
           type="range"
-          min={0}
-          max={PUBLIC_TOKEN_PACKS.length - 1}
-          step={1}
-          value={packIndex}
-          onChange={(event) => setPackIndex(Number(event.target.value))}
+          min={TOKEN_PURCHASE_MIN}
+          max={TOKEN_PURCHASE_MAX}
+          step={TOKEN_PURCHASE_STEP}
+          value={tokenAmount}
+          onChange={(event) => setTokenAmount(Number(event.target.value))}
           className="mt-5 w-full"
           aria-label="Количество Tokens"
         />
         <div className="mt-2 flex justify-between text-[10px] text-muted-foreground">
-          {PUBLIC_TOKEN_PACKS.map((item) => <span key={item.tokens}>{item.tokens}</span>)}
+          <span>200</span><span>1000</span><span>2000</span><span>3000</span>
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[10px]">
+          <span className={tokenAmount >= 1000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>1000+ · −8%</span>
+          <span className={tokenAmount >= 2000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>2000+ · −10%</span>
+          <span className={tokenAmount >= 3000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>3000 · −13%</span>
         </div>
       </div>
 
