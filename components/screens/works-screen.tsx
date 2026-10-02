@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, CheckCircle2, Clock3, Download, ExternalLink, FolderOpen, LoaderCircle, RefreshCw, RotateCcw } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Clock3, Download, Expand, ExternalLink, FolderOpen, LoaderCircle, RefreshCw, RotateCcw } from 'lucide-react'
 import { getTelegramInitData, haptics } from '@/lib/telegram'
 import { useI18n } from '../i18n-provider'
 import { useUserState, type HistoryItem } from '../user-provider'
+import type { UpscaleSource } from '../upscale-sheet'
 
 function isVideoUrl(url: string) {
   return /\.(mp4|webm|mov)(\?|$)/i.test(url) || url.includes('/Video/') || url.includes('cloudfront.net') || url.includes('/videos/')
@@ -64,7 +65,7 @@ function failureCopy(item: HistoryItem, locale: 'en' | 'ru') {
     : 'The service could not finish the generation. You can try again.'
 }
 
-export function WorksScreen({ onRepeatGeneration }: { onRepeatGeneration?: (jobId: string) => void }) {
+export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGeneration?: (jobId: string) => void; onUpscale?: (source: UpscaleSource) => void }) {
   const { locale } = useI18n()
   const { history, refreshUser, markWorksSeen } = useUserState()
   const [refreshing, setRefreshing] = useState(false)
@@ -72,6 +73,7 @@ export function WorksScreen({ onRepeatGeneration }: { onRepeatGeneration?: (jobI
   const [downloadErrorId, setDownloadErrorId] = useState<string | null>(null)
   const [retryingId, setRetryingId] = useState<string | null>(null)
   const [retryErrorId, setRetryErrorId] = useState<string | null>(null)
+  const [mediaInfo, setMediaInfo] = useState<Record<string, { width: number; height: number; duration: number }>>({})
 
   const visibleHistory = useMemo(() => history.filter((item) => {
     if (item.status !== 'failed') return true
@@ -278,12 +280,50 @@ export function WorksScreen({ onRepeatGeneration }: { onRepeatGeneration?: (jobI
                   <div className="mt-3">
                     <div className="overflow-hidden rounded-2xl border bg-black">
                       {video ? (
-                        <video src={item.resultUrl} controls playsInline preload="metadata" className="max-h-[58dvh] w-full object-contain" />
+                        <video
+                          src={item.resultUrl}
+                          controls
+                          playsInline
+                          preload="metadata"
+                          className="max-h-[58dvh] w-full object-contain"
+                          onLoadedMetadata={(event) => {
+                            const el = event.currentTarget
+                            setMediaInfo((current) => ({
+                              ...current,
+                              [item.id]: {
+                                width: el.videoWidth || 0,
+                                height: el.videoHeight || 0,
+                                duration: el.duration || 0,
+                              },
+                            }))
+                          }}
+                        />
                       ) : (
                         // eslint-disable-next-line @next/next/no-img-element -- generated remote result
-                        <img src={item.resultUrl} alt="Generated result" className="w-full object-contain" />
+                        <img
+                          src={item.resultUrl}
+                          alt="Generated result"
+                          className="w-full object-contain"
+                          onLoad={(event) => {
+                            setMediaInfo((current) => ({
+                              ...current,
+                              [item.id]: {
+                                width: event.currentTarget.naturalWidth,
+                                height: event.currentTarget.naturalHeight,
+                                duration: 0,
+                              },
+                            }))
+                          }}
+                        />
                       )}
                     </div>
+                    {mediaInfo[item.id]?.width > 0 && mediaInfo[item.id]?.height > 0 && (
+                      <p className="mt-2 text-center text-[11px] font-medium text-muted-foreground">
+                        {mediaInfo[item.id].width}×{mediaInfo[item.id].height}
+                        {video && mediaInfo[item.id].duration > 0 ? ` · ${mediaInfo[item.id].duration.toFixed(1)} сек` : ''}
+                      </p>
+                    )}
+                    <div className={onUpscale ? "mt-2 grid grid-cols-2 gap-2" : "mt-2"}>
                     <button
                       type="button"
                       onClick={() => void downloadResult(item)}
@@ -297,6 +337,25 @@ export function WorksScreen({ onRepeatGeneration }: { onRepeatGeneration?: (jobI
                           ? (locale === 'ru' ? 'Скачать видео' : 'Download video')
                           : (locale === 'ru' ? 'Скачать изображение' : 'Download image')}
                     </button>
+                    {onUpscale && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          haptics.impact('light')
+                          onUpscale({
+                            mediaType: video ? 'video' : 'image',
+                            jobId: item.id,
+                            url: item.resultUrl || undefined,
+                            duration: mediaInfo[item.id]?.duration || undefined,
+                          })
+                        }}
+                        className="flex h-11 items-center justify-center gap-2 rounded-full border border-brand/25 bg-brand-tint/60 text-sm font-semibold text-brand transition active:scale-[0.98]"
+                      >
+                        <Expand className="size-4" />
+                        {locale === 'ru' ? 'Улучшить' : 'Upscale'}
+                      </button>
+                    )}
+                    </div>
                     <a
                       href={item.resultUrl}
                       target="_blank"
