@@ -7,6 +7,8 @@ import {
   createApiModelsElevenTts,
   createApiModelsGeminiOmniFlashTask,
   createApiModelsImageTask,
+  createApiModelsKlingMotionControlTask,
+  createApiModelsKlingOmniTask,
   createApiModelsKlingTask,
 } from '@/lib/server/apimodels'
 import { quoteTokens } from '@/lib/server/model-pricing'
@@ -47,7 +49,8 @@ export async function POST(request: Request) {
   if (toolId === 'seedance-2-5') return NextResponse.json({ error: 'USE_SEEDANCE_WORKSPACE' }, { status: 400 })
 
   const prompt = String(payload.prompt || '').trim()
-  if (prompt.length < 2) return NextResponse.json({ error: 'PROMPT_REQUIRED' }, { status: 400 })
+  const promptOptional = toolId === 'kling-motion-control'
+  if (!promptOptional && prompt.length < 2) return NextResponse.json({ error: 'PROMPT_REQUIRED' }, { status: 400 })
   if (prompt.length > 12_000) return NextResponse.json({ error: 'PROMPT_TOO_LONG' }, { status: 400 })
 
   const settings = payload.settings && typeof payload.settings === 'object' ? payload.settings : {}
@@ -177,12 +180,15 @@ export async function POST(request: Request) {
     let kind: 'video' | 'image' | 'audio' = 'video'
 
     if (toolId === 'omni-flash') {
+      const omniMode = String(settings.omniMode || 'text')
       task = await createApiModelsGeminiOmniFlashTask({
         promptText: prompt,
         duration: ([4,6,8,10].includes(duration) ? duration : 4) as 4 | 6 | 8 | 10,
         ratio: String(settings.ratio || '9:16') === '16:9' ? '16:9' : '9:16',
         resolution: (['720p','1080p','4k'].includes(resolution) ? resolution : '720p') as '720p' | '1080p' | '4k',
-        firstFrameUrl: references[0],
+        ...(omniMode === 'keyframes' ? { firstFrameUrl: references[0], lastFrameUrl: references[1] } : {}),
+        ...(omniMode === 'references' ? { references } : {}),
+        ...(omniMode === 'video-edit' && sourceVideoUrl ? { sourceVideoUrl } : {}),
         callbackUrl,
       })
     } else if (toolId === 'kling-v3') {
@@ -194,6 +200,26 @@ export async function POST(request: Request) {
         imageUrl: references[0],
         mode: mode === 'pro' ? 'pro' : 'std',
         generateAudio,
+        callbackUrl,
+      })
+    } else if (toolId === 'kling-v3-omni') {
+      task = await createApiModelsKlingOmniTask({
+        promptText: prompt,
+        duration,
+        ratio: String(settings.ratio || '9:16'),
+        imageUrls: references,
+        sourceVideoUrl: sourceVideoUrl || undefined,
+        keepOriginalSound: settings.keepOriginalSound !== false,
+        generateAudio,
+        callbackUrl,
+      })
+    } else if (toolId === 'kling-motion-control') {
+      if (!references[0] || !sourceVideoUrl) throw new Error('MOTION_INPUTS_REQUIRED')
+      task = await createApiModelsKlingMotionControlTask({
+        imageUrl: references[0],
+        motionVideoUrl: sourceVideoUrl,
+        resolution: resolution === '1080p' ? '1080p' : '720p',
+        characterOrientation: String(settings.characterOrientation || 'video') === 'image' ? 'image' : 'video',
         callbackUrl,
       })
     } else if (tool.category === 'image') {
