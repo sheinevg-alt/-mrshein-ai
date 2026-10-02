@@ -63,7 +63,6 @@ export function UpscaleSheet({
   const [scale, setScale] = useState<2 | 4>(2)
   const [faceEnhance, setFaceEnhance] = useState(false)
   const [quotedTokens, setQuotedTokens] = useState<number | null>(null)
-  const [providerUsd, setProviderUsd] = useState<number | null>(null)
   const [generating, setGenerating] = useState(false)
   const [message, setMessage] = useState('')
 
@@ -91,7 +90,6 @@ export function UpscaleSheet({
     const initData = getTelegramInitData()
     if (!initData || !ready) {
       setQuotedTokens(null)
-      setProviderUsd(null)
       return
     }
     if (mediaType === 'video' && duration <= 0) return
@@ -114,7 +112,6 @@ export function UpscaleSheet({
         const data = await response.json().catch(() => ({}))
         if (!cancelled && response.ok) {
           setQuotedTokens(Number(data.tokenCost || 0))
-          setProviderUsd(Number(data.providerUsd || 0))
         }
       }).catch(() => undefined)
     }, 180)
@@ -302,7 +299,6 @@ export function UpscaleSheet({
         <div>
           <p className="text-xs text-muted-foreground">{locale === 'ru' ? 'Стоимость' : 'Price'}</p>
           <p className="mt-0.5 text-lg font-black">{quotedTokens == null ? '…' : `${quotedTokens} Tokens`}</p>
-          {providerUsd != null && providerUsd > 0 && <p className="text-[10px] text-muted-foreground">provider ≈ {`${providerUsd.toFixed(3)}`}</p>}
         </div>
         <div className="text-right">
           <p className="text-xs text-muted-foreground">{locale === 'ru' ? 'Баланс' : 'Balance'}</p>
