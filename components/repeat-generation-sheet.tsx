@@ -22,6 +22,8 @@ type RepeatTemplate = {
   aspectRatio: string
   generateAudio: boolean
   referenceTags: string[]
+  inputsExpired: boolean
+  inputRetentionDays: number
   sourceVideo: {
     path: string
     url: string
@@ -75,6 +77,7 @@ export function RepeatGenerationSheet({
   const [template, setTemplate] = useState<RepeatTemplate | null>(null)
   const [prompt, setPrompt] = useState('')
   const [replacements, setReplacements] = useState<Record<number, Replacement>>({})
+  const [sourceVideoReplacement, setSourceVideoReplacement] = useState<Replacement | null>(null)
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -94,6 +97,7 @@ export function RepeatGenerationSheet({
       setTemplate(null)
       setPrompt('')
       setReplacements({})
+      setSourceVideoReplacement(null)
       setMessage('')
       setCopied(false)
       return
@@ -111,6 +115,7 @@ export function RepeatGenerationSheet({
     setCopied(false)
     setTemplate(null)
     setReplacements({})
+    setSourceVideoReplacement(null)
 
     fetch(`/api/generate/repeat?jobId=${encodeURIComponent(jobId)}`, {
       headers: { 'X-Telegram-Init-Data': initData },
@@ -140,6 +145,21 @@ export function RepeatGenerationSheet({
   }, [jobId, locale])
 
   const changedCount = useMemo(() => Object.keys(replacements).length, [replacements])
+
+  function handleSourceVideoReplacement(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('video/')) {
+      setMessage(locale === 'ru' ? 'Нужен видеофайл.' : 'Choose a video file.')
+      return
+    }
+    const url = URL.createObjectURL(file)
+    objectUrls.current.push(url)
+    setSourceVideoReplacement({ file, url })
+    setMessage('')
+    haptics.impact('light')
+  }
 
   function handleReplacement(index: number, event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
@@ -177,6 +197,10 @@ export function RepeatGenerationSheet({
     setMessage(locale === 'ru' ? 'Клонирую успешную конфигурацию…' : 'Cloning the successful configuration…')
 
     try {
+      const sourceVideoPath = sourceVideoReplacement
+        ? await uploadInputFile(sourceVideoReplacement.file, initData)
+        : template.sourceVideo.path
+
       const referencePaths = await Promise.all(
         template.references.map(async (reference, index) => {
           const replacement = replacements[index]
@@ -193,6 +217,7 @@ export function RepeatGenerationSheet({
         body: JSON.stringify({
           jobId: template.jobId,
           prompt,
+          sourceVideoPath,
           referencePaths,
         }),
       })
@@ -223,24 +248,45 @@ export function RepeatGenerationSheet({
 
       {!loading && template && (
         <>
-          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/8 p-4">
-            <p className="flex items-center gap-2 text-sm font-semibold text-emerald-700">
+          <div className={`rounded-2xl border p-4 ${template.inputsExpired ? 'border-amber-500/25 bg-amber-500/8' : 'border-emerald-500/20 bg-emerald-500/8'}`}>
+            <p className={`flex items-center gap-2 text-sm font-semibold ${template.inputsExpired ? 'text-amber-800' : 'text-emerald-700'}`}>
               <Check className="size-4" />
-              {locale === 'ru' ? 'Это точная конфигурация выбранного готового видео' : 'This is the exact configuration of the selected completed video'}
+              {template.inputsExpired
+                ? (locale === 'ru' ? 'Промпт и настройки сохранены, исходники уже очищены' : 'Prompt and settings are saved, source media has expired')
+                : (locale === 'ru' ? 'Это точная конфигурация выбранного готового видео' : 'This is the exact configuration of the selected completed video')}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {locale === 'ru'
-                ? 'Исходное видео, порядок референсов, длительность, качество, формат и звук сохранены из истории.'
-                : 'Source video, reference order, duration, quality, aspect ratio, and sound are loaded from history.'}
+              {template.inputsExpired
+                ? (locale === 'ru'
+                    ? `Исходные файлы хранятся до ${template.inputRetentionDays} дней. Чтобы повторить генерацию, загрузите исходное видео и референсы заново — промпт, порядок @Image, длительность, качество, формат и звук уже сохранены.`
+                    : `Source files are kept for up to ${template.inputRetentionDays} days. Re-upload the source video and references; prompt, @Image order, duration, quality, aspect ratio, and audio settings are preserved.`)
+                : (locale === 'ru'
+                    ? 'Исходное видео, порядок референсов, длительность, качество, формат и звук сохранены из истории.'
+                    : 'Source video, reference order, duration, quality, aspect ratio, and sound are loaded from history.')}
             </p>
           </div>
 
           <section className="mt-4 rounded-2xl border bg-card p-3">
             <div className="flex items-center gap-2">
               <Video className="size-4 text-brand" />
-              <p className="text-sm font-semibold">{template.sourceVideo.label} · {locale === 'ru' ? 'тот же исходник' : 'same source'}</p>
+              <p className="text-sm font-semibold">{template.sourceVideo.label} · {template.inputsExpired ? (locale === 'ru' ? 'загрузите заново' : 're-upload required') : (locale === 'ru' ? 'тот же исходник' : 'same source')}</p>
             </div>
-            <video src={template.sourceVideo.url} controls muted playsInline preload="metadata" className="mt-3 max-h-64 w-full rounded-xl bg-black object-contain" />
+            {(sourceVideoReplacement?.url || template.sourceVideo.url) ? (
+              <video src={sourceVideoReplacement?.url || template.sourceVideo.url} controls muted playsInline preload="metadata" className="mt-3 max-h-64 w-full rounded-xl bg-black object-contain" />
+            ) : (
+              <div className="mt-3 flex min-h-36 items-center justify-center rounded-xl border border-dashed bg-muted/30 text-xs text-muted-foreground">
+                {locale === 'ru' ? 'Исходное видео удалено из временного хранилища' : 'Source video removed from temporary storage'}
+              </div>
+            )}
+            <input id="repeat-source-video" type="file" accept="video/mp4,video/quicktime" className="sr-only" onChange={handleSourceVideoReplacement} />
+            <label htmlFor="repeat-source-video" className="mt-3 flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border bg-background px-3 text-xs font-semibold text-brand transition active:scale-[0.98]">
+              <Video className="size-3.5" />
+              {sourceVideoReplacement
+                ? (locale === 'ru' ? 'Заменить видео' : 'Replace video')
+                : template.inputsExpired
+                  ? (locale === 'ru' ? 'Загрузить исходное видео' : 'Upload source video')
+                  : (locale === 'ru' ? 'Заменить исходное видео' : 'Replace source video')}
+            </label>
           </section>
 
           <section className="mt-5">
@@ -289,9 +335,13 @@ export function RepeatGenerationSheet({
           <section className="mt-5">
             <p className="text-sm font-semibold">{locale === 'ru' ? 'Референсы из успешной генерации' : 'References from the successful generation'}</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {locale === 'ru'
-                ? 'Оставьте как есть или замените только нужное фото. Порядок @Image сохраняется.'
-                : 'Keep them or replace only the photo you need. @Image order is preserved.'}
+              {template.inputsExpired
+                ? (locale === 'ru'
+                    ? 'Порядок @Image сохранён, но сами файлы уже удалены. Загрузите каждый референс заново.'
+                    : 'The @Image order is preserved, but the files have expired. Re-upload each reference.')
+                : (locale === 'ru'
+                    ? 'Оставьте как есть или замените только нужное фото. Порядок @Image сохраняется.'
+                    : 'Keep them or replace only the photo you need. @Image order is preserved.')}
             </p>
 
             <div className="mt-3 grid gap-3">
@@ -306,14 +356,22 @@ export function RepeatGenerationSheet({
                         <p className="text-[11px] text-muted-foreground">
                           {replacement
                             ? (locale === 'ru' ? 'Будет использовано новое фото' : 'New photo will be used')
-                            : (locale === 'ru' ? 'Исходное фото из успешного видео' : 'Original photo from the successful video')}
+                            : template.inputsExpired
+                              ? (locale === 'ru' ? 'Исходник удалён — загрузите фото заново' : 'Original expired — re-upload this photo')
+                              : (locale === 'ru' ? 'Исходное фото из успешного видео' : 'Original photo from the successful video')}
                         </p>
                       </div>
                       {replacement && <span className="rounded-full bg-brand-tint px-2.5 py-1 text-[11px] font-semibold text-brand">{locale === 'ru' ? 'Заменено' : 'Changed'}</span>}
                     </div>
 
                     <div className="mt-3 flex items-center gap-3">
-                      <img src={replacement?.url || reference.url} alt={reference.label} className="size-24 rounded-xl border object-cover" />
+                      {(replacement?.url || reference.url) ? (
+                        <img src={replacement?.url || reference.url} alt={reference.label} className="size-24 rounded-xl border object-cover" />
+                      ) : (
+                        <div className="flex size-24 items-center justify-center rounded-xl border border-dashed bg-muted/30 text-center text-[10px] text-muted-foreground">
+                          {locale === 'ru' ? 'Нужно загрузить' : 'Upload required'}
+                        </div>
+                      )}
                       <div className="min-w-0 flex-1">
                         <input
                           id={inputId}
@@ -358,13 +416,15 @@ export function RepeatGenerationSheet({
           <button
             type="button"
             onClick={() => void generate()}
-            disabled={generating || prompt.trim().length < 5}
+            disabled={generating || prompt.trim().length < 5 || (template.inputsExpired && (!sourceVideoReplacement || changedCount !== template.references.length))}
             className="brand-gradient mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-white transition active:scale-[0.98] disabled:opacity-45"
           >
             {generating ? <LoaderCircle className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
             {generating
               ? (locale === 'ru' ? 'Запускаю…' : 'Starting…')
-              : (locale === 'ru' ? 'Создать с этой конфигурацией' : 'Generate with this configuration')}
+              : template.inputsExpired
+                ? (locale === 'ru' ? 'Создать с новыми исходниками' : 'Generate with new source media')
+                : (locale === 'ru' ? 'Создать с этой конфигурацией' : 'Generate with this configuration')}
           </button>
 
           <p className="mt-3 text-center text-xs text-muted-foreground" aria-live="polite">
