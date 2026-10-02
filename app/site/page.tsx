@@ -5,6 +5,7 @@ import { ArrowRight, Clapperboard, ImageIcon, MessageSquareText, Music2, Sparkle
 import { MERCHANT } from '@/lib/merchant'
 import { SiteHeader } from '@/components/site/site-header'
 import { SiteTrendHits } from '@/components/site/site-trend-hits'
+import { SitePricing } from '@/components/site/site-pricing'
 import { useSiteLocale } from '@/components/site/site-locale-provider'
 
 const copy = {
@@ -87,19 +88,6 @@ const steps = [
   { n: '01', ru: ['Выберите', 'Тренд или нужный AI-инструмент.'], en: ['Choose', 'A trend or the AI tool you need.'] },
   { n: '02', ru: ['Загрузите', 'Добавьте только нужные фото, видео или референсы.'], en: ['Upload', 'Add only the photos, videos or references you need.'] },
   { n: '03', ru: ['Создайте', 'Запустите генерацию и получите результат в «Моих работах».'], en: ['Create', 'Run the generation and find the result in My Works.'] },
-] as const
-
-const pricingPlans = [
-  { name: 'Beginner', price: 990, tokens: 1100, discount: 10, ru: 'Для знакомства с Banana Zero и регулярных небольших генераций.', en: 'For getting started and regular light generation.' },
-  { name: 'Creator', price: 2490, tokens: 2850, discount: 12, featured: true, ru: 'Для активных авторов, Reels, изображений и ежедневной работы.', en: 'For active creators, Reels, images and everyday work.' },
-  { name: 'Professional', price: 4990, tokens: 5900, discount: 15, ru: 'Максимальный пакет для профессиональной и коммерческой работы.', en: 'Maximum value for professional and commercial use.' },
-] as const
-
-const tokenPacks = [
-  { tokens: 500, price: 500 },
-  { tokens: 1000, price: 1000 },
-  { tokens: 3000, price: 3000 },
-  { tokens: 5000, price: 5000 },
 ] as const
 
 export default function SitePage() {
@@ -200,20 +188,7 @@ export default function SitePage() {
           </div>
         </section>
 
-        <section id="pricing" className="mx-auto max-w-6xl px-5 py-16 md:px-8">
-          <div className="rounded-[2rem] bg-[#0B0F1A] px-6 py-10 text-white md:px-10 md:py-12">
-            <div className="grid items-end gap-8 md:grid-cols-[1fr_auto]">
-              <div>
-                <p className="text-xs font-bold tracking-[0.16em] text-[#F6AB10]">{t.pricing}</p>
-                <h2 className="mt-3 text-3xl font-bold tracking-tight">{t.pricingTitle}</h2>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-[#A8B3C7]">{t.pricingText}</p>
-              </div>
-              <Link href="/app?tab=create" className="rounded-full border border-white/15 bg-white/10 px-5 py-3 text-sm font-semibold text-white">
-                {t.openCreate}
-              </Link>
-            </div>
-          </div>
-        </section>
+        <SitePricing />
       </main>
 
       <footer className="border-t border-[#E6EEFF] bg-white">
