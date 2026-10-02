@@ -20,6 +20,7 @@ import { SeedanceSheet } from './seedance-sheet'
 import { RepeatGenerationSheet } from './repeat-generation-sheet'
 import { UserProvider, useUserState } from './user-provider'
 import { ThemeProvider } from './theme-provider'
+import { UpscaleSheet, type UpscaleSource } from './upscale-sheet'
 
 export function AppShell() {
   useTelegramInit()
@@ -48,9 +49,10 @@ function InnerApp() {
   const [activeTrend, setActiveTrend] = useState<Trend | null>(null)
   const [seedanceOpen, setSeedanceOpen] = useState(false)
   const [repeatJobId, setRepeatJobId] = useState<string | null>(null)
+  const [upscaleSource, setUpscaleSource] = useState<UpscaleSource | null>(null)
   const deepLinkHandled = useRef(false)
 
-  const sheetOpen = activeTool !== null || activeTrend !== null || seedanceOpen || repeatJobId !== null
+  const sheetOpen = activeTool !== null || activeTrend !== null || seedanceOpen || repeatJobId !== null || upscaleSource !== null
   const canGoBack = sheetOpen || (tab === 'create' && category !== null)
 
   useEffect(() => {
@@ -95,7 +97,8 @@ function InnerApp() {
   }, [markWorksSeen, trends])
 
   function goBack() {
-    if (repeatJobId) setRepeatJobId(null)
+    if (upscaleSource) setUpscaleSource(null)
+    else if (repeatJobId) setRepeatJobId(null)
     else if (seedanceOpen) setSeedanceOpen(false)
     else if (activeTool) setActiveTool(null)
     else if (activeTrend) setActiveTrend(null)
@@ -124,6 +127,11 @@ function InnerApp() {
     if (tool.id === 'seedance-2-5') {
       setActiveTool(null)
       setSeedanceOpen(true)
+      return
+    }
+    if (tool.id === 'video-upscale' || tool.id === 'image-upscale') {
+      setActiveTool(null)
+      setUpscaleSource({ mediaType: tool.id === 'video-upscale' ? 'video' : 'image' })
       return
     }
     setActiveTool(tool)
@@ -174,7 +182,12 @@ function InnerApp() {
             ) : (
               <CreateScreen onOpenCategory={openCategory} />
             ))}
-          {tab === 'works' && <WorksScreen onRepeatGeneration={(jobId) => setRepeatJobId(jobId)} />}
+          {tab === 'works' && (
+            <WorksScreen
+              onRepeatGeneration={(jobId) => setRepeatJobId(jobId)}
+              onUpscale={(source) => setUpscaleSource(source)}
+            />
+          )}
           {tab === 'pricing' && <PricingScreen />}
           {tab === 'favorites' && (
             <FavoritesScreen onOpenTool={openTool} onOpenTrend={openTrend} onBrowse={() => changeTab('trends')} />
@@ -203,6 +216,11 @@ function InnerApp() {
       <BottomNav active={tab} onChange={changeTab} worksBadge={unreadWorks} />
       <SeedanceSheet open={seedanceOpen} onClose={() => setSeedanceOpen(false)} onGenerationStarted={openWorksAfterGeneration} />
       <RepeatGenerationSheet jobId={repeatJobId} onClose={() => setRepeatJobId(null)} onGenerationStarted={openWorksAfterGeneration} />
+      <UpscaleSheet
+        source={upscaleSource}
+        onClose={() => setUpscaleSource(null)}
+        onGenerationStarted={openWorksAfterGeneration}
+      />
       <ToolSheet tool={activeTool} onClose={() => setActiveTool(null)} onGenerationStarted={openWorksAfterGeneration} />
       <TrendSheet
         trend={activeTrend}
