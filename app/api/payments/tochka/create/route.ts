@@ -4,7 +4,7 @@ import { hasDatabase, supabaseFetch } from '@/lib/server/supabase'
 
 export const dynamic = 'force-dynamic'
 
-const PACKS = new Map<number, number>([[300,300],[560,560],[1000,1000]])
+const PACKS = new Map<number, number>([[500,500],[1000,1000],[3000,3000],[5000,5000]])
 
 export async function POST(request: Request) {
   if (process.env.NEXT_PUBLIC_RUBLE_CHECKOUT_ENABLED !== 'true') {
