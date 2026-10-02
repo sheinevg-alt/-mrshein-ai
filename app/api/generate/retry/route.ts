@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server'
 import {
   createApiModelsSeedance25EditTask,
   createApiModelsSeedance25Task,
-  type ApiModelsResolution,
-} from '@/lib/server/apimodels'
+  type ApiModelsResolution,, createApiModelsCallbackToken } from '@/lib/server/apimodels'
 import {
   createStorageSignedDownloadUrl,
   hasDatabase,
@@ -88,7 +87,8 @@ export async function POST(request: Request) {
     const videoReferences = sourceVideoPath
       ? [await createStorageSignedDownloadUrl(INPUT_BUCKET, sourceVideoPath, 7200)]
       : []
-    const callbackUrl = `${new URL(request.url).origin}/api/generate/callback/apimodels?jobId=${encodeURIComponent(job.id)}`
+    const callbackToken = createApiModelsCallbackToken(job.id)
+    const callbackUrl = `${new URL(request.url).origin}/api/generate/callback/apimodels?jobId=${encodeURIComponent(job.id)}&token=${encodeURIComponent(callbackToken)}`
 
     const task = mode === 'edit'
       ? await createApiModelsSeedance25EditTask({
