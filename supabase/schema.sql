@@ -523,3 +523,77 @@ $function$;
 
 revoke execute on function public.create_generation(bigint,text,text,text,integer,text,text,jsonb) from public, anon, authenticated;
 grant execute on function public.create_generation(bigint,text,text,text,integer,text,text,jsonb) to service_role;
+
+
+-- Temporary heavy-media retention. Financial and audit metadata remain in Postgres.
+insert into public.app_settings(key,value,description)
+values (
+  'media_retention_policy_v1',
+  '{
+    "status":"active_policy",
+    "customer_media_days":14,
+    "generation_inputs_days":14,
+    "trend_previews":"keep",
+    "audit_metadata":"keep",
+    "database_logs":"keep",
+    "target_media_backend":"cloudflare_r2",
+    "current_media_backend":"supabase_storage"
+  }'::jsonb,
+  'Banana Zero media retention policy. Customer media is temporary; audit and financial metadata are retained.'
+)
+on conflict (key) do update set value=excluded.value, description=excluded.description, updated_at=now();
+
+create or replace function public.admin_storage_usage()
+returns table (
+  database_bytes bigint,
+  generation_inputs_bytes bigint,
+  trend_previews_bytes bigint,
+  total_storage_bytes bigint,
+  generation_inputs_objects bigint,
+  trend_previews_objects bigint,
+  expired_generation_inputs_objects bigint,
+  expired_generation_inputs_bytes bigint
+)
+language sql
+security definer
+set search_path = public, storage
+as $$
+  select
+    pg_database_size(current_database())::bigint,
+    coalesce(sum((o.metadata->>'size')::bigint) filter (where o.bucket_id='generation-inputs'),0)::bigint,
+    coalesce(sum((o.metadata->>'size')::bigint) filter (where o.bucket_id='trend-previews'),0)::bigint,
+    coalesce(sum((o.metadata->>'size')::bigint),0)::bigint,
+    count(*) filter (where o.bucket_id='generation-inputs')::bigint,
+    count(*) filter (where o.bucket_id='trend-previews')::bigint,
+    count(*) filter (where o.bucket_id='generation-inputs' and o.created_at < now() - interval '14 days')::bigint,
+    coalesce(sum((o.metadata->>'size')::bigint) filter (where o.bucket_id='generation-inputs' and o.created_at < now() - interval '14 days'),0)::bigint
+  from storage.objects o;
+$$;
+
+revoke execute on function public.admin_storage_usage() from public, anon, authenticated;
+grant execute on function public.admin_storage_usage() to service_role;
+
+create or replace function public.admin_expired_generation_input_paths(p_limit integer default 500)
+returns table (name text, created_at timestamptz, size_bytes bigint)
+language sql
+security definer
+set search_path = public, storage
+as $$
+  select o.name,
+         o.created_at,
+         coalesce((o.metadata->>'size')::bigint,0)::bigint
+  from storage.objects o
+  where o.bucket_id='generation-inputs'
+    and o.created_at < now() - interval '14 days'
+    and not exists (
+      select 1
+      from public.generation_history g
+      where g.status in ('queued','processing')
+        and g.input_payload::text like '%' || o.name || '%'
+    )
+  order by o.created_at asc
+  limit greatest(1, least(coalesce(p_limit,500),1000));
+$$;
+
+revoke execute on function public.admin_expired_generation_input_paths(integer) from public, anon, authenticated;
+grant execute on function public.admin_expired_generation_input_paths(integer) to service_role;
