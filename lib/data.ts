@@ -187,8 +187,30 @@ export function getModelToolsByCategory(id: CategoryId) {
   return tools.filter((tool) => tool.category === id && tool.kind === 'model')
 }
 
+const liveQuickTools = new Set([
+  'text-to-video',
+  'image-to-video',
+  'video-upscale',
+  'video-remix',
+  'text-to-image',
+  'remove-bg',
+  'image-upscale',
+  'style-transfer',
+  'inpaint',
+  'text-to-speech',
+  'music-gen',
+  'ai-chat',
+  'copywriter',
+  'translator',
+  'summarizer',
+  'rewriter',
+  'hashtags',
+  'email-writer',
+  'idea-gen',
+])
+
 export function getQuickToolsByCategory(id: CategoryId) {
-  return tools.filter((tool) => tool.category === id && tool.kind !== 'model')
+  return tools.filter((tool) => tool.category === id && tool.kind !== 'model' && liveQuickTools.has(tool.id))
 }
 
 export function getToolTokens(tool: Tool) {
