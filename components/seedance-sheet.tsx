@@ -329,7 +329,7 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
   return (
     <BottomSheet open title="Seedance 2.5" onClose={onClose}>
       <div className="grid grid-cols-2 gap-2 rounded-2xl bg-muted/60 p-1">
-        <button type="button" onClick={() => { setMode('generate'); if (sourceVideo && prompt.trim()) ensurePromptTag('@video1'); setMessage('') }} className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition ${mode === 'generate' ? 'bg-card text-brand shadow-sm' : 'text-muted-foreground'}`}><Sparkles className="size-4" />{locale === 'ru' ? 'Создать' : 'Generate'}</button>
+        <button type="button" onClick={() => { setMode('generate'); if (sourceVideo && prompt.trim()) ensurePromptTag('@video1'); setMessage('') }} className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition ${mode === 'generate' ? 'bg-card text-brand shadow-sm' : 'text-muted-foreground'}`}><Sparkles className="size-4" />Omni Reference</button>
         <button type="button" onClick={() => { setMode('edit'); if (sourceVideo && prompt.trim()) ensurePromptTag('@video1'); setMessage('') }} className={`flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition ${mode === 'edit' ? 'bg-card text-brand shadow-sm' : 'text-muted-foreground'}`}><Clapperboard className="size-4" />Video Edit</button>
       </div>
 
@@ -350,7 +350,7 @@ export function SeedanceSheet({ open, onClose, onGenerationStarted }: {
         ) : (
           <button type="button" onClick={() => videoInputRef.current?.click()} className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand/25 bg-card text-sm font-semibold text-brand"><Upload className="size-4" />{locale === 'ru' ? 'Загрузить @video1' : 'Upload @video1'}</button>
         )}
-        {mode === 'generate' && <p className="mt-2 text-[11px] text-muted-foreground">{locale === 'ru' ? 'В режиме «Создать» видео и фото отправляются как мультимодальные референсы.' : 'In Generate mode video and images are sent as multimodal references.'}</p>}
+        {mode === 'generate' && <p className="mt-2 text-[11px] text-muted-foreground">{locale === 'ru' ? 'Основной режим для трендов: видео, фото и другие референсы используются для создания нового ролика с сохранением движения, стиля и персонажей.' : 'Primary trend mode: video, image and other references guide a new clip while preserving motion, style and characters.'}</p>}
       </div>
 
       <label htmlFor="seedance-prompt" className="mt-5 block text-sm font-semibold">{locale === 'ru' ? 'Промпт' : 'Prompt'}</label>
