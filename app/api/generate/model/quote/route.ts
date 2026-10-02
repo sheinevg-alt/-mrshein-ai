@@ -19,7 +19,7 @@ export async function POST(request: Request) {
       : settings.duration,
     resolution: settings.resolution,
     quality: settings.quality,
-    mode: settings.mode,
+    mode: toolId === 'omni-flash' ? settings.omniMode : settings.mode,
     generateAudio: settings.generateAudio,
     promptLength,
   })
