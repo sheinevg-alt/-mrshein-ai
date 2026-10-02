@@ -67,7 +67,8 @@ export async function POST(request: Request) {
   }
 
   const sourceVideoPath = String(config.source_video_path || '')
-  if (!sourceVideoPath) return NextResponse.json({ error: 'TREND_SOURCE_VIDEO_MISSING' }, { status: 500 })
+  const sourceVideoUrl = String(config.source_video_url || '')
+  if (!sourceVideoPath && !sourceVideoUrl) return NextResponse.json({ error: 'TREND_SOURCE_VIDEO_MISSING' }, { status: 500 })
 
   const inputSchema = Array.isArray(trend.input_schema) ? trend.input_schema : []
   const expectedImageCount = inputSchema.filter((item: any) => String(item?.kind || 'photo') === 'photo' && item?.required !== false).length
@@ -113,7 +114,8 @@ export async function POST(request: Request) {
       input_payload: {
         mode: 'edit',
         prompt,
-        source_video_path: sourceVideoPath,
+        source_video_path: sourceVideoPath || null,
+        source_video_url: sourceVideoUrl || null,
         reference_paths: referencePaths,
         reference_count: referencePaths.length + 1,
         reference_tags: [
@@ -152,7 +154,7 @@ export async function POST(request: Request) {
     if (!signedReferences[0]) throw new Error('PERSON_REFERENCE_MISSING')
     const references = signedReferences
 
-    const videoUrl = await createStorageSignedDownloadUrl(INPUT_BUCKET, sourceVideoPath, 7200)
+    const videoUrl = sourceVideoUrl || await createStorageSignedDownloadUrl(INPUT_BUCKET, sourceVideoPath, 7200)
     const callbackToken = createApiModelsCallbackToken(job.id)
     const callbackUrl = `${new URL(request.url).origin}/api/generate/callback/apimodels?jobId=${encodeURIComponent(job.id)}&token=${encodeURIComponent(callbackToken)}`
 
@@ -162,7 +164,8 @@ export async function POST(request: Request) {
         input_payload: {
           mode: 'edit',
           prompt,
-          source_video_path: sourceVideoPath,
+          source_video_path: sourceVideoPath || null,
+          source_video_url: sourceVideoUrl || null,
           reference_paths: referencePaths,
           reference_count: referencePaths.length + 1,
           reference_tags: [
