@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import {
   Clapperboard,
   FileAudio,
-  FileImage,
   FileVideo,
   Paperclip,
   Sparkles,
@@ -38,7 +37,7 @@ const MAX_REFERENCES = 50
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024
 const MAX_IMAGE_BYTES = 30 * 1024 * 1024
 const MAX_AUDIO_BYTES = 15 * 1024 * 1024
-const RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'] as const
+const RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', 'adaptive'] as const
 
 function kindOf(file: File): AssetKind | null {
   if (file.type.startsWith('image/')) return 'image'
