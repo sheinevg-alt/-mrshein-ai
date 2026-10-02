@@ -29,23 +29,10 @@ export default function ContactsPage() {
           <div className="rounded-3xl border border-[#E6EEFF] bg-white p-6">
             <p className="text-xs font-bold text-[#1E3A8A]">САЙТ</p>
             <p className="mt-3 text-lg font-bold">BananaZero.ru</p>
-            <p className="mt-2 text-sm text-[#66758E]">Официальный сайт сервиса и документы для оплаты.</p>
+            <p className="mt-2 text-sm text-[#66758E]">Официальный сайт сервиса Banana Zero.</p>
           </div>
         </div>
 
-        <div className="mt-4 rounded-3xl bg-[#0B0F1A] p-6 text-white">
-          <p className="font-bold">Реквизиты продавца</p>
-          <dl className="mt-4 grid gap-3 text-sm leading-6 text-[#D7DEEA] sm:grid-cols-[150px_1fr]">
-            <dt className="text-[#8F9DB3]">Продавец</dt><dd>{MERCHANT.legalName}</dd>
-            <dt className="text-[#8F9DB3]">ИНН</dt><dd>{MERCHANT.inn}</dd>
-            <dt className="text-[#8F9DB3]">ОГРНИП</dt><dd>{MERCHANT.ogrnip}</dd>
-            <dt className="text-[#8F9DB3]">Адрес</dt><dd>{MERCHANT.address}</dd>
-            <dt className="text-[#8F9DB3]">Банк</dt><dd>{MERCHANT.bankName}</dd>
-            <dt className="text-[#8F9DB3]">Расчётный счёт</dt><dd>{MERCHANT.settlementAccount}</dd>
-            <dt className="text-[#8F9DB3]">БИК</dt><dd>{MERCHANT.bik}</dd>
-            <dt className="text-[#8F9DB3]">Корр. счёт</dt><dd>{MERCHANT.correspondentAccount}</dd>
-          </dl>
-        </div>
       </main>
     </div>
   )
