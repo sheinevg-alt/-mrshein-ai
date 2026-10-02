@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { hasAppAccess } from '@/lib/server/access-control'
 import { APP_CONFIG } from '@/lib/app-config'
 import { hasDatabase, supabaseFetch } from '@/lib/server/supabase'
 import { saveBotUser } from '@/lib/server/telegram-bot'
@@ -10,6 +11,7 @@ export async function GET(request: Request) {
   const user = verifyTelegramInitData(request.headers.get('x-telegram-init-data') || '')
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!hasDatabase()) return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+  if (!(await hasAppAccess(user.id))) return NextResponse.json({ error: 'CLOSED_BETA' }, { status: 403 })
 
   const userRecord = {
     telegram_id: user.id,
