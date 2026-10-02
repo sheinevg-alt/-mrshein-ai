@@ -152,7 +152,7 @@ export async function POST(request: Request) {
       const result = await createApiModelsElevenTts({
         text: prompt,
         voiceId: String(settings.voiceId || 'EXAVITQu4vr4xnSDxMaL'),
-        model: 'eleven-tts-v3',
+        model: 'eleven-tts-v4',
       })
       const audioBase64 = result.audio.toString('base64')
       await rpc('complete_generation', {
