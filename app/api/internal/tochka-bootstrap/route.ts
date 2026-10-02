@@ -39,7 +39,9 @@ export async function GET() {
   if (token && !clientId) {
     try {
       const payload = JSON.parse(Buffer.from(token.split('.')[1] || '', 'base64url').toString('utf8'))
-      clientId = String(payload?.client_id || payload?.clientId || '')
+      const aud = Array.isArray(payload?.aud) ? payload.aud[0] : payload?.aud
+      const candidate = String(payload?.client_id || payload?.clientId || aud || '')
+      clientId = /^[A-Za-z0-9_-]{20,100}$/.test(candidate) ? candidate : ''
     } catch {
       clientId = ''
     }
