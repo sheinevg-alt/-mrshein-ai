@@ -341,3 +341,40 @@ grant execute on function public.reverse_referral_for_payment(uuid) to service_r
 
 alter view public.referral_wallet_balances set (security_invoker = true);
 alter function public.price_tokens_from_provider_cost(numeric) set search_path = public;
+
+
+-- Banana Zero public customer pricing v2.
+alter table public.token_packages
+  add column if not exists beginner_price_rub integer,
+  add column if not exists creator_price_rub integer;
+
+update public.token_packages
+set beginner_price_rub = round(price_rub * 0.90)::integer,
+    creator_price_rub = round(price_rub * 0.88)::integer,
+    professional_price_rub = round(price_rub * 0.85)::integer
+where code in ('tokens_500','tokens_1000','tokens_3000','tokens_5000');
+
+insert into public.app_settings(key,value,description)
+values (
+  'commercial_model_v2',
+  '{
+    "currency":"RUB",
+    "token_value_rub":1,
+    "one_off":{"subscription_required":false,"token_packages":[
+      {"tokens":500,"price_rub":500},
+      {"tokens":1000,"price_rub":1000},
+      {"tokens":3000,"price_rub":3000},
+      {"tokens":5000,"price_rub":5000}
+    ]},
+    "plans":[
+      {"code":"beginner","name":"Beginner","period_days":30,"price_rub":990,"included_tokens":1100,"topup_discount_pct":10},
+      {"code":"creator","name":"Creator","period_days":30,"price_rub":2490,"included_tokens":2850,"topup_discount_pct":12},
+      {"code":"professional","name":"Professional","period_days":30,"price_rub":4990,"included_tokens":5900,"topup_discount_pct":15}
+    ],
+    "token_expiry":{"purchased_tokens":"do_not_expire_while_account_active","plan_included_tokens":"end_of_paid_period"},
+    "generation_cost_multiplier":3.1,
+    "payment_cost_reserve_pct":5
+  }'::jsonb,
+  'Canonical Banana Zero customer pricing v2.'
+)
+on conflict (key) do update set value=excluded.value, description=excluded.description, updated_at=now();
