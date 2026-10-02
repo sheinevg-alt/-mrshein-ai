@@ -512,12 +512,13 @@ export async function createApiModelsAudioTask(params: {
   duration?: number
   videoUrl?: string
   bgmPrompt?: string
+  sunoVersion?: 'chirp-v5-5' | 'chirp-v5' | 'chirp-v4-5' | 'chirp-v4'
   callbackUrl?: string
 }) {
   const body: Record<string, unknown> = { model: params.model }
   if (params.model === 'suno-v5') {
     body.description = params.promptText
-    body.mv = 'chirp-v5'
+    body.mv = params.sunoVersion || 'chirp-v5-5'
   } else if (params.model === 'kling-video-to-audio') {
     if (!params.videoUrl) throw new Error('VIDEO_REQUIRED')
     body.video_url = params.videoUrl
