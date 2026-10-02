@@ -4,13 +4,14 @@ import { useMemo, useState } from 'react'
 import { CreditCard, QrCode, ShieldCheck } from 'lucide-react'
 
 const PACKS = [
-  { tokens: 300, rub: 300, label: '300 токенов' },
-  { tokens: 560, rub: 560, label: '560 токенов', featured: true },
-  { tokens: 1000, rub: 1000, label: '1 000 токенов' },
+  { tokens: 500, rub: 500, label: '500 Tokens' },
+  { tokens: 1000, rub: 1000, label: '1 000 Tokens', featured: true },
+  { tokens: 3000, rub: 3000, label: '3 000 Tokens' },
+  { tokens: 5000, rub: 5000, label: '5 000 Tokens' },
 ]
 
 export function PaymentForm({ enabled }: { enabled: boolean }) {
-  const [selected, setSelected] = useState(560)
+  const [selected, setSelected] = useState(1000)
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
@@ -25,7 +26,7 @@ export function PaymentForm({ enabled }: { enabled: boolean }) {
       return
     }
     if (!enabled) {
-      setError('Рублёвая оплата пока в режиме подготовки. Эквайринг Точка будет включён после выдачи API-доступа.')
+      setError('Рублёвая оплата временно недоступна. Тарифы и стоимость услуг уже опубликованы на сайте.')
       return
     }
 
@@ -48,7 +49,12 @@ export function PaymentForm({ enabled }: { enabled: boolean }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div>
+        <p className="text-sm font-semibold">Разовая покупка Tokens</p>
+        <p className="mt-1 text-xs text-muted-foreground">Тариф не требуется. 1 Token = 1 ₽. Купленные отдельно Tokens не сгорают, пока аккаунт активен.</p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
         {PACKS.map((item) => (
           <button
             key={item.tokens}
@@ -57,8 +63,8 @@ export function PaymentForm({ enabled }: { enabled: boolean }) {
             className={`rounded-3xl border p-4 text-left transition ${selected === item.tokens ? 'border-brand bg-brand-tint shadow-sm' : 'bg-card'}`}
           >
             <p className="text-sm font-semibold">{item.label}</p>
-            <p className="mt-1 text-2xl font-bold">{item.rub} ₽</p>
-            {item.featured && <p className="mt-1 text-xs text-brand">Подходит для Birthday Drive</p>}
+            <p className="mt-1 text-2xl font-bold">{item.rub.toLocaleString('ru-RU')} ₽</p>
+            {item.featured && <p className="mt-1 text-xs text-brand">Популярный пакет</p>}
           </button>
         ))}
       </div>
@@ -81,10 +87,10 @@ export function PaymentForm({ enabled }: { enabled: boolean }) {
       </div>
 
       <button type="button" onClick={() => void checkout()} disabled={busy} className="brand-gradient h-12 w-full rounded-full font-semibold text-white disabled:opacity-50">
-        {busy ? 'Создаём платёж…' : `Оплатить ${pack.rub} ₽`}
+        {busy ? 'Создаём платёж…' : `Оплатить ${pack.rub.toLocaleString('ru-RU')} ₽`}
       </button>
       {error && <p className="text-center text-sm text-destructive">{error}</p>}
-      <p className="text-center text-xs text-muted-foreground">1 Shein Token = 1 ₽. После подтверждения оплаты токены зачисляются на аккаунт.</p>
+      <p className="text-center text-xs text-muted-foreground">После подтверждения оплаты Tokens зачисляются на баланс Banana Zero.</p>
     </div>
   )
 }
