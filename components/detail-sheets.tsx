@@ -640,25 +640,35 @@ function TrendFlow({ trend, onGenerationStarted }: { trend: Trend; onGenerationS
           }),
         })
       } else {
-        const form = new FormData()
-        form.append('trendId', trend.id)
-        form.append('generateAudio', generateAudio ? 'true' : 'false')
-        form.append('resolution', resolution)
+        const referencePaths: Record<string, string> = {}
+        const referenceUrls: Record<string, string> = {}
+        const inputValues: Record<string, string> = {}
+
         for (const input of trend.inputs) {
           const value = values[input.id]
           if (typeof value === 'string') {
-            form.append(input.id, value)
+            inputValues[input.id] = value
           } else if (value?.file) {
-            form.append(input.id, value.file, value.file.name)
+            referencePaths[input.id] = await uploadTrendInputFile(value.file, initData)
           } else if (value?.url) {
-            form.append(`${input.id}_url`, value.url)
+            referenceUrls[input.id] = value.url
           }
         }
 
         response = await fetch('/api/generate', {
           method: 'POST',
-          headers: { 'X-Telegram-Init-Data': initData },
-          body: form,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Telegram-Init-Data': initData,
+          },
+          body: JSON.stringify({
+            trendId: trend.id,
+            generateAudio,
+            resolution,
+            referencePaths,
+            referenceUrls,
+            inputValues,
+          }),
         })
       }
 
@@ -680,8 +690,10 @@ function TrendFlow({ trend, onGenerationStarted }: { trend: Trend; onGenerationS
         setResultMessage(locale === 'ru' ? 'Фото слишком большое. Выберите другое фото или уменьшите его размер.' : 'The image is too large. Choose another image or reduce its size.')
       } else if (data?.details) {
         setResultMessage(locale === 'ru' ? `Ошибка генерации: ${String(data.details).slice(0, 180)}` : `Generation error: ${String(data.details).slice(0, 180)}`)
+      } else if (response.status === 413) {
+        setResultMessage(locale === 'ru' ? 'Файлы слишком большие для отправки. Попробуйте уменьшить размер фото.' : 'The files are too large to send. Try reducing the image size.')
       } else {
-        setResultMessage(t('generation.backendNeeded'))
+        setResultMessage(locale === 'ru' ? 'Не удалось запустить генерацию. Попробуйте ещё раз.' : 'Could not start generation. Please try again.')
       }
       setSubmitted(true)
       await refreshUser()
