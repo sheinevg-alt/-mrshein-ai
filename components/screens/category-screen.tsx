@@ -36,26 +36,10 @@ export function CategoryScreen({ categoryId, onBack, onOpenTool, onOpenTrend }: 
     <div className="animate-in fade-in slide-in-from-right-4 duration-300">
       <ScreenHeader title={name} subtitle={tagline} onBack={onBack} />
 
-      {categoryTrends.length > 0 && (
-        <section>
-          <div className="mb-3 flex items-end justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold">{locale === 'ru' ? 'Готовые тренды и шаблоны' : 'Ready trends & templates'}</h2>
-              <p className="mt-0.5 text-xs text-muted-foreground">{locale === 'ru' ? 'Для быстрого результата без сложных настроек' : 'Fast results without complex settings'}</p>
-            </div>
-          </div>
-          <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none]">
-            {categoryTrends.slice(0, 8).map((trend) => (
-              <TrendCard key={trend.id} trend={trend} onOpen={onOpenTrend} className="w-[190px] shrink-0" />
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section className={categoryTrends.length ? 'mt-7' : ''}>
+      <section>
         <div className="mb-3">
-          <h2 className="text-base font-semibold">{locale === 'ru' ? 'AI-модели' : 'AI models'}</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">{locale === 'ru' ? 'Профессиональный режим — все модели видны независимо от баланса' : 'Professional mode — all models stay visible regardless of balance'}</p>
+          <h2 className="text-base font-semibold">{locale === 'ru' ? 'AI-инструменты' : 'AI tools'}</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">{locale === 'ru' ? 'Выберите модель или профессиональный инструмент' : 'Choose a model or professional tool'}</p>
         </div>
         <ul className="grid grid-cols-2 gap-3">
           {modelTools.map((tool) => (
@@ -67,14 +51,30 @@ export function CategoryScreen({ categoryId, onBack, onOpenTool, onOpenTrend }: 
       {quickTools.length > 0 && (
         <section className="mt-7">
           <div className="mb-3">
-            <h2 className="text-base font-semibold">{locale === 'ru' ? 'Быстрые инструменты' : 'Quick tools'}</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">{locale === 'ru' ? 'Готовые действия для частых задач' : 'Ready actions for common jobs'}</p>
+            <h2 className="text-base font-semibold">{locale === 'ru' ? 'Быстрые действия' : 'Quick actions'}</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">{locale === 'ru' ? 'Частые задачи без лишних настроек' : 'Common jobs without extra setup'}</p>
           </div>
           <ul className="grid grid-cols-2 gap-3">
             {quickTools.map((tool) => (
               <li key={tool.id}><ToolCard tool={tool} onOpen={onOpenTool} /></li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {categoryTrends.length > 0 && (
+        <section className="mt-7">
+          <div className="mb-3 flex items-end justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold">{locale === 'ru' ? 'Готовые шаблоны' : 'Ready templates'}</h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">{locale === 'ru' ? 'Выберите пример, загрузите свои материалы и повторите' : 'Choose an example, upload your media and recreate it'}</p>
+            </div>
+          </div>
+          <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none]">
+            {categoryTrends.slice(0, 12).map((trend) => (
+              <TrendCard key={trend.id} trend={trend} onOpen={onOpenTrend} className="w-[160px] shrink-0" />
+            ))}
+          </div>
         </section>
       )}
     </div>
