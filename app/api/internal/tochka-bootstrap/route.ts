@@ -22,7 +22,17 @@ export async function GET() {
   if (!hasDatabase()) return NextResponse.json({ ok: false, stage: 'database' }, { status: 503 })
 
   const token = process.env.TOCHKA_JWT
-  const clientId = process.env.TOCHKA_CLIENT_ID
+  let clientId = process.env.TOCHKA_CLIENT_ID || ''
+
+  if (token && !clientId) {
+    try {
+      const payload = JSON.parse(Buffer.from(token.split('.')[1] || '', 'base64url').toString('utf8'))
+      clientId = String(payload?.client_id || payload?.clientId || '')
+    } catch {
+      clientId = ''
+    }
+  }
+
   if (!token || !clientId) {
     return NextResponse.json({ ok: false, stage: 'environment', hasJwt: Boolean(token), hasClientId: Boolean(clientId) }, { status: 503 })
   }
