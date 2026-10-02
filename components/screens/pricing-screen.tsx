@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { BadgePercent, WalletCards } from 'lucide-react'
-import { PUBLIC_PLANS, PUBLIC_TOKEN_PACKS } from '@/lib/public-pricing'
+import { PUBLIC_PLANS, TOKEN_PURCHASE_MAX, TOKEN_PURCHASE_MIN, TOKEN_PURCHASE_STEP, getTokenPurchaseQuote } from '@/lib/public-pricing'
 import { useI18n } from '../i18n-provider'
 import { ScreenHeader } from '../screen-header'
 import { TokenBalancePill } from '../tokens'
@@ -11,8 +11,8 @@ import { TokenBalancePill } from '../tokens'
 export function PricingScreen() {
   const { locale } = useI18n()
   const ru = locale === 'ru'
-  const [packIndex, setPackIndex] = useState(1)
-  const pack = PUBLIC_TOKEN_PACKS[packIndex]
+  const [tokenAmount, setTokenAmount] = useState(500)
+  const pack = getTokenPurchaseQuote(tokenAmount)
 
   return (
     <div className="animate-in fade-in duration-300">
@@ -57,22 +57,38 @@ export function PricingScreen() {
 
         <div className="mt-5 text-center">
           <p className="text-3xl font-black">{pack.tokens.toLocaleString(ru ? 'ru-RU' : 'en-US')} Tokens</p>
-          <p className="mt-1 text-lg font-semibold">{pack.priceRub.toLocaleString(ru ? 'ru-RU' : 'en-US')} ₽</p>
+          <div className="mt-1 flex items-center justify-center gap-2">
+            {pack.discountPct > 0 && (
+              <span className="text-sm text-muted-foreground line-through">{pack.regularRub.toLocaleString(ru ? 'ru-RU' : 'en-US')} ₽</span>
+            )}
+            <span className="text-xl font-black">{pack.priceRub.toLocaleString(ru ? 'ru-RU' : 'en-US')} ₽</span>
+            {pack.discountPct > 0 && (
+              <span className="rounded-full bg-emerald-500/12 px-2 py-1 text-[11px] font-black text-emerald-700">−{pack.discountPct}%</span>
+            )}
+          </div>
+          {pack.savingsRub > 0 && (
+            <p className="mt-1 text-xs font-medium text-emerald-700">{ru ? `Экономия ${pack.savingsRub.toLocaleString('ru-RU')} ₽` : `Save ${pack.savingsRub.toLocaleString('en-US')} RUB`}</p>
+          )}
         </div>
 
         <input
           type="range"
-          min={0}
-          max={PUBLIC_TOKEN_PACKS.length - 1}
-          step={1}
-          value={packIndex}
-          onChange={(event) => setPackIndex(Number(event.target.value))}
+          min={TOKEN_PURCHASE_MIN}
+          max={TOKEN_PURCHASE_MAX}
+          step={TOKEN_PURCHASE_STEP}
+          value={tokenAmount}
+          onChange={(event) => setTokenAmount(Number(event.target.value))}
           className="mt-5 w-full"
           aria-label={ru ? 'Количество Tokens' : 'Token amount'}
         />
 
         <div className="mt-2 flex justify-between text-[10px] text-muted-foreground">
-          {PUBLIC_TOKEN_PACKS.map((item) => <span key={item.tokens}>{item.tokens}</span>)}
+          <span>200</span><span>1000</span><span>2000</span><span>3000</span>
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[10px]">
+          <span className={tokenAmount >= 1000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>1000+ · −8%</span>
+          <span className={tokenAmount >= 2000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>2000+ · −10%</span>
+          <span className={tokenAmount >= 3000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>3000 · −13%</span>
         </div>
 
         <Link href={`/pay?tokens=${pack.tokens}`} className="brand-gradient mt-5 flex h-12 w-full items-center justify-center rounded-full text-sm font-semibold text-white">
