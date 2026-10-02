@@ -302,7 +302,7 @@ export function UpscaleSheet({
         <div>
           <p className="text-xs text-muted-foreground">{locale === 'ru' ? 'Стоимость' : 'Price'}</p>
           <p className="mt-0.5 text-lg font-black">{quotedTokens == null ? '…' : `${quotedTokens} Tokens`}</p>
-          {providerUsd != null && providerUsd > 0 && <p className="text-[10px] text-muted-foreground">provider ≈ ${providerUsd.toFixed(3)}</p>}
+          {providerUsd != null && providerUsd > 0 && <p className="text-[10px] text-muted-foreground">provider ≈ {`${providerUsd.toFixed(3)}`}</p>}
         </div>
         <div className="text-right">
           <p className="text-xs text-muted-foreground">{locale === 'ru' ? 'Баланс' : 'Balance'}</p>
