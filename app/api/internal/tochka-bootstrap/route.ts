@@ -34,7 +34,7 @@ export async function GET() {
   if (!hasDatabase()) return NextResponse.json({ ok: false, stage: 'database' }, { status: 503 })
 
   const token = process.env.TOCHKA_JWT
-  let clientId = process.env.TOCHKA_CLIENT_ID || ''
+  let clientId = process.env.TOCHKA_CLIENT_ID || process.env.TOCHKA_CLIENT_I || ''
 
   if (token && !clientId) {
     try {
