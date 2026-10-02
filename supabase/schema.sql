@@ -427,3 +427,99 @@ values (
   'Canonical active Banana Zero pricing model.'
 )
 on conflict (key) do update set value=excluded.value, description=excluded.description, updated_at=now();
+
+
+-- Legal/audit context for paid AI generations.
+insert into public.app_settings(key,value,description)
+values (
+  'legal_offer_current_version',
+  '{"version":"2026-10-02-v2","effective_at":"2026-10-02T00:00:00+07:00","pricing_version":"commercial_model_v3"}'::jsonb,
+  'Current public offer version recorded into future generation audit context.'
+)
+on conflict (key) do update set value=excluded.value, description=excluded.description, updated_at=now();
+
+create index if not exists payment_orders_user_created_idx
+  on public.payment_orders (telegram_id, created_at desc);
+
+create index if not exists admin_audit_log_subject_created_idx
+  on public.admin_audit_log (subject_id, created_at desc);
+
+create or replace function public.create_generation(
+  p_telegram_id bigint,
+  p_type text,
+  p_source_id text,
+  p_title text,
+  p_token_cost integer,
+  p_provider text default null::text,
+  p_model text default null::text,
+  p_input_payload jsonb default '{}'::jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+declare
+  v_generation_id uuid;
+  v_balance integer;
+  v_payload jsonb;
+begin
+  if p_token_cost < 0 then
+    raise exception 'INVALID_AMOUNT';
+  end if;
+
+  if p_type not in ('trend','tool') then
+    raise exception 'INVALID_GENERATION_TYPE';
+  end if;
+
+  update public.app_users
+  set token_balance = token_balance - p_token_cost,
+      last_seen_at = now()
+  where telegram_id = p_telegram_id
+    and token_balance >= p_token_cost
+  returning token_balance into v_balance;
+
+  if v_balance is null then
+    if exists (select 1 from public.app_users where telegram_id = p_telegram_id) then
+      raise exception 'INSUFFICIENT_TOKENS';
+    else
+      raise exception 'USER_NOT_FOUND';
+    end if;
+  end if;
+
+  v_payload := coalesce(p_input_payload, '{}'::jsonb)
+    || jsonb_build_object(
+      '_audit',
+      jsonb_build_object(
+        'offer_version', '2026-10-02-v2',
+        'pricing_version', 'commercial_model_v3',
+        'generation_requested_at', now(),
+        'token_cost', p_token_cost,
+        'balance_after_debit', v_balance
+      )
+    );
+
+  insert into public.generation_history(
+    telegram_id, type, source_id, title, status, token_cost,
+    provider, model, input_payload, queued_at
+  )
+  values (
+    p_telegram_id, p_type, p_source_id, p_title, 'queued', p_token_cost,
+    p_provider, p_model, v_payload, now()
+  )
+  returning id into v_generation_id;
+
+  insert into public.token_ledger(
+    telegram_id, amount, event_type, reference, generation_id
+  )
+  values (
+    p_telegram_id, -p_token_cost, 'generation',
+    'generation:' || v_generation_id::text, v_generation_id
+  );
+
+  return v_generation_id;
+end;
+$function$;
+
+revoke execute on function public.create_generation(bigint,text,text,text,integer,text,text,jsonb) from public, anon, authenticated;
+grant execute on function public.create_generation(bigint,text,text,text,integer,text,text,jsonb) to service_role;
