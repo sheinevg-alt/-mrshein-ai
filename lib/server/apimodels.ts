@@ -380,6 +380,34 @@ export async function createApiModelsGeminiOmniFlashTask(params: {
   })
 }
 
+export async function createApiModelsVideoUpscaleTask(params: {
+  videoUrl: string
+  resolution: '720p' | '1080p' | '2k' | '4k'
+  callbackUrl?: string
+}) {
+  return createTaskAt('/video/generations', {
+    model: 'flashvsr',
+    video: params.videoUrl,
+    resolution: params.resolution,
+    ...(params.callbackUrl ? { callback_url: params.callbackUrl } : {}),
+  })
+}
+
+export async function createApiModelsImageUpscaleTask(params: {
+  imageUrl: string
+  scale?: 2 | 4
+  faceEnhance?: boolean
+  callbackUrl?: string
+}) {
+  return createTaskAt('/images/generations', {
+    model: 'real-esrgan',
+    image: params.imageUrl,
+    scale: params.scale || 2,
+    face_enhance: params.faceEnhance === true,
+    ...(params.callbackUrl ? { callback_url: params.callbackUrl } : {}),
+  })
+}
+
 export async function createApiModelsKlingTask(params: {
   model?: ApiModelsKlingModel
   promptText: string
