@@ -1,6 +1,7 @@
 import { createPublicKey, verify } from 'crypto'
 import { NextResponse } from 'next/server'
 import { hasDatabase, supabaseFetch } from '@/lib/server/supabase'
+import { tochkaRequest } from '@/lib/server/tochka-http'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,9 +18,9 @@ async function verifyTochkaJwt(raw: string) {
   const header = decodeJsonSegment(encodedHeader)
   if (header?.alg !== 'RS256') throw new Error('INVALID_ALG')
 
-  const response = await fetch(TOCHKA_PUBLIC_KEY_URL, { cache: 'no-store' })
-  if (!response.ok) throw new Error('PUBLIC_KEY_UNAVAILABLE')
-  const keyData = await response.json()
+  const keyResponse = await tochkaRequest('/doc/openapi/static/keys/public')
+  if (!keyResponse.ok) throw new Error('PUBLIC_KEY_UNAVAILABLE')
+  const keyData = keyResponse.json
   const jwk = Array.isArray(keyData?.keys) ? keyData.keys[0] : keyData
   if (!jwk?.kty || !jwk?.n || !jwk?.e) throw new Error('INVALID_PUBLIC_KEY')
 
