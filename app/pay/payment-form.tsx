@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { CreditCard, QrCode, ShieldCheck } from 'lucide-react'
 import { PUBLIC_TOKEN_PACKS } from '@/lib/public-pricing'
+import { getTelegramInitData } from '@/lib/telegram'
 
 export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean; initialTokens?: number }) {
   const initialIndex = Math.max(0, PUBLIC_TOKEN_PACKS.findIndex((item) => item.tokens === initialTokens))
@@ -29,7 +30,10 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
     try {
       const response = await fetch('/api/payments/tochka/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Telegram-Init-Data': getTelegramInitData(),
+        },
         body: JSON.stringify({ tokenAmount: pack.tokens, email, name }),
       })
       const data = await response.json()
