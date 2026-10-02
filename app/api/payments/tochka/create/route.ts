@@ -15,9 +15,9 @@ export async function POST(request: Request) {
   const customerCode = process.env.TOCHKA_CUSTOMER_CODE
   const merchantId = process.env.TOCHKA_MERCHANT_ID
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin
-  const taxSystemCode = process.env.TOCHKA_TAX_SYSTEM_CODE
+  const taxSystemCode = process.env.TOCHKA_TAX_SYSTEM_CODE || 'usn_income'
   const vatType = process.env.TOCHKA_VAT_TYPE || 'none'
-  if (!token || !customerCode || !taxSystemCode) {
+  if (!token || !customerCode) {
     return NextResponse.json({ error: 'Tochka fiscal checkout is not configured' }, { status: 503 })
   }
 
