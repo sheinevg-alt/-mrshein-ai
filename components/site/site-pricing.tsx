@@ -4,16 +4,16 @@ import Link from 'next/link'
 import { useSiteLocale } from './site-locale-provider'
 
 const plans = [
-  { name: 'Beginner', price: 990, tokens: 1100, discount: 10, ru: 'Для знакомства с Banana Zero и регулярных небольших генераций.', en: 'For getting started and regular light generation.' },
-  { name: 'Creator', price: 2490, tokens: 2850, discount: 12, featured: true, ru: 'Для активных авторов, Reels, изображений и ежедневной работы.', en: 'For active creators, Reels, images and everyday work.' },
-  { name: 'Professional', price: 4990, tokens: 5900, discount: 15, ru: 'Максимальный пакет для профессиональной и коммерческой работы.', en: 'Maximum value for professional and commercial use.' },
+  { name: 'Beginner', price: 1490, tokens: 630, discount: 5, ru: 'Для знакомства с Banana Zero и регулярных небольших генераций.', en: 'For getting started and regular light generation.' },
+  { name: 'Creator', price: 2990, tokens: 1330, discount: 10, featured: true, ru: 'Для активных авторов, Reels, изображений и ежедневной работы.', en: 'For active creators, Reels, images and everyday work.' },
+  { name: 'Professional', price: 4990, tokens: 2350, discount: 15, ru: 'Максимальный пакет для профессиональной и коммерческой работы.', en: 'Maximum value for professional and commercial use.' },
 ] as const
 
 const packs = [
-  { tokens: 500, price: 500 },
-  { tokens: 1000, price: 1000 },
-  { tokens: 3000, price: 3000 },
-  { tokens: 5000, price: 5000 },
+  { tokens: 200, price: 500 },
+  { tokens: 500, price: 1250 },
+  { tokens: 1000, price: 2500 },
+  { tokens: 2000, price: 5000 },
 ] as const
 
 export function SitePricing() {
@@ -51,7 +51,7 @@ export function SitePricing() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="text-base font-bold">{ru ? 'Без тарифа — разовая покупка Tokens' : 'No plan — one-time Token purchase'}</p>
-              <p className="mt-1 text-xs text-[#8F9DB3]">{ru ? '1 Token = 1 ₽. Тариф не требуется. Купленные отдельно Tokens не сгорают, пока аккаунт активен.' : '1 Token = 1 RUB. No plan required. Separately purchased Tokens do not expire while the account is active.'}</p>
+              <p className="mt-1 text-xs text-[#8F9DB3]">{ru ? 'Tokens — внутренняя единица Banana Zero. Тариф не требуется. Купленные отдельно Tokens не сгорают, пока аккаунт активен.' : 'Tokens are internal Banana Zero usage units. No plan required. Separately purchased Tokens do not expire while the account is active.'}</p>
             </div>
             <Link href="/pay" className="rounded-full bg-white px-4 py-2.5 text-xs font-bold text-[#171A22]">{ru ? 'Купить Tokens' : 'Buy Tokens'}</Link>
           </div>

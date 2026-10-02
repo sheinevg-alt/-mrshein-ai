@@ -165,6 +165,7 @@ export default function AdminControlCenterPage() {
         <div className="flex flex-wrap gap-2">
           <Link href="/admin" className="rounded-full border px-4 py-2 text-xs font-semibold">Контент</Link>
           <Link href="/admin/referrals" className="rounded-full border px-4 py-2 text-xs font-semibold">Рефералы</Link>
+          <Link href="/admin/announcements" className="rounded-full border px-4 py-2 text-xs font-semibold">Уведомления</Link>
           <button type="button" onClick={() => void downloadSnapshot()} className="flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold"><Download className="size-4" />Snapshot</button>
           <button type="button" onClick={() => void load()} className="flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-xs font-semibold text-background"><RefreshCw className="size-4" />Обновить</button>
         </div>

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ChevronDown, Clapperboard, ImageIcon, MessageSquareText, Music2, Sparkles, X } from 'lucide-react'
 import { useState } from 'react'
 import { useSiteLocale } from './site-locale-provider'
+import { AnnouncementsBell } from '../announcements-bell'
 
 const menuItems = [
   { ru: 'Тренды', en: 'Trends', href: '/app?tab=trends', icon: Sparkles },
@@ -43,6 +44,7 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-2">
+          <AnnouncementsBell locale={locale} variant="site" />
           <button
             type="button"
             onClick={toggleLocale}

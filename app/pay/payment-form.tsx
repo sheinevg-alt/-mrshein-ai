@@ -4,14 +4,14 @@ import { useMemo, useState } from 'react'
 import { CreditCard, QrCode, ShieldCheck } from 'lucide-react'
 
 const PACKS = [
-  { tokens: 500, rub: 500, label: '500 Tokens' },
-  { tokens: 1000, rub: 1000, label: '1 000 Tokens', featured: true },
-  { tokens: 3000, rub: 3000, label: '3 000 Tokens' },
-  { tokens: 5000, rub: 5000, label: '5 000 Tokens' },
+  { tokens: 200, rub: 500, label: '200 Tokens' },
+  { tokens: 500, rub: 1250, label: '500 Tokens', featured: true },
+  { tokens: 1000, rub: 2500, label: '1 000 Tokens' },
+  { tokens: 2000, rub: 5000, label: '2 000 Tokens' },
 ]
 
 export function PaymentForm({ enabled }: { enabled: boolean }) {
-  const [selected, setSelected] = useState(1000)
+  const [selected, setSelected] = useState(500)
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
@@ -51,7 +51,7 @@ export function PaymentForm({ enabled }: { enabled: boolean }) {
     <div className="space-y-5">
       <div>
         <p className="text-sm font-semibold">Разовая покупка Tokens</p>
-        <p className="mt-1 text-xs text-muted-foreground">Тариф не требуется. 1 Token = 1 ₽. Купленные отдельно Tokens не сгорают, пока аккаунт активен.</p>
+        <p className="mt-1 text-xs text-muted-foreground">Тариф не требуется. Если у вас активен Beginner, Creator или Professional, скидка на пополнение применяется по условиям тарифа. Купленные отдельно Tokens не сгорают, пока аккаунт активен.</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
