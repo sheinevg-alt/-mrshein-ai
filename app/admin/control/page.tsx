@@ -252,7 +252,7 @@ export default function AdminControlCenterPage() {
                   return (
                     <tr key={user.telegram_id}>
                       <td className="px-4 py-3">
-                        <p className="font-semibold">{name}</p>
+                        <Link href={`/admin/users/${user.telegram_id}`} className="font-semibold text-brand hover:underline">{name}</Link>
                         <p className="text-xs text-muted-foreground">{user.username ? `@${user.username} · ` : ''}{user.telegram_id}</p>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs">{user.referral_code || '—'}</td>
