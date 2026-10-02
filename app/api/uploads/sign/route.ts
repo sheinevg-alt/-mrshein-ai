@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { hasAppAccess } from '@/lib/server/access-control'
 import { NextResponse } from 'next/server'
 import { createStorageSignedUploadUrl, hasDatabase } from '@/lib/server/supabase'
 import { verifyTelegramInitData } from '@/lib/server/telegram-auth'
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
   const user = verifyTelegramInitData(request.headers.get('x-telegram-init-data') || '')
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!hasDatabase()) return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+  if (!(await hasAppAccess(user.id))) return NextResponse.json({ error: 'CLOSED_BETA' }, { status: 403 })
 
   const body = await request.json().catch(() => ({}))
   const contentType = String(body?.contentType || '').toLowerCase()
