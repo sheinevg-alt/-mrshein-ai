@@ -52,13 +52,13 @@ export function AnnouncementsBell({ locale = 'ru', variant = 'app' }: { locale?:
 
       {open && (
         <div className={variant === 'site'
-          ? 'absolute right-0 top-12 z-[70] w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-[#E6EEFF] bg-white shadow-[0_24px_60px_-24px_rgba(30,58,138,0.35)]'
-          : 'absolute right-0 top-12 z-[70] w-[min(340px,calc(100vw-2rem))] overflow-hidden rounded-3xl border bg-card shadow-2xl'}>
+          ? 'fixed left-4 right-4 top-20 z-[90] max-h-[calc(100dvh-6rem)] overflow-hidden rounded-3xl border border-[#E6EEFF] bg-white shadow-[0_24px_60px_-24px_rgba(30,58,138,0.35)] md:absolute md:left-auto md:right-0 md:top-12 md:w-[360px]'
+          : 'fixed left-4 right-4 top-20 z-[90] max-h-[calc(100dvh-6rem)] overflow-hidden rounded-3xl border bg-card shadow-2xl md:absolute md:left-auto md:right-0 md:top-12 md:w-[340px]'}>
           <div className="border-b px-4 py-3">
             <p className="text-sm font-bold">{locale === 'ru' ? 'Новости Banana Zero' : 'Banana Zero updates'}</p>
             <p className="mt-0.5 text-[11px] text-muted-foreground">{locale === 'ru' ? 'Изменения моделей, цен и сервиса' : 'Model, pricing and service changes'}</p>
           </div>
-          <div className="max-h-[420px] overflow-y-auto">
+          <div className="max-h-[calc(100dvh-10rem)] overflow-y-auto md:max-h-[420px]">
             {items.length === 0 ? (
               <p className="px-4 py-8 text-center text-xs text-muted-foreground">{locale === 'ru' ? 'Пока новых уведомлений нет' : 'No updates yet'}</p>
             ) : items.map((item) => {
