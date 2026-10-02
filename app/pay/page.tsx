@@ -2,11 +2,19 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { PUBLIC_PLANS, PUBLIC_TOKEN_PACKS } from '@/lib/public-pricing'
 import { PaymentForm } from './payment-form'
+import { hasDatabase, supabaseFetch } from '@/lib/server/supabase'
 
 export const dynamic = 'force-dynamic'
 
 export default async function PayPage({ searchParams }: { searchParams: Promise<{ tokens?: string }> }) {
-  const enabled = process.env.NEXT_PUBLIC_RUBLE_CHECKOUT_ENABLED === 'true'
+  let enabled = false
+  if (hasDatabase() && process.env.TOCHKA_JWT) {
+    const configResponse = await supabaseFetch(
+      'app_settings?select=value&key=eq.tochka_acquiring_config&limit=1',
+    )
+    const configRows = configResponse.ok ? await configResponse.json() : []
+    enabled = configRows?.[0]?.value?.setupComplete === true
+  }
   const params = await searchParams
   const requestedTokens = Number(params?.tokens || 500)
   const initialTokens = PUBLIC_TOKEN_PACKS.some((item) => item.tokens === requestedTokens) ? requestedTokens : 500
