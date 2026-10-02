@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { hasAppAccess } from '@/lib/server/access-control'
 import {
   createApiModelsCallbackToken,
   createApiModelsImageUpscaleTask,
@@ -20,6 +21,7 @@ export async function POST(request: Request) {
   const user = verifyTelegramInitData(request.headers.get('x-telegram-init-data') || '')
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!hasDatabase()) return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+  if (!(await hasAppAccess(user.id))) return NextResponse.json({ error: 'CLOSED_BETA' }, { status: 403 })
 
   const body = await request.json().catch(() => ({}))
   const mediaType = String(body?.mediaType || '')
