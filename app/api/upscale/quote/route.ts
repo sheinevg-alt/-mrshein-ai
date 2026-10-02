@@ -24,7 +24,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'SOURCE_DURATION_REQUIRED' }, { status: 400 })
     }
     const q = await quoteTokens({ toolId: 'video-upscale', duration, resolution })
-    return NextResponse.json({ ok: true, tokenCost: q.tokenCost, providerUsd: q.providerUsd })
+    return NextResponse.json({ ok: true, tokenCost: q.tokenCost })
   }
 
   const q = await quoteTokens({ toolId: 'image-upscale' })
