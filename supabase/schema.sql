@@ -378,3 +378,52 @@ values (
   'Canonical Banana Zero customer pricing v2.'
 )
 on conflict (key) do update set value=excluded.value, description=excluded.description, updated_at=now();
+
+
+-- Public product announcements shown through the website/Mini App bell.
+create table if not exists public.announcements (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null default 'info' check (kind in ('info','price','model','maintenance','promo')),
+  title_ru text not null,
+  title_en text not null,
+  body_ru text not null,
+  body_en text not null,
+  link_url text,
+  is_published boolean not null default false,
+  published_at timestamptz,
+  expires_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.announcements enable row level security;
+revoke all on table public.announcements from anon, authenticated;
+grant select, insert, update, delete on table public.announcements to service_role;
+
+create index if not exists announcements_public_idx
+  on public.announcements (is_published, published_at desc);
+
+
+insert into public.app_settings(key,value,description)
+values (
+  'commercial_model_v3',
+  '{
+    "status":"active",
+    "currency":"RUB",
+    "reference_rub_per_token":2.5,
+    "one_off_packages":[
+      {"tokens":200,"price_rub":500},
+      {"tokens":500,"price_rub":1250},
+      {"tokens":1000,"price_rub":2500},
+      {"tokens":2000,"price_rub":5000}
+    ],
+    "plans":[
+      {"code":"beginner","name":"Beginner","period_days":30,"price_rub":1490,"included_tokens":630,"topup_discount_pct":5},
+      {"code":"creator","name":"Creator","period_days":30,"price_rub":2990,"included_tokens":1330,"topup_discount_pct":10},
+      {"code":"professional","name":"Professional","period_days":30,"price_rub":4990,"included_tokens":2350,"topup_discount_pct":15}
+    ],
+    "pricing_rule":{"usd_rub":90,"provider_cost_multiplier":3.1,"token_reference_value_rub":2.5,"round_generation_tokens_to":5,"tax_pct":7,"payment_and_fiscal_reserve_pct":5}
+  }'::jsonb,
+  'Canonical active Banana Zero pricing model.'
+)
+on conflict (key) do update set value=excluded.value, description=excluded.description, updated_at=now();
