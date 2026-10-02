@@ -28,7 +28,6 @@ export function TrendsScreen({ onOpenTrend, onOpenCategory }: TrendsScreenProps)
     ...categories.filter((c) => trendCategoryIds.has(c.id)).map((c) => ({ id: c.id, label: localize(c.name, locale) })),
   ]
   const visible = filter === 'all' ? trends : trends.filter((trend) => trend.category === filter)
-  const [featured, ...rest] = visible
 
   return (
     <div className="animate-in fade-in duration-300">
@@ -75,17 +74,12 @@ export function TrendsScreen({ onOpenTrend, onOpenCategory }: TrendsScreenProps)
           })}
         </div>
 
-        {featured ? (
-          <div className="flex flex-col gap-3">
-            <TrendCard trend={featured} onOpen={onOpenTrend} featured />
-            {rest.length > 0 && (
-              <ul className="grid grid-cols-2 gap-3">
-                {rest.map((trend) => (
-                  <li key={trend.id}><TrendCard trend={trend} onOpen={onOpenTrend} /></li>
-                ))}
-              </ul>
-            )}
-          </div>
+        {visible.length > 0 ? (
+          <ul className="grid grid-cols-2 gap-3">
+            {visible.map((trend) => (
+              <li key={trend.id}><TrendCard trend={trend} onOpen={onOpenTrend} /></li>
+            ))}
+          </ul>
         ) : (
           <p className="glass rounded-2xl px-6 py-10 text-center text-sm text-muted-foreground">{t('home.empty')}</p>
         )}
