@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import {
   createApiModelsSeedance25Task,
   registerApiModelsPortrait,
-  type ApiModelsResolution,, createApiModelsCallbackToken } from '@/lib/server/apimodels'
+  type ApiModelsResolution,
+  createApiModelsCallbackToken, } from '@/lib/server/apimodels'
 import {
   createStorageSignedDownloadUrl,
   hasDatabase,
