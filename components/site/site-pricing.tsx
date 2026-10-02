@@ -24,11 +24,11 @@ export function SitePricing() {
     <section id="pricing" className="mx-auto max-w-6xl px-5 py-16 md:px-8">
       <div className="rounded-[2rem] bg-[#0B0F1A] px-6 py-10 text-white md:px-10 md:py-12">
         <p className="text-xs font-bold tracking-[0.16em] text-[#F6AB10]">{ru ? 'ТАРИФЫ' : 'PRICING'}</p>
-        <h2 className="mt-3 text-3xl font-bold tracking-tight">{ru ? 'Понятные тарифы и Tokens' : 'Simple plans and Tokens'}</h2>
+        <h2 className="mt-3 text-3xl font-bold tracking-tight">{ru ? 'Стоимость цифровых услуг Banana Zero' : 'Banana Zero digital service pricing'}</h2>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-[#A8B3C7]">
           {ru
-            ? 'Можно пользоваться без тарифа и покупать Tokens отдельно. Тарифы действуют 30 дней, включают Tokens и дают скидку на пополнение баланса.'
-            : 'Use Banana Zero without a plan and buy Tokens separately, or choose a 30-day plan with included Tokens and a top-up discount.'}
+            ? 'Все цены указаны в рублях и доступны до оплаты. Можно пользоваться без тарифа и покупать Tokens отдельно. Тарифы действуют 30 дней, включают Tokens и дают скидку на пополнение баланса.'
+            : 'All prices are shown in RUB before payment. Use Banana Zero without a plan and buy Tokens separately, or choose a 30-day plan with included Tokens and a top-up discount.'}
         </p>
 
         <div className="mt-8 grid gap-4 lg:grid-cols-3">
@@ -50,8 +50,8 @@ export function SitePricing() {
         <div className="mt-7 rounded-3xl border border-white/10 bg-white/[0.05] p-5">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <p className="text-base font-bold">{ru ? 'Без тарифа — разовая покупка Tokens' : 'No plan — one-time Token purchase'}</p>
-              <p className="mt-1 text-xs text-[#8F9DB3]">{ru ? 'Tokens — внутренняя единица Banana Zero. Тариф не требуется. Купленные отдельно Tokens не сгорают, пока аккаунт активен.' : 'Tokens are internal Banana Zero usage units. No plan required. Separately purchased Tokens do not expire while the account is active.'}</p>
+              <p className="text-base font-bold">{ru ? 'Разовые пакеты цифровой услуги' : 'One-time digital service packages'}</p>
+              <p className="mt-1 text-xs text-[#8F9DB3]">{ru ? 'Tokens — внутренняя единица учёта объёма AI-генераций Banana Zero. Тариф не требуется. Цена каждого пакета фиксирована в рублях и указана ниже.' : 'Tokens are internal Banana Zero usage units for AI generation services. No plan is required. Each package has a fixed RUB price shown below.'}</p>
             </div>
             <Link href="/pay" className="rounded-full bg-white px-4 py-2.5 text-xs font-bold text-[#171A22]">{ru ? 'Купить Tokens' : 'Buy Tokens'}</Link>
           </div>

@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { ChevronDown, Clapperboard, ImageIcon, MessageSquareText, Music2, Sparkles, X } from 'lucide-react'
+import { ChevronDown, Clapperboard, ImageIcon, MessageSquareText, Music2, Sparkles, WalletCards, X } from 'lucide-react'
 import { useState } from 'react'
 import { useSiteLocale } from './site-locale-provider'
 import { AnnouncementsBell } from '../announcements-bell'
@@ -13,6 +13,7 @@ const menuItems = [
   { ru: 'Изображения', en: 'Images', href: '/app?tab=create&category=image', icon: ImageIcon },
   { ru: 'Аудио', en: 'Audio', href: '/app?tab=create&category=audio', icon: Music2 },
   { ru: 'Чат', en: 'Text', href: '/app?tab=create&category=text', icon: MessageSquareText },
+  { ru: 'Тарифы', en: 'Pricing', href: '/#pricing', icon: WalletCards },
 ]
 
 export function SiteHeader() {
