@@ -10,10 +10,6 @@ export const dynamic = 'force-dynamic'
 const PACKS = new Map<number, number>([[200,500],[500,1250],[1000,2500],[2000,5000]])
 
 export async function POST(request: Request) {
-  if (process.env.NEXT_PUBLIC_RUBLE_CHECKOUT_ENABLED !== 'true') {
-    return NextResponse.json({ error: 'Ruble checkout is not enabled yet' }, { status: 503 })
-  }
-
   const user = verifyTelegramInitData(request.headers.get('x-telegram-init-data') || '')
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!(await hasAppAccess(user.id))) return NextResponse.json({ error: 'CLOSED_BETA' }, { status: 403 })
@@ -22,20 +18,21 @@ export async function POST(request: Request) {
 
   let customerCode = process.env.TOCHKA_CUSTOMER_CODE || ''
   let merchantId = process.env.TOCHKA_MERCHANT_ID || ''
+  let acquiringConfig: any = {}
 
-  if (hasDatabase() && (!customerCode || !merchantId)) {
+  if (hasDatabase()) {
     const configResponse = await supabaseFetch(
       'app_settings?select=value&key=eq.tochka_acquiring_config&limit=1',
     )
     const configRows = configResponse.ok ? await configResponse.json() : []
-    const acquiringConfig = configRows?.[0]?.value || {}
+    acquiringConfig = configRows?.[0]?.value || {}
     customerCode = customerCode || String(acquiringConfig?.customerCode || '')
     merchantId = merchantId || String(acquiringConfig?.merchantId || '')
   }
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin
   const taxSystemCode = process.env.TOCHKA_TAX_SYSTEM_CODE || 'usn_income'
   const vatType = process.env.TOCHKA_VAT_TYPE || 'none'
-  if (!token || !customerCode || !merchantId) {
+  if (!token || !customerCode || !merchantId || acquiringConfig?.setupComplete !== true) {
     return NextResponse.json({ error: 'Tochka fiscal checkout is not configured' }, { status: 503 })
   }
 
