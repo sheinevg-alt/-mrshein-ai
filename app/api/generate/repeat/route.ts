@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { hasAppAccess } from '@/lib/server/access-control'
 import { createApiModelsSeedance25Task, type ApiModelsResolution, createApiModelsCallbackToken } from '@/lib/server/apimodels'
 import { createStorageSignedDownloadUrl, hasDatabase, supabaseFetch } from '@/lib/server/supabase'
 import { verifyTelegramInitData } from '@/lib/server/telegram-auth'
@@ -68,6 +69,7 @@ export async function GET(request: Request) {
   const user = verifyTelegramInitData(request.headers.get('x-telegram-init-data') || '')
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!hasDatabase()) return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+  if (!(await hasAppAccess(user.id))) return NextResponse.json({ error: 'CLOSED_BETA' }, { status: 403 })
 
   const jobId = new URL(request.url).searchParams.get('jobId') || ''
   if (!jobId) return NextResponse.json({ error: 'JOB_ID_REQUIRED' }, { status: 400 })
