@@ -61,7 +61,8 @@ export async function GET(request: Request) {
     expiredGenerationInputsBytes: Number(storageRow?.expired_generation_inputs_bytes || 0),
     freePlanStorageQuotaBytes: 1024 * 1024 * 1024,
     freePlanDatabaseQuotaBytes: 500 * 1024 * 1024,
-    retentionDays: 14,
+    inputRetentionDays: 3,
+    resultRetentionDays: 14,
   }
 
   return NextResponse.json({
