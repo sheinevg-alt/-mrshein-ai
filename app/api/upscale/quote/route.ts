@@ -28,5 +28,5 @@ export async function POST(request: Request) {
   }
 
   const q = await quoteTokens({ toolId: 'image-upscale' })
-  return NextResponse.json({ ok: true, tokenCost: q.tokenCost, providerUsd: q.providerUsd })
+  return NextResponse.json({ ok: true, tokenCost: q.tokenCost })
 }
