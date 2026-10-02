@@ -180,7 +180,9 @@ export function WorksScreen({ onRepeatGeneration }: { onRepeatGeneration?: (jobI
         <div>
           <h1 className="text-xl font-semibold tracking-tight">{locale === 'ru' ? 'Мои работы' : 'My works'}</h1>
           <p className="mt-1 text-xs text-muted-foreground">
-            {locale === 'ru' ? 'Здесь появляются активные, готовые и недавние неудачные генерации.' : 'Active, completed, and recent failed generations appear here.'}
+            {locale === 'ru'
+              ? 'Здесь появляются активные, готовые и недавние неудачные генерации. Готовые медиа храните у себя: срок доступности в сервисе ограничен 14 днями.'
+              : 'Active, completed, and recent failed generations appear here. Save completed media to your device: in-service availability is limited to 14 days.'}
           </p>
         </div>
         <button
@@ -317,6 +319,11 @@ export function WorksScreen({ onRepeatGeneration }: { onRepeatGeneration?: (jobI
                         {locale === 'ru' ? 'Повторить с теми же настройками' : 'Repeat with same settings'}
                       </button>
                     )}
+                    <p className="mt-2 text-center text-[11px] text-muted-foreground">
+                      {locale === 'ru'
+                        ? 'Сохраните результат на устройство. Медиафайл может быть автоматически удалён из Banana Zero через 14 дней.'
+                        : 'Save the result to your device. The media file may be automatically removed from Banana Zero after 14 days.'}
+                    </p>
                     {downloadErrorId === item.id && (
                       <p className="mt-2 text-center text-xs text-destructive">
                         {locale === 'ru' ? 'Не удалось скачать файл. Попробуйте ещё раз.' : 'Could not download the file. Please try again.'}

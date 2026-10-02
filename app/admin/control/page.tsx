@@ -18,6 +18,19 @@ type Overview = {
     pendingPayoutRub: number
   }
   provider: { configured: boolean; balanceUsd: number | null; error?: string | null }
+  storage: {
+    databaseBytes: number
+    generationInputsBytes: number
+    trendPreviewsBytes: number
+    totalStorageBytes: number
+    generationInputsObjects: number
+    trendPreviewsObjects: number
+    expiredGenerationInputsObjects: number
+    expiredGenerationInputsBytes: number
+    freePlanStorageQuotaBytes: number
+    freePlanDatabaseQuotaBytes: number
+    retentionDays: number
+  }
   models: Array<{ id: string; category: string; displayName: string; model: string }>
   recent: {
     generations: any[]
@@ -52,6 +65,7 @@ export default function AdminControlCenterPage() {
   const [amounts, setAmounts] = useState<Record<string,string>>({})
   const [notes, setNotes] = useState<Record<string,string>>({})
   const [busyId, setBusyId] = useState<number | null>(null)
+  const [storageBusy, setStorageBusy] = useState(false)
 
   useEffect(() => {
     const saved = window.sessionStorage.getItem('mrshein.admin.secret')
@@ -128,6 +142,34 @@ export default function AdminControlCenterPage() {
     setStatus('Snapshot скачан.')
   }
 
+
+  async function cleanupExpiredMedia() {
+    setStorageBusy(true)
+    setStatus('Проверяю временные файлы старше 14 дней…')
+    const response = await fetch('/api/admin/storage/cleanup', {
+      method: 'POST',
+      headers,
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      setStatus(data?.error || 'Не удалось очистить временные файлы.')
+      setStorageBusy(false)
+      return
+    }
+    setStatus(data.deleted
+      ? `Удалено ${data.deleted} временных файлов. Освобождено ${formatBytes(Number(data.freedBytes || 0))}.`
+      : 'Файлов старше 14 дней для очистки нет.')
+    await load()
+    setStorageBusy(false)
+  }
+
+  function formatBytes(bytes: number) {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 MB'
+    const mb = bytes / (1024 * 1024)
+    if (mb < 1024) return `${mb.toFixed(mb >= 100 ? 0 : 1)} MB`
+    return `${(mb / 1024).toFixed(2)} GB`
+  }
+
   const filteredUsers = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return users
@@ -191,6 +233,56 @@ export default function AdminControlCenterPage() {
                 <p className="mt-1 text-[11px] text-muted-foreground">{label}</p>
               </div>
             ))}
+          </section>
+
+          <section className="mt-5 rounded-3xl border bg-card p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">Хранилище и retention</p>
+                <p className="mt-1 text-xs text-muted-foreground">Тяжёлые пользовательские медиа — временные. Финансовые и audit-записи сохраняются отдельно в базе.</p>
+              </div>
+              <button
+                type="button"
+                disabled={storageBusy || overview.storage.expiredGenerationInputsObjects === 0}
+                onClick={() => void cleanupExpiredMedia()}
+                className="rounded-full border px-4 py-2 text-xs font-semibold disabled:opacity-40"
+              >
+                {storageBusy ? 'Очищаю…' : 'Удалить >14 дней'}
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                ['Media Storage', overview.storage.totalStorageBytes, overview.storage.freePlanStorageQuotaBytes],
+                ['Generation inputs', overview.storage.generationInputsBytes, overview.storage.freePlanStorageQuotaBytes],
+                ['Trend previews', overview.storage.trendPreviewsBytes, overview.storage.freePlanStorageQuotaBytes],
+                ['Postgres DB', overview.storage.databaseBytes, overview.storage.freePlanDatabaseQuotaBytes],
+              ].map(([label, rawUsed, rawQuota]) => {
+                const used = Number(rawUsed)
+                const quota = Number(rawQuota)
+                const pct = quota > 0 ? Math.min(999, used / quota * 100) : 0
+                return (
+                  <div key={String(label)} className="rounded-2xl bg-muted/40 p-4">
+                    <p className="text-lg font-black">{formatBytes(used)}</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">{String(label)} · {pct.toFixed(0)}%</p>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div className={`h-full rounded-full ${pct >= 85 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, pct)}%` }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
+              <span>Входных файлов: <strong className="text-foreground">{overview.storage.generationInputsObjects}</strong></span>
+              <span>На очистку сейчас: <strong className="text-foreground">{overview.storage.expiredGenerationInputsObjects}</strong></span>
+              <span>Retention: <strong className="text-foreground">{overview.storage.retentionDays} дней</strong></span>
+            </div>
+            {overview.storage.totalStorageBytes / overview.storage.freePlanStorageQuotaBytes >= 0.7 && (
+              <div className="mt-4 rounded-2xl bg-amber-500/10 px-4 py-3 text-xs leading-5 text-amber-800">
+                Хранилище заполнено более чем на 70%. До массового запуска нужно переключить тяжёлые пользовательские медиа на масштабируемое object storage.
+              </div>
+            )}
           </section>
 
           <section className="mt-5 grid gap-3 md:grid-cols-2">
