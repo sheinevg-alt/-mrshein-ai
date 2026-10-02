@@ -238,6 +238,9 @@ export async function POST(request: Request) {
       task = await createApiModelsAudioTask({
         model: 'suno-v5',
         promptText: prompt,
+        sunoVersion: ['chirp-v5-5','chirp-v5','chirp-v4-5','chirp-v4'].includes(String(settings.sunoVersion))
+          ? settings.sunoVersion
+          : 'chirp-v5-5',
         callbackUrl,
       })
     } else if (toolId === 'kling-audio') {
