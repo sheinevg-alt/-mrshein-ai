@@ -69,7 +69,7 @@ export function estimateProviderUsd(input: ToolQuoteInput) {
     case 'suno-v5':
       return 0.26
     case 'elevenlabs-tts':
-      return Math.max(0.01, (Math.max(1, input.promptLength || 1) / 1000) * 0.085)
+      return Math.max(0.01, (Math.max(1, input.promptLength || 1) / 1000) * 0.04)
     case 'kling-audio':
       return 0.05
     case 'gpt-6-luna':
