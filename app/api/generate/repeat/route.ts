@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic'
 
 const MODEL = 'seedance-2.5'
 const INPUT_BUCKET = 'generation-inputs'
+const INPUT_RETENTION_MS = 3 * 24 * 60 * 60 * 1000
 
 function safeResolution(value: unknown): ApiModelsResolution {
   return String(value || '480p') === '720p' ? '720p' : '480p'
@@ -19,7 +20,7 @@ function safeDuration(value: unknown) {
 
 async function getOriginalJob(userId: number, jobId: string) {
   const response = await supabaseFetch(
-    `generation_history?select=id,title,status,provider,model,input_payload&id=eq.${encodeURIComponent(jobId)}&telegram_id=eq.${userId}&limit=1`,
+    `generation_history?select=id,title,status,provider,model,input_payload,created_at&id=eq.${encodeURIComponent(jobId)}&telegram_id=eq.${userId}&limit=1`,
   )
   const rows = response.ok ? await response.json() : []
   return rows?.[0] || null
@@ -79,10 +80,17 @@ export async function GET(request: Request) {
 
   try {
     const config = normalizePayload(row, user.id)
-    const [sourceVideoUrl, referenceUrls] = await Promise.all([
-      createStorageSignedDownloadUrl(INPUT_BUCKET, config.sourceVideoPath, 7200),
-      Promise.all(config.referencePaths.map((path) => createStorageSignedDownloadUrl(INPUT_BUCKET, path, 7200))),
-    ])
+    const createdAt = new Date(String(row.created_at || '')).getTime()
+    const inputsExpired = !Number.isFinite(createdAt) || Date.now() - createdAt >= INPUT_RETENTION_MS
+
+    let sourceVideoUrl = ''
+    let referenceUrls: string[] = []
+    if (!inputsExpired) {
+      ;[sourceVideoUrl, referenceUrls] = await Promise.all([
+        createStorageSignedDownloadUrl(INPUT_BUCKET, config.sourceVideoPath, 7200),
+        Promise.all(config.referencePaths.map((path) => createStorageSignedDownloadUrl(INPUT_BUCKET, path, 7200))),
+      ])
+    }
 
     return NextResponse.json({
       ok: true,
@@ -95,14 +103,16 @@ export async function GET(request: Request) {
         aspectRatio: config.ratio,
         generateAudio: config.generateAudio,
         referenceTags: config.referenceTags,
+        inputsExpired,
+        inputRetentionDays: 3,
         sourceVideo: {
-          path: config.sourceVideoPath,
+          path: inputsExpired ? '' : config.sourceVideoPath,
           url: sourceVideoUrl,
           label: '@Video1',
         },
         references: config.referencePaths.map((path, index) => ({
-          path,
-          url: referenceUrls[index],
+          path: inputsExpired ? '' : path,
+          url: referenceUrls[index] || '',
           label: `@Image${index + 1}`,
         })),
       },
@@ -139,6 +149,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'REPEAT_SOURCE_INVALID' }, { status: 400 })
   }
 
+  const createdAt = new Date(String(row.created_at || '')).getTime()
+  const inputsExpired = !Number.isFinite(createdAt) || Date.now() - createdAt >= INPUT_RETENTION_MS
+
   const prompt = typeof payload.prompt === 'string' && payload.prompt.trim()
     ? payload.prompt.trim()
     : original.prompt
@@ -146,13 +159,19 @@ export async function POST(request: Request) {
   if (prompt.length < 5) return NextResponse.json({ error: 'PROMPT_REQUIRED' }, { status: 400 })
   if (prompt.length > 12_000) return NextResponse.json({ error: 'PROMPT_TOO_LONG' }, { status: 400 })
 
-  const referencePaths = (Array.isArray(payload.referencePaths) ? payload.referencePaths : original.referencePaths)
+  const sourceVideoPath = typeof payload.sourceVideoPath === 'string' && payload.sourceVideoPath.trim()
+    ? payload.sourceVideoPath.trim()
+    : inputsExpired ? '' : original.sourceVideoPath
+  const referencePaths = (Array.isArray(payload.referencePaths) ? payload.referencePaths : inputsExpired ? [] : original.referencePaths)
     .map((value) => String(value || ''))
     .filter(Boolean)
     .slice(0, 30)
 
+  if (!sourceVideoPath || !sourceVideoPath.startsWith(`${user.id}/videos/`)) {
+    return NextResponse.json({ error: inputsExpired ? 'SOURCE_VIDEO_REUPLOAD_REQUIRED' : 'INVALID_SOURCE_VIDEO_PATH' }, { status: 400 })
+  }
   if (referencePaths.length !== original.referencePaths.length) {
-    return NextResponse.json({ error: 'REFERENCE_COUNT_MISMATCH' }, { status: 400 })
+    return NextResponse.json({ error: inputsExpired ? 'REFERENCES_REUPLOAD_REQUIRED' : 'REFERENCE_COUNT_MISMATCH' }, { status: 400 })
   }
   if (referencePaths.some((path) => !path.startsWith(`${user.id}/images/`))) {
     return NextResponse.json({ error: 'INVALID_REFERENCE_PATH' }, { status: 400 })
@@ -173,7 +192,7 @@ export async function POST(request: Request) {
       input_payload: {
         mode: 'generate',
         prompt,
-        source_video_path: original.sourceVideoPath,
+        source_video_path: sourceVideoPath,
         reference_paths: referencePaths,
         reference_count: referencePaths.length + 1,
         reference_tags: original.referenceTags,
@@ -197,7 +216,7 @@ export async function POST(request: Request) {
   try {
     const [references, videoUrl] = await Promise.all([
       Promise.all(referencePaths.map((path) => createStorageSignedDownloadUrl(INPUT_BUCKET, path, 7200))),
-      createStorageSignedDownloadUrl(INPUT_BUCKET, original.sourceVideoPath, 7200),
+      createStorageSignedDownloadUrl(INPUT_BUCKET, sourceVideoPath, 7200),
     ])
     const callbackUrl = `${new URL(request.url).origin}/api/generate/callback/apimodels?jobId=${encodeURIComponent(job.id)}`
 

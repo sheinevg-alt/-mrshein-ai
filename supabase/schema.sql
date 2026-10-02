@@ -532,7 +532,9 @@ values (
   '{
     "status":"active_policy",
     "customer_media_days":14,
-    "generation_inputs_days":14,
+    "generation_inputs_days":3,
+    "input_media_days":3,
+    "result_media_days":14,
     "trend_previews":"keep",
     "audit_metadata":"keep",
     "database_logs":"keep",
@@ -565,8 +567,8 @@ as $$
     coalesce(sum((o.metadata->>'size')::bigint),0)::bigint,
     count(*) filter (where o.bucket_id='generation-inputs')::bigint,
     count(*) filter (where o.bucket_id='trend-previews')::bigint,
-    count(*) filter (where o.bucket_id='generation-inputs' and o.created_at < now() - interval '14 days')::bigint,
-    coalesce(sum((o.metadata->>'size')::bigint) filter (where o.bucket_id='generation-inputs' and o.created_at < now() - interval '14 days'),0)::bigint
+    count(*) filter (where o.bucket_id='generation-inputs' and o.created_at < now() - interval '3 days')::bigint,
+    coalesce(sum((o.metadata->>'size')::bigint) filter (where o.bucket_id='generation-inputs' and o.created_at < now() - interval '3 days'),0)::bigint
   from storage.objects o;
 $$;
 
@@ -584,7 +586,7 @@ as $$
          coalesce((o.metadata->>'size')::bigint,0)::bigint
   from storage.objects o
   where o.bucket_id='generation-inputs'
-    and o.created_at < now() - interval '14 days'
+    and o.created_at < now() - interval '3 days'
     and not exists (
       select 1
       from public.generation_history g
