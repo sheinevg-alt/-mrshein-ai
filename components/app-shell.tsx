@@ -12,6 +12,7 @@ import { CategoryScreen } from './screens/category-screen'
 import { CreateScreen } from './screens/create-screen'
 import { FavoritesScreen } from './screens/favorites-screen'
 import { ProfileScreen } from './screens/profile-screen'
+import { PricingScreen } from './screens/pricing-screen'
 import { TrendsScreen } from './screens/trends-screen'
 import { WorksScreen } from './screens/works-screen'
 import { TrendsProvider, useTrends } from './trends-provider'
@@ -85,7 +86,7 @@ function InnerApp() {
     }
 
     const requestedTab = params.get('tab')
-    if (requestedTab && ['trends', 'create', 'works', 'favorites', 'profile'].includes(requestedTab)) {
+    if (requestedTab && ['trends', 'create', 'works', 'pricing', 'favorites', 'profile'].includes(requestedTab)) {
       setTab(requestedTab as TabId)
       if (requestedTab === 'works') markWorksSeen()
     }
@@ -174,6 +175,7 @@ function InnerApp() {
               <CreateScreen onOpenCategory={openCategory} />
             ))}
           {tab === 'works' && <WorksScreen onRepeatGeneration={(jobId) => setRepeatJobId(jobId)} />}
+          {tab === 'pricing' && <PricingScreen />}
           {tab === 'favorites' && (
             <FavoritesScreen onOpenTool={openTool} onOpenTrend={openTrend} onBrowse={() => changeTab('trends')} />
           )}
