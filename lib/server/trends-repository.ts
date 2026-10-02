@@ -76,6 +76,7 @@ function toPublicTrend(row: TrendRow): Trend {
       ? undefined
       : Boolean(config.default_generate_audio),
     generateAudioLocked: Boolean(config.lock_audio),
+    sourceAudioMode: String(config.source_audio_mode || '') === 'preserve_source' ? 'preserve_source' : 'generate',
   }
 }
 
