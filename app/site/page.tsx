@@ -89,6 +89,19 @@ const steps = [
   { n: '03', ru: ['Создайте', 'Запустите генерацию и получите результат в «Моих работах».'], en: ['Create', 'Run the generation and find the result in My Works.'] },
 ] as const
 
+const pricingPlans = [
+  { name: 'Beginner', price: 990, tokens: 1100, discount: 10, ru: 'Для знакомства с Banana Zero и регулярных небольших генераций.', en: 'For getting started and regular light generation.' },
+  { name: 'Creator', price: 2490, tokens: 2850, discount: 12, featured: true, ru: 'Для активных авторов, Reels, изображений и ежедневной работы.', en: 'For active creators, Reels, images and everyday work.' },
+  { name: 'Professional', price: 4990, tokens: 5900, discount: 15, ru: 'Максимальный пакет для профессиональной и коммерческой работы.', en: 'Maximum value for professional and commercial use.' },
+] as const
+
+const tokenPacks = [
+  { tokens: 500, price: 500 },
+  { tokens: 1000, price: 1000 },
+  { tokens: 3000, price: 3000 },
+  { tokens: 5000, price: 5000 },
+] as const
+
 export default function SitePage() {
   const { locale } = useSiteLocale()
   const t = copy[locale]
