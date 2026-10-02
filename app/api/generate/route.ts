@@ -252,7 +252,7 @@ export async function POST(request: Request) {
         references,
         videoReferences,
         resolution: apiResolution,
-        effectiveGenerateAudio,
+        generateAudio: effectiveGenerateAudio,
         callbackUrl,
       })
 
