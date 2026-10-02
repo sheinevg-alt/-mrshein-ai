@@ -40,18 +40,33 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [notificationsEnabled, setNotificationsLocal] = useState(true)
   const [completionNotice, setCompletionNotice] = useState<HistoryItem | null>(null)
   const [unreadWorks, setUnreadWorks] = useState(false)
+  const [accessState, setAccessState] = useState<'checking' | 'granted' | 'denied'>('checking')
   const previousStatuses = useRef<Map<string, HistoryItem['status']>>(new Map())
 
   const refreshUser = useCallback(async () => {
     const initData = getTelegramInitData()
-    if (!initData) return
+    if (!initData) {
+      setAccessState('denied')
+      return
+    }
 
     await Promise.all([
       fetch('/api/me', {
         headers: { 'X-Telegram-Init-Data': initData },
         cache: 'no-store',
       })
-        .then(async (response) => (response.ok ? response.json() : null))
+        .then(async (response) => {
+          if (response.status === 403) {
+            setAccessState('denied')
+            return null
+          }
+          if (!response.ok) {
+            setAccessState('denied')
+            return null
+          }
+          setAccessState('granted')
+          return response.json()
+        })
         .then((data) => {
           if (!data) return
           if (typeof data.tokenBalance === 'number') setTokenBalance(data.tokenBalance)
@@ -188,6 +203,31 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       markWorksSeen,
     ],
   )
+
+  if (accessState === 'checking') {
+    return (
+      <div className="flex min-h-[var(--app-height)] items-center justify-center bg-background px-6 text-center">
+        <div>
+          <div className="text-xl font-semibold">Banana Zero</div>
+          <div className="mt-2 text-sm text-muted-foreground">Проверяем доступ…</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (accessState === 'denied') {
+    return (
+      <div className="flex min-h-[var(--app-height)] items-center justify-center bg-background px-6 text-center">
+        <div className="max-w-sm">
+          <div className="text-xl font-semibold">Banana Zero</div>
+          <div className="mt-3 text-sm font-medium">Сейчас идёт закрытое тестирование</div>
+          <div className="mt-2 text-sm text-muted-foreground">
+            Доступ к приложению временно ограничен. Closed beta access only.
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>
 }
