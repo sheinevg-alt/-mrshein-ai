@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { hasAppAccess } from '@/lib/server/access-control'
 import { hasDatabase, supabaseFetch } from '@/lib/server/supabase'
 import { verifyTelegramInitData } from '@/lib/server/telegram-auth'
+import { tochkaAuthHeaders, tochkaRequest } from '@/lib/server/tochka-http'
 
 export const dynamic = 'force-dynamic'
 
@@ -101,18 +102,13 @@ export async function POST(request: Request) {
     })
   }
 
-  const response = await fetch('https://enter.tochka.com/uapi/acquiring/v1.0/payments_with_receipt', {
+  const response = await tochkaRequest('/uapi/acquiring/v1.0/payments_with_receipt', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    },
+    headers: tochkaAuthHeaders(token, true),
     body: JSON.stringify(providerPayload),
-    cache: 'no-store',
   })
 
-  const data = await response.json().catch(() => null)
+  const data = response.json
   if (!response.ok || !data?.Data?.paymentLink) {
     if (hasDatabase()) await supabaseFetch(`payment_orders?id=eq.${orderId}`, { method: 'PATCH', body: JSON.stringify({ status: 'failed', metadata: { email, name, offer_version: '2026-10-02-v2', pricing_version: 'commercial_model_v3', purchase_snapshot: { token_amount: tokenAmount, amount_rub: amount }, provider_error: data } }) })
     return NextResponse.json({ error: 'Payment provider error' }, { status: 502 })
