@@ -89,6 +89,7 @@ async function readRequest(request: Request) {
     const form = await request.formData()
     return {
       form,
+      body: {} as Record<string, unknown>,
       trendId: String(form.get('trendId') || ''),
       generateAudio: String(form.get('generateAudio') ?? 'true') !== 'false',
       resolution: String(form.get('resolution') || '480p'),
@@ -97,6 +98,7 @@ async function readRequest(request: Request) {
   const body = await request.json().catch(() => ({}))
   return {
     form: null as FormData | null,
+    body: body && typeof body === 'object' ? body as Record<string, unknown> : {},
     trendId: String(body?.trendId || ''),
     generateAudio: body?.generateAudio !== false,
     resolution: String(body?.resolution || '480p'),
@@ -108,7 +110,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!hasDatabase()) return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
 
-  const { form, trendId, generateAudio, resolution: requestedResolution } = await readRequest(request)
+  const { form, body, trendId, generateAudio, resolution: requestedResolution } = await readRequest(request)
   const resolution: BytePlusResolution = requestedResolution === '1080p' ? '1080p' : requestedResolution === '720p' ? '720p' : '480p'
   if (!trendId) return NextResponse.json({ error: 'trendId is required' }, { status: 400 })
 
@@ -137,38 +139,61 @@ export async function POST(request: Request) {
   const references: string[] = []
   const referenceTags: string[] = []
 
-  if (form) {
-    try {
-      for (const input of inputSchema) {
-        if (String(input.kind || 'photo') !== 'photo') continue
-        const id = String(input.id || '')
-        if (!id) continue
+  try {
+    const jsonReferencePaths = body.referencePaths && typeof body.referencePaths === 'object'
+      ? body.referencePaths as Record<string, unknown>
+      : {}
+    const jsonReferenceUrls = body.referenceUrls && typeof body.referenceUrls === 'object'
+      ? body.referenceUrls as Record<string, unknown>
+      : {}
 
+    for (const input of inputSchema) {
+      if (String(input.kind || 'photo') !== 'photo') continue
+      const id = String(input.id || '')
+      if (!id) continue
+
+      let uri = ''
+
+      if (form) {
         const upload = form.get(id)
         const suppliedUrl = String(form.get(`${id}_url`) || '')
-        let uri = ''
 
         if (upload instanceof File && upload.size > 0) {
           uri = isApiModels
             ? await uploadReferenceForApiModels(upload, user.id)
             : await fileToDataUri(upload)
+        } else if (suppliedUrl.startsWith('https://')) {
+          uri = suppliedUrl
         }
-        else if (suppliedUrl.startsWith('https://')) uri = suppliedUrl
-        else if (input.default_asset_url) uri = String(input.default_asset_url)
+      } else {
+        const storedPath = String(jsonReferencePaths[id] || '')
+        const suppliedUrl = String(jsonReferenceUrls[id] || '')
 
-        if (!uri && input.required) {
-          return NextResponse.json({ error: `MISSING_REFERENCE:${id}` }, { status: 400 })
-        }
-        if (uri) {
-          references.push(uri)
-          referenceTags.push(String(input.tag || `@image${references.length}`))
+        if (storedPath) {
+          const expectedPrefix = `${user.id}/images/`
+          if (!storedPath.startsWith(expectedPrefix)) {
+            return NextResponse.json({ error: `INVALID_REFERENCE_PATH:${id}` }, { status: 400 })
+          }
+          uri = await createStorageSignedDownloadUrl(INPUT_BUCKET, storedPath, 7200)
+        } else if (suppliedUrl.startsWith('https://')) {
+          uri = suppliedUrl
         }
       }
-    } catch (error) {
-      const code = error instanceof Error ? error.message : 'INVALID_REFERENCE'
-      const status = code === 'REFERENCE_IMAGE_TOO_LARGE' ? 413 : 400
-      return NextResponse.json({ error: code }, { status })
+
+      if (!uri && input.default_asset_url) uri = String(input.default_asset_url)
+
+      if (!uri && input.required) {
+        return NextResponse.json({ error: `MISSING_REFERENCE:${id}` }, { status: 400 })
+      }
+      if (uri) {
+        references.push(uri)
+        referenceTags.push(String(input.tag || `@image${references.length}`))
+      }
     }
+  } catch (error) {
+    const code = error instanceof Error ? error.message : 'INVALID_REFERENCE'
+    const status = code === 'REFERENCE_IMAGE_TOO_LARGE' ? 413 : 400
+    return NextResponse.json({ error: code }, { status })
   }
 
   const tokenCost = Math.max(0, Number(trend.token_cost || 0))
@@ -217,7 +242,7 @@ export async function POST(request: Request) {
   const job = (await historyResponse.json())?.[0]
 
   if (isRunway || isBytePlus || isApiModels) {
-    if (!form) {
+    if (references.length === 0 && inputSchema.some((input) => String(input.kind || 'photo') === 'photo' && input.required)) {
       if (tokenCost > 0) await rpc('refund_tokens', { p_telegram_id: user.id, p_amount: tokenCost, p_reference: `missing-input:${job.id}` })
       await supabaseFetch(`generation_history?id=eq.${job.id}`, {
         method: 'PATCH',
