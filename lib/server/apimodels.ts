@@ -582,12 +582,12 @@ export async function createApiModelsChatCompletion(params: {
 export async function createApiModelsElevenTts(params: {
   text: string
   voiceId?: string
-  model?: 'eleven-tts-flash' | 'eleven-tts-turbo' | 'eleven-tts-multilingual' | 'eleven-tts-v3'
+  model?: 'eleven-tts-flash' | 'eleven-tts-turbo' | 'eleven-tts-multilingual' | 'eleven-tts-v3' | 'eleven-tts-v4' | 'eleven-tts-v4-turbo'
 }) {
   const response = await apiModelsFetch('/tts/stream', {
     method: 'POST',
     body: JSON.stringify({
-      model: params.model || 'eleven-tts-v3',
+      model: params.model || 'eleven-tts-v4',
       text: params.text,
       voice_id: params.voiceId || 'EXAVITQu4vr4xnSDxMaL',
     }),
