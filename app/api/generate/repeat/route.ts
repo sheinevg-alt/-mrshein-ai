@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createApiModelsSeedance25Task, type ApiModelsResolution } from '@/lib/server/apimodels'
+import { createApiModelsSeedance25Task, type ApiModelsResolution, createApiModelsCallbackToken } from '@/lib/server/apimodels'
 import { createStorageSignedDownloadUrl, hasDatabase, supabaseFetch } from '@/lib/server/supabase'
 import { verifyTelegramInitData } from '@/lib/server/telegram-auth'
 
@@ -218,7 +218,8 @@ export async function POST(request: Request) {
       Promise.all(referencePaths.map((path) => createStorageSignedDownloadUrl(INPUT_BUCKET, path, 7200))),
       createStorageSignedDownloadUrl(INPUT_BUCKET, sourceVideoPath, 7200),
     ])
-    const callbackUrl = `${new URL(request.url).origin}/api/generate/callback/apimodels?jobId=${encodeURIComponent(job.id)}`
+    const callbackToken = createApiModelsCallbackToken(job.id)
+    const callbackUrl = `${new URL(request.url).origin}/api/generate/callback/apimodels?jobId=${encodeURIComponent(job.id)}&token=${encodeURIComponent(callbackToken)}`
 
     const task = await createApiModelsSeedance25Task({
       promptText: prompt,
