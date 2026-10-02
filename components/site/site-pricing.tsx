@@ -51,7 +51,7 @@ export function SitePricing() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="text-base font-bold">{ru ? 'Без тарифа — разовая покупка Tokens' : 'No plan — one-time Token purchase'}</p>
-              <p className="mt-1 text-xs text-[#8F9DB3]">{ru ? 'Tokens — внутренняя единица Banana Zero. Тариф не требуется. Купленные отдельно Tokens не сгорают, пока аккаунт активен.' : 'Tokens are Banana Zero's internal usage units. No plan required. Separately purchased Tokens do not expire while the account is active.'}</p>
+              <p className="mt-1 text-xs text-[#8F9DB3]">{ru ? 'Tokens — внутренняя единица Banana Zero. Тариф не требуется. Купленные отдельно Tokens не сгорают, пока аккаунт активен.' : 'Tokens are internal Banana Zero usage units. No plan required. Separately purchased Tokens do not expire while the account is active.'}</p>
             </div>
             <Link href="/pay" className="rounded-full bg-white px-4 py-2.5 text-xs font-bold text-[#171A22]">{ru ? 'Купить Tokens' : 'Buy Tokens'}</Link>
           </div>
