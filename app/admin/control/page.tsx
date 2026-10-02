@@ -29,7 +29,8 @@ type Overview = {
     expiredGenerationInputsBytes: number
     freePlanStorageQuotaBytes: number
     freePlanDatabaseQuotaBytes: number
-    retentionDays: number
+    inputRetentionDays: number
+    resultRetentionDays: number
   }
   models: Array<{ id: string; category: string; displayName: string; model: string }>
   recent: {
@@ -145,7 +146,7 @@ export default function AdminControlCenterPage() {
 
   async function cleanupExpiredMedia() {
     setStorageBusy(true)
-    setStatus('Проверяю временные файлы старше 14 дней…')
+    setStatus('Проверяю исходные файлы старше 3 дней…')
     const response = await fetch('/api/admin/storage/cleanup', {
       method: 'POST',
       headers,
@@ -247,7 +248,7 @@ export default function AdminControlCenterPage() {
                 onClick={() => void cleanupExpiredMedia()}
                 className="rounded-full border px-4 py-2 text-xs font-semibold disabled:opacity-40"
               >
-                {storageBusy ? 'Очищаю…' : 'Удалить >14 дней'}
+                {storageBusy ? 'Очищаю…' : 'Удалить исходники >3 дней'}
               </button>
             </div>
 
@@ -276,7 +277,8 @@ export default function AdminControlCenterPage() {
             <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
               <span>Входных файлов: <strong className="text-foreground">{overview.storage.generationInputsObjects}</strong></span>
               <span>На очистку сейчас: <strong className="text-foreground">{overview.storage.expiredGenerationInputsObjects}</strong></span>
-              <span>Retention: <strong className="text-foreground">{overview.storage.retentionDays} дней</strong></span>
+              <span>Исходники: <strong className="text-foreground">{overview.storage.inputRetentionDays} дня</strong></span>
+              <span>Готовые результаты: <strong className="text-foreground">{overview.storage.resultRetentionDays} дней</strong></span>
             </div>
             {overview.storage.totalStorageBytes / overview.storage.freePlanStorageQuotaBytes >= 0.7 && (
               <div className="mt-4 rounded-2xl bg-amber-500/10 px-4 py-3 text-xs leading-5 text-amber-800">
