@@ -139,6 +139,51 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
     setDownloadErrorId(null)
 
     try {
+      const app = getWebApp()
+      const isAppleMobile =
+        app?.platform === 'ios' ||
+        /iPad|iPhone|iPod/.test(navigator.userAgent)
+
+      if (isAppleMobile) {
+        const controller = new AbortController()
+        const timeout = window.setTimeout(() => controller.abort(), 60_000)
+
+        try {
+          const response = await fetch(`/api/download?jobId=${encodeURIComponent(item.id)}`, {
+            headers: { 'X-Telegram-Init-Data': initData },
+            cache: 'no-store',
+            signal: controller.signal,
+          })
+          if (!response.ok) throw new Error(`DOWNLOAD_${response.status}`)
+
+          const sourceBlob = await response.blob()
+          const video = isVideoUrl(item.resultUrl)
+          const forcedType = video ? 'video/mp4' : (sourceBlob.type || 'image/png')
+          const blob = sourceBlob.type === forcedType
+            ? sourceBlob
+            : new Blob([sourceBlob], { type: forcedType })
+          const ext = video ? 'mp4' : extensionForType(forcedType, false)
+          const filename = `Banana-Zero-${video ? 'video' : 'image'}-${item.id.slice(0, 8)}.${ext}`
+          const file = new File([blob], filename, { type: forcedType })
+
+          const shareNavigator = navigator as Navigator & {
+            canShare?: (data?: ShareData) => boolean
+            share?: (data: ShareData) => Promise<void>
+          }
+
+          if (!shareNavigator.share) throw new Error('IOS_SHARE_UNAVAILABLE')
+          if (shareNavigator.canShare && !shareNavigator.canShare({ files: [file] })) {
+            throw new Error('IOS_FILE_SHARE_UNAVAILABLE')
+          }
+
+          await shareNavigator.share({ files: [file], title: filename })
+          haptics.success()
+          return
+        } finally {
+          window.clearTimeout(timeout)
+        }
+      }
+
       const prepare = await fetch(`/api/download?prepare=1&jobId=${encodeURIComponent(item.id)}`, {
         headers: { 'X-Telegram-Init-Data': initData },
         cache: 'no-store',
@@ -146,69 +191,6 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
       const data = await prepare.json().catch(() => ({}))
       if (!prepare.ok || !data?.url || !data?.fileName) throw new Error('DOWNLOAD_PREPARE_FAILED')
 
-      const isAppleMobile = /iPad|iPhone|iPod/.test(navigator.userAgent)
-      const shareNavigator = navigator as Navigator & {
-        canShare?: (data?: ShareData) => boolean
-        share?: (data: ShareData) => Promise<void>
-      }
-
-      if (isAppleMobile && shareNavigator.share) {
-        let sharedToIos = false
-
-        const tryShareFile = async (url: string, timeoutMs: number) => {
-          const controller = new AbortController()
-          const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
-          try {
-            const response = await fetch(url, {
-              cache: 'no-store',
-              signal: controller.signal,
-            })
-            if (!response.ok) return false
-
-            const blob = await response.blob()
-            const video = isVideoUrl(item.resultUrl || '')
-            const detectedType = response.headers.get('content-type') || blob.type || ''
-            const ext = extensionForType(detectedType, video)
-            const filename = `Banana-Zero-${video ? 'video' : 'image'}-${item.id.slice(0, 8)}.${ext}`
-            const mediaType = video
-              ? (ext === 'webm' ? 'video/webm' : ext === 'mov' ? 'video/quicktime' : 'video/mp4')
-              : (detectedType.startsWith('image/') ? detectedType : 'image/png')
-            const file = new File([blob], filename, { type: mediaType })
-
-            if (shareNavigator.canShare?.({ files: [file] })) {
-              await shareNavigator.share({ files: [file], title: filename })
-              return true
-            }
-            return false
-          } finally {
-            window.clearTimeout(timeout)
-          }
-        }
-
-        try {
-          // Fastest path: fetch the provider result directly when CORS allows it.
-          sharedToIos = await tryShareFile(item.resultUrl, 20_000)
-        } catch {
-          sharedToIos = false
-        }
-
-        if (!sharedToIos) {
-          try {
-            // Same-origin signed fallback, still opens the iOS share sheet with “Save Video”.
-            sharedToIos = await tryShareFile(String(data.url), 45_000)
-          } catch {
-            sharedToIos = false
-          }
-        }
-
-        if (sharedToIos) {
-          haptics.success()
-          return
-        }
-      }
-
-      // Fallback for non-iOS or when the iOS share sheet cannot be prepared.
-      const app = getWebApp()
       const supportsNativeDownload = Boolean(
         app?.downloadFile &&
         (!app.isVersionAtLeast || app.isVersionAtLeast('9.0')),
