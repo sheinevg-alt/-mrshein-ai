@@ -88,6 +88,7 @@ export type Trend = {
   cardBadge?: 'hit' | 'new' | 'popular'
   generateAudioDefault?: boolean
   generateAudioLocked?: boolean
+  sourceAudioMode?: 'preserve_source' | 'generate'
 }
 
 export const TOKEN_BALANCE = 120
