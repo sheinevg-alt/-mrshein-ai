@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { Sparkle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useI18n } from './i18n-provider'
@@ -20,14 +21,15 @@ export function TokenBalancePill() {
   const { t } = useI18n()
   const { tokenBalance } = useUserState()
   return (
-    <span
-      className="glass inline-flex items-center gap-1.5 rounded-full py-1 pr-3 pl-1 text-xs"
+    <Link
+      href="/pay"
+      className="glass inline-flex items-center gap-1.5 rounded-full py-1 pr-3 pl-1 text-xs transition active:scale-95"
       aria-label={t('tokens.balance', { count: tokenBalance })}
     >
       <TokenGlyph className="size-5" />
       <span className="font-semibold text-foreground tabular-nums">{tokenBalance}</span>
       <span className="text-muted-foreground">{t('tokens.unit')}</span>
-    </span>
+    </Link>
   )
 }
 
