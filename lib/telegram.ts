@@ -26,6 +26,10 @@ type TelegramWebApp = {
   disableVerticalSwipes?: () => void
   openLink?: (url: string) => void
   openTelegramLink?: (url: string) => void
+  downloadFile?: (
+    params: { url: string; file_name: string },
+    callback?: (accepted: boolean) => void,
+  ) => void
   initDataUnsafe?: {
     user?: TelegramUser
     start_param?: string
