@@ -146,6 +146,66 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
       const data = await prepare.json().catch(() => ({}))
       if (!prepare.ok || !data?.url || !data?.fileName) throw new Error('DOWNLOAD_PREPARE_FAILED')
 
+      const isAppleMobile = /iPad|iPhone|iPod/.test(navigator.userAgent)
+      const shareNavigator = navigator as Navigator & {
+        canShare?: (data?: ShareData) => boolean
+        share?: (data: ShareData) => Promise<void>
+      }
+
+      if (isAppleMobile && shareNavigator.share) {
+        let sharedToIos = false
+
+        const tryShareFile = async (url: string, timeoutMs: number) => {
+          const controller = new AbortController()
+          const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
+          try {
+            const response = await fetch(url, {
+              cache: 'no-store',
+              signal: controller.signal,
+            })
+            if (!response.ok) return false
+
+            const blob = await response.blob()
+            const video = isVideoUrl(item.resultUrl || '')
+            const ext = extensionForType(response.headers.get('content-type') || blob.type || '', video)
+            const filename = `Banana-Zero-${video ? 'video' : 'image'}-${item.id.slice(0, 8)}.${ext}`
+            const file = new File([blob], filename, {
+              type: blob.type || response.headers.get('content-type') || undefined,
+            })
+
+            if (shareNavigator.canShare?.({ files: [file] })) {
+              await shareNavigator.share({ files: [file], title: filename })
+              return true
+            }
+            return false
+          } finally {
+            window.clearTimeout(timeout)
+          }
+        }
+
+        try {
+          // Fastest path: fetch the provider result directly when CORS allows it.
+          sharedToIos = await tryShareFile(item.resultUrl, 20_000)
+        } catch {
+          sharedToIos = false
+        }
+
+        if (!sharedToIos) {
+          try {
+            // Same-origin signed fallback, still opens the iOS share sheet with “Save Video”.
+            sharedToIos = await tryShareFile(String(data.url), 45_000)
+          } catch {
+            sharedToIos = false
+          }
+        }
+
+        if (sharedToIos) {
+          haptics.success()
+          return
+        }
+      }
+
+      // Fallback for non-iOS or when the iOS share sheet cannot be prepared.
       const app = getWebApp()
       const supportsNativeDownload = Boolean(
         app?.downloadFile &&
