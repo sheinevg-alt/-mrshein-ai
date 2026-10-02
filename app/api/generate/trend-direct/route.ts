@@ -25,12 +25,6 @@ function safeResolution(value: unknown): ApiModelsResolution {
   return String(value || '480p') === '720p' ? '720p' : '480p'
 }
 
-function canonicalizeTags(prompt: string) {
-  return prompt
-    .replace(/@video\s*(\d+)/gi, '@Video$1')
-    .replace(/@image\s*(\d+)/gi, '@Image$1')
-}
-
 export async function POST(request: Request) {
   const user = verifyTelegramInitData(request.headers.get('x-telegram-init-data') || '')
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -85,7 +79,7 @@ export async function POST(request: Request) {
   }
 
   const rawPrompt = String(trend.hidden_prompt || '').trim()
-  const prompt = canonicalizeTags(rawPrompt)
+  const prompt = rawPrompt
   if (prompt.length < 5) return NextResponse.json({ error: 'PROMPT_REQUIRED' }, { status: 500 })
   if (prompt.length > 12_000) return NextResponse.json({ error: 'PROMPT_TOO_LONG' }, { status: 500 })
 
@@ -128,8 +122,8 @@ export async function POST(request: Request) {
         reference_paths: referencePaths,
         reference_count: referencePaths.length + 1,
         reference_tags: [
-          '@Video1',
-          ...referencePaths.map((_, index) => `@Image${index + 1}`),
+          '@video1',
+          ...referencePaths.map((_, index) => `@image${index + 1}`),
         ],
         generate_audio: generateAudio,
         duration,
@@ -182,8 +176,8 @@ export async function POST(request: Request) {
           reference_paths: referencePaths,
           reference_count: referencePaths.length + 1,
           reference_tags: [
-            '@Video1',
-            ...referencePaths.map((_, index) => `@Image${index + 1}`),
+            '@video1',
+            ...referencePaths.map((_, index) => `@image${index + 1}`),
           ],
           generate_audio: generateAudio,
           duration,
