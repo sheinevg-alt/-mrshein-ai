@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react'
 import { Check, FileAudio, ImagePlus, RefreshCw, Sparkles, Trash2, Video, Volume2 } from 'lucide-react'
-import { getCategory, getToolTokens, localize, type Tool, type Trend, type TrendInput } from '@/lib/data'
+import { getCategory, getToolTokens, localize, tools, type Tool, type Trend, type TrendInput } from '@/lib/data'
 import { getTelegramInitData, haptics } from '@/lib/telegram'
 import { BottomSheet } from './bottom-sheet'
 import { useI18n } from './i18n-provider'
@@ -12,6 +12,75 @@ import { KlingMotionFlow, KlingOmniFlow, OmniFlashFlow } from './video-model-flo
 
 type FileUpload = { url: string; isVideo: boolean; isAudio: boolean; name: string; isDefault?: boolean; file?: File }
 type InputValue = FileUpload | string
+
+const QUICK_TOOL_CONFIG: Record<string, {
+  targetId: string
+  presetRu?: string
+  presetEn?: string
+  omniMode?: 'text' | 'video-edit'
+  generationMode?: 'text' | 'image'
+}> = {
+  'text-to-video': { targetId: 'omni-flash', omniMode: 'text' },
+  'image-to-video': { targetId: 'kling-v3', generationMode: 'image' },
+  'video-remix': { targetId: 'omni-flash', omniMode: 'video-edit' },
+
+  'text-to-image': { targetId: 'nano-banana-2' },
+  'remove-bg': {
+    targetId: 'gpt-image-2-5',
+    presetRu: 'Удалить фон с загруженного изображения. Полностью сохранить исходный объект, лицо, волосы, одежду, пропорции, края и мелкие детали. Не менять внешний вид объекта. Результат — объект на прозрачном фоне, без теней и новых элементов.',
+    presetEn: 'Remove the background from the uploaded image. Preserve the original subject, face, hair, clothing, proportions, edges and fine details exactly. Do not redesign the subject. Return the subject on a transparent background with no added elements.',
+  },
+  'style-transfer': {
+    targetId: 'nano-banana-2',
+    presetRu: 'Сохрани человека или основной объект с исходного фото максимально точно: лицо, волосы, телосложение, пропорции и позу. Измени только визуальный стиль изображения на: [опиши желаемый стиль].',
+    presetEn: 'Preserve the person or main subject from the uploaded image as accurately as possible: face, hair, body, proportions and pose. Change only the visual style to: [describe the desired style].',
+  },
+  'inpaint': {
+    targetId: 'nano-banana-2',
+    presetRu: 'Измени только указанную часть изображения: [опиши, что заменить или исправить]. Всё остальное — лицо, позу, одежду, фон, композицию, освещение и детали — оставить без изменений.',
+    presetEn: 'Change only this requested part of the image: [describe what to replace or fix]. Keep everything else — face, pose, clothing, background, composition, lighting and details — unchanged.',
+  },
+
+  'text-to-speech': { targetId: 'elevenlabs-tts' },
+  'music-gen': { targetId: 'suno-v5' },
+
+  'ai-chat': { targetId: 'gpt-6-sol' },
+  'copywriter': {
+    targetId: 'gpt-6-luna',
+    presetRu: 'Напиши готовый текст по задаче ниже. Сделай его естественным, современным и без канцелярита. Задача: ',
+    presetEn: 'Write polished copy for the task below. Keep it natural, modern and concise. Task: ',
+  },
+  'translator': {
+    targetId: 'gpt-6-luna',
+    presetRu: 'Переведи текст на [нужный язык]. Сохрани смысл, тон и естественное звучание, не переводи дословно там, где это звучит неестественно. Текст: ',
+    presetEn: 'Translate the text into [target language]. Preserve meaning and tone and make it sound natural rather than overly literal. Text: ',
+  },
+  'summarizer': {
+    targetId: 'gpt-6-luna',
+    presetRu: 'Сделай короткое структурированное саммари следующего текста. Сохрани ключевые факты, цифры и выводы, не добавляй того, чего нет в исходнике. Текст: ',
+    presetEn: 'Create a concise structured summary of the following text. Preserve key facts, numbers and conclusions and do not invent anything. Text: ',
+  },
+  'rewriter': {
+    targetId: 'gpt-6-luna',
+    presetRu: 'Перепиши текст яснее и естественнее, сохранив исходный смысл и факты. Убери повторы и канцелярит. Текст: ',
+    presetEn: 'Rewrite the text to be clearer and more natural while preserving the original meaning and facts. Remove repetition and stiffness. Text: ',
+  },
+  'hashtags': {
+    targetId: 'gpt-6-luna',
+    presetRu: 'Подбери релевантные хэштеги и короткую подпись для публикации по теме ниже. Не используй случайные высокочастотные теги. Тема: ',
+    presetEn: 'Create relevant hashtags and a short social caption for the topic below. Avoid random high-volume tags. Topic: ',
+  },
+  'email-writer': {
+    targetId: 'gpt-6-luna',
+    presetRu: 'Напиши профессиональное, короткое и человеческое письмо по задаче ниже. Задача: ',
+    presetEn: 'Write a professional, concise and natural email for the task below. Task: ',
+  },
+  'idea-gen': {
+    targetId: 'gpt-6-sol',
+    presetRu: 'Предложи сильные идеи по задаче ниже. Идеи должны заметно отличаться друг от друга и быть применимыми на практике. Задача: ',
+    presetEn: 'Generate strong ideas for the task below. Make the ideas meaningfully different and practical. Task: ',
+  },
+}
 
 export function ToolSheet({
   tool,
@@ -25,14 +94,26 @@ export function ToolSheet({
   const { t, locale } = useI18n()
   if (!tool) return null
 
-  if (tool.kind === 'model') {
-    const flow = tool.id === 'omni-flash'
-      ? <OmniFlashFlow onGenerationStarted={onGenerationStarted} />
-      : tool.id === 'kling-v3-omni'
+  const quickConfig = QUICK_TOOL_CONFIG[tool.id]
+  if (tool.kind === 'model' || quickConfig) {
+    const target = quickConfig ? tools.find((item) => item.id === quickConfig.targetId) : tool
+    if (!target) return null
+    const effectiveTool: Tool = quickConfig
+      ? { ...target, name: tool.name, description: tool.description }
+      : target
+    const preset = quickConfig ? (locale === 'ru' ? quickConfig.presetRu : quickConfig.presetEn) : undefined
+    const flow = target.id === 'omni-flash'
+      ? <OmniFlashFlow onGenerationStarted={onGenerationStarted} initialMode={quickConfig?.omniMode || 'text'} />
+      : target.id === 'kling-v3-omni'
         ? <KlingOmniFlow onGenerationStarted={onGenerationStarted} />
-        : tool.id === 'kling-motion-control'
+        : target.id === 'kling-motion-control'
           ? <KlingMotionFlow onGenerationStarted={onGenerationStarted} />
-          : <ModelToolFlow tool={tool} onGenerationStarted={onGenerationStarted} />
+          : <ModelToolFlow
+              tool={effectiveTool}
+              onGenerationStarted={onGenerationStarted}
+              initialPrompt={preset}
+              initialGenerationMode={quickConfig?.generationMode}
+            />
     return (
       <BottomSheet open title={localize(tool.name, locale)} onClose={onClose}>
         {flow}
@@ -63,18 +144,28 @@ export function ToolSheet({
   )
 }
 
-function ModelToolFlow({ tool, onGenerationStarted }: { tool: Tool; onGenerationStarted?: (jobId: string) => void }) {
+function ModelToolFlow({
+  tool,
+  onGenerationStarted,
+  initialPrompt = '',
+  initialGenerationMode = 'text',
+}: {
+  tool: Tool
+  onGenerationStarted?: (jobId: string) => void
+  initialPrompt?: string
+  initialGenerationMode?: 'text' | 'image'
+}) {
   const { locale } = useI18n()
   const { tokenBalance, refreshUser } = useUserState()
   const fileRef = useRef<HTMLInputElement>(null)
-  const [prompt, setPrompt] = useState('')
+  const [prompt, setPrompt] = useState(initialPrompt)
   const [reference, setReference] = useState<FileUpload | null>(null)
   const [duration, setDuration] = useState(tool.id === 'omni-flash' ? 4 : 5)
   const [resolution, setResolution] = useState(tool.category === 'video' ? '720p' : '2k')
   const [ratio, setRatio] = useState(tool.category === 'image' ? '1:1' : '9:16')
   const [quality, setQuality] = useState('medium')
   const [mode, setMode] = useState('std')
-  const [generationMode, setGenerationMode] = useState<'text' | 'image'>('text')
+  const [generationMode, setGenerationMode] = useState<'text' | 'image'>(initialGenerationMode)
   const [sunoVersion, setSunoVersion] = useState('chirp-v5-5')
   const [generateAudio, setGenerateAudio] = useState(false)
   const [reasoningEffort, setReasoningEffort] = useState('medium')
