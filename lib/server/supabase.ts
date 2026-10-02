@@ -71,3 +71,24 @@ export async function createStorageSignedDownloadUrl(bucket: string, path: strin
   if (!rawUrl) throw new Error('STORAGE_SIGN_DOWNLOAD_URL_MISSING')
   return rawUrl.startsWith('http') ? rawUrl : `${base}/storage/v1${rawUrl}`
 }
+
+
+export async function deleteStorageObjects(bucket: string, paths: string[]) {
+  if (!paths.length) return { deleted: 0 }
+  const chunks: string[][] = []
+  for (let i = 0; i < paths.length; i += 1000) chunks.push(paths.slice(i, i + 1000))
+
+  let deleted = 0
+  for (const prefixes of chunks) {
+    const response = await storageFetch(`object/${encodeURIComponent(bucket)}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ prefixes }),
+    })
+    const text = await response.text()
+    let data: any = {}
+    try { data = text ? JSON.parse(text) : {} } catch { data = { raw: text } }
+    if (!response.ok) throw new Error(String(data?.message || data?.error || `STORAGE_DELETE_FAILED_${response.status}`))
+    deleted += Array.isArray(data) ? data.length : prefixes.length
+  }
+  return { deleted }
+}
