@@ -75,10 +75,10 @@ function PriceBox({ quotedTokens, tokenBalance }: { quotedTokens: number | null;
   )
 }
 
-export function OmniFlashFlow({ onGenerationStarted }: { onGenerationStarted?: (jobId: string) => void }) {
+export function OmniFlashFlow({ onGenerationStarted, initialMode = 'text' }: { onGenerationStarted?: (jobId: string) => void; initialMode?: 'text' | 'keyframes' | 'references' | 'video-edit' }) {
   const { locale } = useI18n()
   const { tokenBalance, refreshUser } = useUserState()
-  const [mode, setMode] = useState<'text' | 'keyframes' | 'references' | 'video-edit'>('text')
+  const [mode, setMode] = useState<'text' | 'keyframes' | 'references' | 'video-edit'>(initialMode)
   const [prompt, setPrompt] = useState('')
   const [images, setImages] = useState<UploadItem[]>([])
   const [video, setVideo] = useState<UploadItem | null>(null)
