@@ -15,9 +15,11 @@ export async function POST(request: Request) {
   const customerCode = process.env.TOCHKA_CUSTOMER_CODE
   const merchantId = process.env.TOCHKA_MERCHANT_ID
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin
-  const taxSystemCode = process.env.TOCHKA_TAX_SYSTEM_CODE || 'usn_income'
-  const vatType = process.env.TOCHKA_VAT_TYPE || 'none'
-  if (!token || !customerCode) return NextResponse.json({ error: 'Tochka is not configured' }, { status: 503 })
+  const taxSystemCode = process.env.TOCHKA_TAX_SYSTEM_CODE
+  const vatType = process.env.TOCHKA_VAT_TYPE
+  if (!token || !customerCode || !taxSystemCode || !vatType) {
+    return NextResponse.json({ error: 'Tochka fiscal checkout is not configured' }, { status: 503 })
+  }
 
   const body = await request.json().catch(() => ({}))
   const tokenAmount = Number(body?.tokenAmount)
@@ -37,6 +39,7 @@ export async function POST(request: Request) {
       failRedirectUrl: `${siteUrl}/pay?status=failed`,
       paymentMode: ['sbp', 'card', 'tinkoff'],
       paymentLinkId,
+      preAuthorization: false,
       taxSystemCode,
       Client: { name, email },
       Items: [{
