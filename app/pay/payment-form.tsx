@@ -51,7 +51,7 @@ export function PaymentForm({ enabled }: { enabled: boolean }) {
     <div className="space-y-5">
       <div>
         <p className="text-sm font-semibold">Разовая покупка Tokens</p>
-        <p className="mt-1 text-xs text-muted-foreground">Тариф не требуется. Если у вас активен Beginner, Creator или Professional, скидка на пополнение применяется по условиям тарифа. Купленные отдельно Tokens не сгорают, пока аккаунт активен.</p>
+        <p className="mt-1 text-xs text-muted-foreground">Тариф не требуется. Разовые пакеты доступны отдельно от тарифов. Купленные Tokens не сгорают, пока аккаунт активен.</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
