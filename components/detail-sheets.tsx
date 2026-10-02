@@ -205,6 +205,12 @@ function ModelToolFlow({ tool, onGenerationStarted }: { tool: Tool; onGeneration
       ? Array.from({ length: 13 }, (_, index) => index + 3)
       : [3, 4, 5, 6, 7, 8, 9, 10]
 
+  const videoAspectOptions = tool.id === 'omni-flash'
+    ? ['9:16', '16:9']
+    : tool.id === 'kling-v3'
+      ? ['9:16', '16:9', '1:1', '4:3', '3:4', '3:2', '2:3', '21:9']
+      : ['9:16', '16:9', '1:1']
+
   return (
     <div>
       <div className="rounded-2xl border border-brand/20 bg-brand-tint/50 p-4">
@@ -272,23 +278,26 @@ function ModelToolFlow({ tool, onGenerationStarted }: { tool: Tool; onGeneration
           <label className="rounded-2xl border bg-card p-3 text-xs text-muted-foreground">
             <span>{locale === 'ru' ? 'Формат' : 'Aspect'}</span>
             <select value={ratio} onChange={(e) => setRatio(e.target.value)} className="mt-2 h-10 w-full rounded-xl border bg-background px-2 text-sm font-semibold text-foreground">
-              {['9:16','16:9','1:1'].map((value) => <option key={value}>{value}</option>)}
+              {videoAspectOptions.map((value) => <option key={value}>{value}</option>)}
             </select>
           </label>
           {tool.id === 'omni-flash' && (
             <label className="rounded-2xl border bg-card p-3 text-xs text-muted-foreground">
-              <span>{locale === 'ru' ? 'Качество' : 'Quality'}</span>
+              <span>{locale === 'ru' ? 'Разрешение' : 'Resolution'}</span>
               <select value={resolution} onChange={(e) => setResolution(e.target.value)} className="mt-2 h-10 w-full rounded-xl border bg-background px-2 text-sm font-semibold text-foreground">
-                {['720p','1080p','4k'].map((value) => <option key={value}>{value}</option>)}
+                <option value="720p">720p</option>
+                <option value="1080p">1080p</option>
+                <option value="4k">4K</option>
               </select>
             </label>
           )}
           {tool.id === 'kling-v3' && (
             <>
               <label className="rounded-2xl border bg-card p-3 text-xs text-muted-foreground">
-                <span>Mode</span>
+                <span>{locale === 'ru' ? 'Разрешение / качество' : 'Resolution / quality'}</span>
                 <select value={mode} onChange={(e) => setMode(e.target.value)} className="mt-2 h-10 w-full rounded-xl border bg-background px-2 text-sm font-semibold text-foreground">
-                  <option value="std">Standard · 720p</option><option value="pro">Pro · 1080p</option>
+                  <option value="std">720p · Standard</option>
+                  <option value="pro">1080p · Pro</option>
                 </select>
               </label>
               <label className="flex items-center justify-between rounded-2xl border bg-card p-3 text-xs">
