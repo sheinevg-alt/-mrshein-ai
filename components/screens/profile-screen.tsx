@@ -91,14 +91,14 @@ export function ProfileScreen() {
         ))}
       </section>
 
-      <button type="button" onClick={() => setPanel('tokens')} className="brand-gradient mt-3 flex w-full items-center gap-3 rounded-2xl p-4 text-left text-white shadow-[0_12px_28px_-14px_oklch(0.5_0.21_264/0.8)] transition active:scale-[0.98]">
+      <Link href="/app?tab=pricing" className="brand-gradient mt-3 flex w-full items-center gap-3 rounded-2xl p-4 text-left text-white shadow-[0_12px_28px_-14px_oklch(0.5_0.21_264/0.8)] transition active:scale-[0.98]">
         <Sparkles className="size-5" strokeWidth={2} aria-hidden="true" />
         <span className="flex-1">
-          <span className="block text-sm font-semibold">{t('profile.getTokens')}</span>
-          <span className="block text-xs opacity-80">{t('profile.getTokensHint')}</span>
+          <span className="block text-sm font-semibold">{locale === 'ru' ? 'Тарифы и Tokens' : 'Plans and Tokens'}</span>
+          <span className="block text-xs opacity-80">{locale === 'ru' ? 'Выбрать тариф или купить Tokens отдельно' : 'Choose a plan or buy Tokens separately'}</span>
         </span>
         <ChevronRight className="size-4" aria-hidden="true" />
-      </button>
+      </Link>
 
       <a
         href={APP_CONFIG.website}
