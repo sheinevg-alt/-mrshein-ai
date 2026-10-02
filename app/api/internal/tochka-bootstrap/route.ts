@@ -56,9 +56,9 @@ export async function GET() {
 
   const rawCustomers =
     customers.json?.Data?.Customer ||
-    customers.data?.Data?.Customers ||
-    customers.data?.Data?.customers ||
-    customers.data?.customers ||
+    customers.json?.Data?.Customers ||
+    customers.json?.Data?.customers ||
+    customers.json?.customers ||
     []
   const businesses = (Array.isArray(rawCustomers) ? rawCustomers : [rawCustomers])
     .filter((item: any) => item?.customerType === 'Business' && item?.customerCode)
@@ -79,8 +79,8 @@ export async function GET() {
 
   const rawRetailers =
     retailers.json?.Data?.Retailer ||
-    retailers.data?.Data?.Retailers ||
-    retailers.data?.Data?.retailers ||
+    retailers.json?.Data?.Retailers ||
+    retailers.json?.Data?.retailers ||
     []
   const active = (Array.isArray(rawRetailers) ? rawRetailers : [rawRetailers])
     .filter((item: any) => item?.status === 'REG' && item?.isActive === true && item?.merchantId)
@@ -124,7 +124,7 @@ export async function GET() {
         customerConfigured: true,
         retailerConfigured: true,
         status: webhook.status,
-        code: webhook.json?.code || webhook.data?.errorCode || null,
+        code: webhook.json?.code || webhook.json?.errorCode || null,
       }, { status: 502 })
     }
 
