@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { ArrowRight, Clapperboard, ImageIcon, MessageSquareText, Music2, Sparkles, WandSparkles } from 'lucide-react'
-import { MERCHANT } from '@/lib/merchant'
 import { SiteHeader } from '@/components/site/site-header'
 import { SiteTrendHits } from '@/components/site/site-trend-hits'
 import { SitePricing } from '@/components/site/site-pricing'
@@ -193,10 +192,7 @@ export default function SitePage() {
 
       <footer className="border-t border-[#E6EEFF] bg-white">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-8 text-sm text-[#66758E] md:flex-row md:items-center md:justify-between md:px-8">
-          <div>
-            <div className="flex items-center gap-2"><span className="font-bold text-[#171A22]">Banana Zero</span><span>·</span><span>bananazero.ru</span></div>
-            <p className="mt-1 text-[11px] text-[#8B99AD]">{MERCHANT.legalName} · {locale === 'ru' ? 'ИНН' : 'TIN'} {MERCHANT.inn} · {locale === 'ru' ? 'ОГРНИП' : 'Registration'} {MERCHANT.ogrnip}</p>
-          </div>
+          <div className="flex items-center gap-2"><span className="font-bold text-[#171A22]">Banana Zero</span><span>·</span><span>bananazero.ru</span></div>
           <div className="flex flex-wrap gap-5">
             <Link href="/privacy" className="transition hover:text-[#171A22]">{t.privacy}</Link>
             <Link href="/offer" className="transition hover:text-[#171A22]">{t.offer}</Link>
