@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 import { hasAppAccess } from '@/lib/server/access-control'
 import {
-  createApiModelsSeedance25EditTask,
+  createApiModelsSeedance25Task,
+  registerApiModelsPortrait,
   type ApiModelsResolution,
-  createApiModelsCallbackToken,
-} from '@/lib/server/apimodels'
+  createApiModelsCallbackToken, } from '@/lib/server/apimodels'
 import {
   createStorageSignedDownloadUrl,
   hasDatabase,
@@ -23,6 +23,12 @@ async function rpc(name: string, payload: Record<string, unknown>) {
 
 function safeResolution(value: unknown): ApiModelsResolution {
   return String(value || '480p') === '720p' ? '720p' : '480p'
+}
+
+function canonicalizeTags(prompt: string) {
+  return prompt
+    .replace(/@video\s*(\d+)/gi, '@Video$1')
+    .replace(/@image\s*(\d+)/gi, '@Image$1')
 }
 
 export async function POST(request: Request) {
@@ -78,7 +84,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'REFERENCE_COUNT_MISMATCH', expected: expectedImageCount, received: referencePaths.length }, { status: 400 })
   }
 
-  const prompt = String(trend.hidden_prompt || '').trim()
+  const rawPrompt = String(trend.hidden_prompt || '').trim()
+  const prompt = canonicalizeTags(rawPrompt)
   if (prompt.length < 5) return NextResponse.json({ error: 'PROMPT_REQUIRED' }, { status: 500 })
   if (prompt.length > 12_000) return NextResponse.json({ error: 'PROMPT_TOO_LONG' }, { status: 500 })
 
@@ -114,15 +121,15 @@ export async function POST(request: Request) {
       provider: 'apimodels',
       model: MODEL,
       input_payload: {
-        mode: 'edit',
+        mode: 'generate',
         prompt,
         source_video_path: sourceVideoPath || null,
         source_video_url: sourceVideoUrl || null,
         reference_paths: referencePaths,
         reference_count: referencePaths.length + 1,
         reference_tags: [
-          '@video1',
-          ...referencePaths.map((_, index) => `@image${index + 1}`),
+          '@Video1',
+          ...referencePaths.map((_, index) => `@Image${index + 1}`),
         ],
         generate_audio: generateAudio,
         duration,
@@ -154,7 +161,11 @@ export async function POST(request: Request) {
     )
 
     if (!signedReferences[0]) throw new Error('PERSON_REFERENCE_MISSING')
-    const references = signedReferences
+    const portrait = await registerApiModelsPortrait(signedReferences[0], `trend-${trend.id}-person`)
+    const references = [
+      portrait.assetUrl,
+      ...signedReferences.slice(1),
+    ]
 
     const videoUrl = sourceVideoUrl || await createStorageSignedDownloadUrl(INPUT_BUCKET, sourceVideoPath, 7200)
     const callbackToken = createApiModelsCallbackToken(job.id)
@@ -164,30 +175,35 @@ export async function POST(request: Request) {
       method: 'PATCH',
       body: JSON.stringify({
         input_payload: {
-          mode: 'edit',
+          mode: 'generate',
           prompt,
           source_video_path: sourceVideoPath || null,
-          source_video_url: sourceVideoUrl || null,
+        source_video_url: sourceVideoUrl || null,
           reference_paths: referencePaths,
           reference_count: referencePaths.length + 1,
           reference_tags: [
-            '@video1',
-            ...referencePaths.map((_, index) => `@image${index + 1}`),
+            '@Video1',
+            ...referencePaths.map((_, index) => `@Image${index + 1}`),
           ],
           generate_audio: generateAudio,
           duration,
           aspect_ratio: ratio,
           resolution,
           execution_mode: 'direct',
+          person_reference_mode: 'asset',
+          person_asset_id: portrait.id || null,
+          person_asset_url: portrait.assetUrl,
         },
         updated_at: new Date().toISOString(),
       }),
     })
 
-    const task = await createApiModelsSeedance25EditTask({
+    const task = await createApiModelsSeedance25Task({
       promptText: prompt,
-      videoUrl,
+      duration,
+      ratio,
       references,
+      videoReferences: [videoUrl],
       resolution,
       generateAudio,
       callbackUrl,
@@ -202,8 +218,9 @@ export async function POST(request: Request) {
           apimodels_task_id: task.id,
           apimodels_direct_tool: true,
           apimodels_trend_direct: true,
-          apimodels_mode: 'edit',
+          apimodels_mode: 'generate',
           apimodels_resolution: resolution,
+          apimodels_person_asset: true,
           prompt_version: String(config.prompt_version || 'control'),
         },
         updated_at: new Date().toISOString(),
@@ -214,7 +231,6 @@ export async function POST(request: Request) {
       ok: true,
       status: 'processing',
       jobId: job.id,
-      providerTaskId: task.id,
       tokenBalance: newBalance,
     })
   } catch (error) {
@@ -241,7 +257,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       error: 'APIMODELS_CREATE_FAILED',
-      details: message,
       tokenBalance: newBalance,
     }, { status: 502 })
   }
