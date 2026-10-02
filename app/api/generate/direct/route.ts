@@ -17,6 +17,11 @@ export const dynamic = 'force-dynamic'
 
 const MODEL = 'seedance-2.5'
 const INPUT_BUCKET = 'generation-inputs'
+const MAX_IMAGES = 30
+const MAX_VIDEOS = 10
+const MAX_AUDIOS = 10
+const MAX_REFERENCES = 50
+const RATIOS = new Set(['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', 'adaptive'])
 
 async function rpc(name: string, payload: Record<string, unknown>) {
   return supabaseFetch(`rpc/${name}`, { method: 'POST', body: JSON.stringify(payload) })
@@ -28,15 +33,26 @@ function clampDuration(value: unknown) {
 }
 
 function safeResolution(value: unknown): ApiModelsResolution {
-  const v = String(value || '480p')
-  if (v === '720p') return '720p'
-  return '480p'
+  return String(value || '480p') === '720p' ? '720p' : '480p'
+}
+
+function safeRatio(value: unknown) {
+  const ratio = String(value || '9:16')
+  return RATIOS.has(ratio) ? ratio : '9:16'
+}
+
+function cleanPaths(value: unknown, max: number) {
+  return (Array.isArray(value) ? value : [])
+    .map((item) => String(item || ''))
+    .filter(Boolean)
+    .slice(0, max)
 }
 
 function canonicalizeTags(prompt: string) {
   return prompt
     .replace(/@video\s*(\d+)/gi, '@video$1')
     .replace(/@image\s*(\d+)/gi, '@image$1')
+    .replace(/@audio\s*(\d+)/gi, '@audio$1')
 }
 
 export async function POST(request: Request) {
@@ -54,25 +70,51 @@ export async function POST(request: Request) {
   const duration = clampDuration(payload.duration)
   const sourceDuration = Math.max(4, Math.min(30, Number(payload.sourceDuration || duration)))
   const resolution = safeResolution(payload.resolution)
+  const ratio = mode === 'edit' ? 'adaptive' : safeRatio(payload.ratio)
+
+  // New professional Omni Reference payload.
+  // Keep referencePaths/sourceVideoPath compatibility for older clients.
+  const legacyImages = cleanPaths(payload.referencePaths, MAX_IMAGES)
+  const referenceImagePaths = cleanPaths(payload.referenceImagePaths, MAX_IMAGES)
+  const referenceVideoPaths = cleanPaths(payload.referenceVideoPaths, MAX_VIDEOS)
+  const referenceAudioPaths = cleanPaths(payload.referenceAudioPaths, MAX_AUDIOS)
   const sourceVideoPath = String(payload.sourceVideoPath || '')
-  const referencePaths = (Array.isArray(payload.referencePaths) ? payload.referencePaths : [])
-    .map((value) => String(value || ''))
-    .filter(Boolean)
-    .slice(0, 30)
+
+  const imagePaths = referenceImagePaths.length ? referenceImagePaths : legacyImages
+  const videoPaths = mode === 'generate'
+    ? (referenceVideoPaths.length ? referenceVideoPaths : sourceVideoPath ? [sourceVideoPath] : [])
+    : []
+  const audioPaths = mode === 'generate' ? referenceAudioPaths : []
 
   if (prompt.length < 5) return NextResponse.json({ error: 'PROMPT_REQUIRED' }, { status: 400 })
   if (prompt.length > 12_000) return NextResponse.json({ error: 'PROMPT_TOO_LONG' }, { status: 400 })
-  if (mode === 'edit' && !sourceVideoPath.startsWith(`${user.id}/videos/`)) {
-    return NextResponse.json({ error: 'SOURCE_VIDEO_REQUIRED' }, { status: 400 })
+
+  if (imagePaths.length > MAX_IMAGES || videoPaths.length > MAX_VIDEOS || audioPaths.length > MAX_AUDIOS) {
+    return NextResponse.json({ error: 'REFERENCE_TYPE_LIMIT_EXCEEDED' }, { status: 400 })
   }
-  if (sourceVideoPath && !sourceVideoPath.startsWith(`${user.id}/videos/`)) {
-    return NextResponse.json({ error: 'INVALID_VIDEO_REFERENCE_PATH' }, { status: 400 })
-  }
-  if (referencePaths.some((path) => !path.startsWith(`${user.id}/images/`))) {
-    return NextResponse.json({ error: 'INVALID_REFERENCE_PATH' }, { status: 400 })
+  if (imagePaths.length + videoPaths.length + audioPaths.length > MAX_REFERENCES) {
+    return NextResponse.json({ error: 'REFERENCE_TOTAL_LIMIT_EXCEEDED' }, { status: 400 })
   }
 
-  // Editing has input-token billing upstream, so reserve a conservative 20% buffer.
+  if (imagePaths.some((path) => !path.startsWith(`${user.id}/images/`))) {
+    return NextResponse.json({ error: 'INVALID_IMAGE_REFERENCE_PATH' }, { status: 400 })
+  }
+  if (videoPaths.some((path) => !path.startsWith(`${user.id}/videos/`))) {
+    return NextResponse.json({ error: 'INVALID_VIDEO_REFERENCE_PATH' }, { status: 400 })
+  }
+  if (audioPaths.some((path) => !path.startsWith(`${user.id}/audios/`))) {
+    return NextResponse.json({ error: 'INVALID_AUDIO_REFERENCE_PATH' }, { status: 400 })
+  }
+
+  if (mode === 'edit') {
+    if (!sourceVideoPath.startsWith(`${user.id}/videos/`)) {
+      return NextResponse.json({ error: 'SOURCE_VIDEO_REQUIRED' }, { status: 400 })
+    }
+    if (cleanPaths(payload.referenceVideoPaths, MAX_VIDEOS).length || cleanPaths(payload.referenceAudioPaths, MAX_AUDIOS).length) {
+      return NextResponse.json({ error: 'EDIT_ACCEPTS_SOURCE_VIDEO_AND_IMAGE_REFERENCES' }, { status: 400 })
+    }
+  }
+
   const quote = await quoteTokens({
     toolId: 'seedance-2-5',
     duration: mode === 'edit' ? sourceDuration : duration,
@@ -81,28 +123,40 @@ export async function POST(request: Request) {
   })
   const tokenCost = mode === 'edit' ? Math.ceil((quote.tokenCost * 1.2) / 10) * 10 : quote.tokenCost
 
+  const referenceTags = mode === 'edit'
+    ? [
+        '@video1',
+        ...imagePaths.map((_, index) => `@image${index + 1}`),
+      ]
+    : [
+        ...imagePaths.map((_, index) => `@image${index + 1}`),
+        ...videoPaths.map((_, index) => `@video${index + 1}`),
+        ...audioPaths.map((_, index) => `@audio${index + 1}`),
+      ]
+
   const createResponse = await rpc('create_generation', {
     p_telegram_id: user.id,
     p_type: 'tool',
-    p_source_id: mode === 'edit' ? 'seedance2-5-video-edit' : sourceVideoPath ? 'seedance2-5-reference-video' : 'seedance2-5-direct',
-    p_title: mode === 'edit' ? 'Seedance 2.5 · Video Edit' : sourceVideoPath ? 'Seedance 2.5 · Video reference' : 'Seedance 2.5',
+    p_source_id: mode === 'edit' ? 'seedance2-5-video-edit' : 'seedance2-5-omni-reference',
+    p_title: mode === 'edit' ? 'Seedance 2.5 · Video Edit' : 'Seedance 2.5 · Omni Reference',
     p_token_cost: tokenCost,
     p_provider: 'apimodels',
     p_model: MODEL,
     p_input_payload: {
       mode,
       prompt,
-      source_video_path: sourceVideoPath || null,
-      reference_paths: referencePaths,
-      reference_count: referencePaths.length + (sourceVideoPath ? 1 : 0),
-      reference_tags: [
-        ...(sourceVideoPath ? ['@video1'] : []),
-        ...referencePaths.map((_, index) => `@image${index + 1}`),
-      ],
+      source_video_path: mode === 'edit' ? sourceVideoPath : null,
+      reference_image_paths: imagePaths,
+      reference_video_paths: mode === 'generate' ? videoPaths : [],
+      reference_audio_paths: mode === 'generate' ? audioPaths : [],
+      reference_count: mode === 'edit'
+        ? imagePaths.length + 1
+        : imagePaths.length + videoPaths.length + audioPaths.length,
+      reference_tags: referenceTags,
       generate_audio: generateAudio,
       duration: mode === 'edit' ? -1 : duration,
       source_duration: mode === 'edit' ? sourceDuration : null,
-      aspect_ratio: mode === 'edit' ? 'adaptive' : '9:16',
+      aspect_ratio: ratio,
       resolution,
       quoted_provider_usd: quote.providerUsd,
       quoted_usd_rub: quote.usdRub,
@@ -120,12 +174,18 @@ export async function POST(request: Request) {
   const jobId = String(await createResponse.json()).replace(/^"|"$/g, '')
 
   try {
-    const references = await Promise.all(
-      referencePaths.map((path) => createStorageSignedDownloadUrl(INPUT_BUCKET, path, 7200)),
+    const imageReferences = await Promise.all(
+      imagePaths.map((path) => createStorageSignedDownloadUrl(INPUT_BUCKET, path, 7200)),
     )
-    const videoReferences = sourceVideoPath
-      ? [await createStorageSignedDownloadUrl(INPUT_BUCKET, sourceVideoPath, 7200)]
-      : []
+    const videoReferences = await Promise.all(
+      (mode === 'generate' ? videoPaths : [sourceVideoPath])
+        .filter(Boolean)
+        .map((path) => createStorageSignedDownloadUrl(INPUT_BUCKET, path, 7200)),
+    )
+    const audioReferences = await Promise.all(
+      audioPaths.map((path) => createStorageSignedDownloadUrl(INPUT_BUCKET, path, 7200)),
+    )
+
     const callbackToken = createApiModelsCallbackToken(jobId)
     const callbackUrl = `${new URL(request.url).origin}/api/generate/callback/apimodels?jobId=${encodeURIComponent(jobId)}&token=${encodeURIComponent(callbackToken)}`
 
@@ -133,7 +193,7 @@ export async function POST(request: Request) {
       ? await createApiModelsSeedance25EditTask({
           promptText: prompt,
           videoUrl: videoReferences[0],
-          references,
+          references: imageReferences,
           resolution,
           generateAudio,
           callbackUrl,
@@ -141,9 +201,10 @@ export async function POST(request: Request) {
       : await createApiModelsSeedance25Task({
           promptText: prompt,
           duration,
-          ratio: '9:16',
-          references,
+          ratio,
+          references: imageReferences,
           videoReferences,
+          audioReferences,
           resolution,
           generateAudio,
           callbackUrl,
@@ -159,6 +220,10 @@ export async function POST(request: Request) {
           apimodels_direct_tool: true,
           apimodels_mode: mode,
           apimodels_resolution: resolution,
+          apimodels_ratio: ratio,
+          reference_count: mode === 'edit'
+            ? imagePaths.length + 1
+            : imagePaths.length + videoPaths.length + audioPaths.length,
           quoted_provider_usd: quote.providerUsd,
           quoted_usd_rub: quote.usdRub,
         },
