@@ -1,109 +1,58 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { CreditCard, QrCode, ShieldCheck } from 'lucide-react'
 import { TOKEN_PURCHASE_MAX, TOKEN_PURCHASE_MIN, TOKEN_PURCHASE_STEP, getTokenPurchaseQuote, normalizeTokenPurchaseAmount } from '@/lib/public-pricing'
-import { getTelegramInitData } from '@/lib/telegram'
+import { getTelegramInitData, openExternalLink } from '@/lib/telegram'
 
 export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean; initialTokens?: number }) {
-  const router = useRouter()
-  const initDataRef = useRef<HTMLInputElement>(null)
-  const orderIdRef = useRef<HTMLInputElement>(null)
   const [tokenAmount, setTokenAmount] = useState(normalizeTokenPurchaseAmount(initialTokens))
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [accepted, setAccepted] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
   const pack = getTokenPurchaseQuote(tokenAmount)
 
-  useEffect(() => {
-    let checking = false
-
-    async function checkPendingPayment() {
-      if (checking || document.visibilityState !== 'visible') return
-      const orderId = window.sessionStorage.getItem('banana-zero.pending-payment') || ''
-      if (!orderId) return
-
-      checking = true
-      try {
-        const response = await fetch('/api/payments/tochka/status?order=' + encodeURIComponent(orderId), { cache: 'no-store' })
-        const data = await response.json().catch(() => null)
-        if (!response.ok || !data) return
-
-        if (data.status === 'succeeded') {
-          window.sessionStorage.removeItem('banana-zero.pending-payment')
-          router.replace('/app?tab=profile&payment=' + encodeURIComponent(orderId))
-        } else if (['failed', 'canceled', 'refunded'].includes(data.status)) {
-          window.sessionStorage.removeItem('banana-zero.pending-payment')
-        }
-      } finally {
-        checking = false
-      }
-    }
-
-    const onResume = () => void checkPendingPayment()
-    void checkPendingPayment()
-    window.addEventListener('focus', onResume)
-    window.addEventListener('pageshow', onResume)
-    document.addEventListener('visibilitychange', onResume)
-
-    return () => {
-      window.removeEventListener('focus', onResume)
-      window.removeEventListener('pageshow', onResume)
-      document.removeEventListener('visibilitychange', onResume)
-    }
-  }, [router])
-
-  function prepareCheckout(event: React.FormEvent<HTMLFormElement>) {
+  async function checkout() {
     setError('')
-
-    if (!enabled) {
-      event.preventDefault()
-      setError('Рублёвая оплата временно недоступна.')
-      return
-    }
     if (!email.includes('@')) {
-      event.preventDefault()
       setError('Укажите email — он нужен для электронного чека.')
       return
     }
     if (!accepted) {
-      event.preventDefault()
       setError('Подтвердите согласие с условиями покупки.')
       return
     }
-
-    const initData = getTelegramInitData()
-    if (!initData) {
-      event.preventDefault()
-      setError('Не удалось подтвердить Telegram-сессию. Откройте Banana Zero заново.')
+    if (!enabled) {
+      setError('Рублёвая оплата временно недоступна.')
       return
     }
 
-    const orderId = crypto.randomUUID()
-    if (initDataRef.current) initDataRef.current.value = initData
-    if (orderIdRef.current) orderIdRef.current.value = orderId
-    window.sessionStorage.setItem('banana-zero.pending-payment', orderId)
+    setBusy(true)
+    try {
+      const response = await fetch('/api/payments/tochka/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Telegram-Init-Data': getTelegramInitData(),
+        },
+        body: JSON.stringify({ tokenAmount: pack.tokens, email, name }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data?.paymentLink) throw new Error(data?.error || 'Не удалось создать платёж')
+      openExternalLink(data.paymentLink)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось создать платёж')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
-    <form
-      action="/api/payments/tochka/create"
-      method="POST"
-      target="_blank"
-      onSubmit={prepareCheckout}
-      className="space-y-5"
-      id="tokens"
-    >
-      <input ref={initDataRef} type="hidden" name="initData" />
-      <input ref={orderIdRef} type="hidden" name="orderId" />
-      <input type="hidden" name="tokenAmount" value={pack.tokens} />
-      <input type="hidden" name="redirect" value="1" />
-      <input type="hidden" name="accepted" value={accepted ? '1' : '0'} />
-
+    <div className="space-y-5" id="tokens">
       <div>
         <p className="text-sm font-semibold">Покупка Tokens</p>
         <p className="mt-1 text-xs text-muted-foreground">Выберите количество Tokens и перейдите к оплате.</p>
@@ -119,7 +68,6 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
           </div>
           {pack.savingsRub > 0 && <p className="mt-1 text-xs font-medium text-emerald-700">Экономия {pack.savingsRub.toLocaleString('ru-RU')} ₽</p>}
         </div>
-
         <input
           type="range"
           min={TOKEN_PURCHASE_MIN}
@@ -143,26 +91,11 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
           <span className="text-xs font-medium text-muted-foreground">Email для чека</span>
-          <input
-            name="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            inputMode="email"
-            autoComplete="email"
-            placeholder="you@example.com"
-            className="mt-1 w-full rounded-2xl border bg-card px-4 py-3 outline-none focus:border-brand"
-          />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" autoComplete="email" placeholder="you@example.com" className="mt-1 w-full rounded-2xl border bg-card px-4 py-3 outline-none focus:border-brand" />
         </label>
         <label className="block">
           <span className="text-xs font-medium text-muted-foreground">Имя</span>
-          <input
-            name="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            autoComplete="name"
-            placeholder="Необязательно"
-            className="mt-1 w-full rounded-2xl border bg-card px-4 py-3 outline-none focus:border-brand"
-          />
+          <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" placeholder="Необязательно" className="mt-1 w-full rounded-2xl border bg-card px-4 py-3 outline-none focus:border-brand" />
         </label>
       </div>
 
@@ -189,15 +122,11 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
         </span>
       </label>
 
-      <button
-        type="submit"
-        className="brand-gradient h-12 w-full rounded-full font-semibold text-white"
-      >
-        Оплатить {pack.priceRub.toLocaleString('ru-RU')} ₽
+      <button type="button" onClick={() => void checkout()} disabled={busy} className="brand-gradient h-12 w-full rounded-full font-semibold text-white disabled:opacity-50">
+        {busy ? 'Создаём платёж…' : 'Оплатить ' + pack.priceRub.toLocaleString('ru-RU') + ' ₽'}
       </button>
-
       {error && <p className="text-center text-sm text-destructive">{error}</p>}
-      <p className="text-center text-xs text-muted-foreground">После подтверждения оплаты Tokens зачисляются на баланс Banana Zero автоматически.</p>
-    </form>
+      <p className="text-center text-xs text-muted-foreground">После подтверждения оплаты Tokens зачисляются на баланс Banana Zero.</p>
+    </div>
   )
 }
