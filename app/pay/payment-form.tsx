@@ -13,11 +13,12 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [accepted, setAccepted] = useState(false)
-  const [busy, setBusy] = useState(false)
   const [testCheckout, setTestCheckout] = useState<{ enabled: boolean; amountRub: number; tokenAmount: number } | null>(null)
   const [error, setError] = useState('')
   const [pendingOrderId, setPendingOrderId] = useState('')
   const [waitingForPayment, setWaitingForPayment] = useState(false)
+  const [preparingPayment, setPreparingPayment] = useState(false)
+  const [preparedPayment, setPreparedPayment] = useState<{ key: string; orderId: string; paymentLink: string } | null>(null)
 
   const isTestMode = testModeRequested && testCheckout?.enabled === true
   const pack = isTestMode
@@ -29,6 +30,81 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
         discountPct: 0,
       }
     : getTokenPurchaseQuote(tokenAmount)
+
+  const checkoutKey = [
+    isTestMode ? 'test' : 'regular',
+    String(pack.tokens),
+    email.trim().toLowerCase(),
+    name.trim(),
+  ].join('|')
+
+  useEffect(() => {
+    setPreparedPayment(null)
+
+    if (!enabled || !accepted || !email.includes('@')) {
+      setPreparingPayment(false)
+      return
+    }
+    if (testModeRequested && !testCheckout?.enabled) return
+
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setPreparingPayment(true)
+        setError('')
+        const orderId = crypto.randomUUID()
+
+        try {
+          const response = await fetch('/api/payments/tochka/create', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Telegram-Init-Data': getTelegramInitData(),
+            },
+            body: JSON.stringify({
+              orderId,
+              tokenAmount: pack.tokens,
+              email,
+              name,
+              testPayment: isTestMode,
+            }),
+          })
+          const data = await response.json()
+          if (!response.ok || !data?.paymentLink || !data?.orderId) {
+            throw new Error(data?.error || 'Не удалось подготовить платёж')
+          }
+          if (!cancelled) {
+            setPreparedPayment({
+              key: checkoutKey,
+              orderId: data.orderId,
+              paymentLink: data.paymentLink,
+            })
+          }
+        } catch (e) {
+          if (!cancelled) {
+            setError(e instanceof Error ? e.message : 'Не удалось подготовить платёж')
+          }
+        } finally {
+          if (!cancelled) setPreparingPayment(false)
+        }
+      })()
+    }, 350)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [
+    accepted,
+    checkoutKey,
+    email,
+    enabled,
+    isTestMode,
+    name,
+    pack.tokens,
+    testCheckout?.enabled,
+    testModeRequested,
+  ])
 
   useEffect(() => {
     const initData = getTelegramInitData()
@@ -115,42 +191,11 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
     }
   }, [pendingOrderId, router])
 
-  async function checkout() {
-    setError('')
-    if (!email.includes('@')) {
-      setError('Укажите email — он нужен для электронного чека.')
-      return
-    }
-    if (!accepted) {
-      setError('Подтвердите согласие с условиями покупки.')
-      return
-    }
-    if (!enabled) {
-      setError('Рублёвая оплата временно недоступна.')
-      return
-    }
-
-    setBusy(true)
-    try {
-      const response = await fetch('/api/payments/tochka/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Telegram-Init-Data': getTelegramInitData(),
-        },
-        body: JSON.stringify({ tokenAmount: pack.tokens, email, name, testPayment: isTestMode }),
-      })
-      const data = await response.json()
-      if (!response.ok || !data?.paymentLink || !data?.orderId) throw new Error(data?.error || 'Не удалось создать платёж')
-      setPendingOrderId(data.orderId)
-      setWaitingForPayment(true)
-      window.sessionStorage.setItem('banana-zero.pending-payment', data.orderId)
-      openExternalLink(data.paymentLink)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось создать платёж')
-    } finally {
-      setBusy(false)
-    }
+  function markPaymentOpened() {
+    if (!preparedPayment || preparedPayment.key !== checkoutKey) return
+    setPendingOrderId(preparedPayment.orderId)
+    setWaitingForPayment(true)
+    window.sessionStorage.setItem('banana-zero.pending-payment', preparedPayment.orderId)
   }
 
   return (
@@ -241,9 +286,25 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
         </div>
       )}
 
-      <button type="button" onClick={() => void checkout()} disabled={busy || waitingForPayment} className="brand-gradient h-12 w-full rounded-full font-semibold text-white disabled:opacity-50">
-        {busy ? 'Создаём платёж…' : waitingForPayment ? 'Ожидаем оплату…' : 'Оплатить ' + pack.priceRub.toLocaleString('ru-RU') + ' ₽'}
-      </button>
+      {waitingForPayment ? (
+        <button type="button" disabled className="brand-gradient h-12 w-full rounded-full font-semibold text-white opacity-50">
+          Ожидаем оплату…
+        </button>
+      ) : preparedPayment && preparedPayment.key === checkoutKey && !preparingPayment ? (
+        <a
+          href={'/pay/banana-zero-pay/' + preparedPayment.orderId.slice(0, 8)}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={markPaymentOpened}
+          className="brand-gradient flex h-12 w-full items-center justify-center rounded-full font-semibold text-white"
+        >
+          {'Оплатить ' + pack.priceRub.toLocaleString('ru-RU') + ' ₽'}
+        </a>
+      ) : (
+        <button type="button" disabled className="brand-gradient h-12 w-full rounded-full font-semibold text-white opacity-50">
+          {preparingPayment ? 'Подготавливаем оплату…' : 'Готовим оплату…'}
+        </button>
+      )}
       {error && <p className="text-center text-sm text-destructive">{error}</p>}
       <p className="text-center text-xs text-muted-foreground">После подтверждения оплаты Tokens зачисляются на баланс Banana Zero автоматически.</p>
     </div>
