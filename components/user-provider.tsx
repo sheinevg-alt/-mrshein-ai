@@ -112,6 +112,19 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     void refreshUser()
   }, [refreshUser])
 
+  useEffect(() => {
+    function refreshOnReturn() {
+      if (document.visibilityState === 'visible') void refreshUser()
+    }
+
+    window.addEventListener('focus', refreshOnReturn)
+    document.addEventListener('visibilitychange', refreshOnReturn)
+    return () => {
+      window.removeEventListener('focus', refreshOnReturn)
+      document.removeEventListener('visibilitychange', refreshOnReturn)
+    }
+  }, [refreshUser])
+
   const activeIdsKey = useMemo(
     () => history
       .filter((item) => item.status === 'queued' || item.status === 'processing')
