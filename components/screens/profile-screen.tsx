@@ -37,7 +37,8 @@ function useTelegramProfile() {
   return useSyncExternalStore(noopSubscribe, () => getTelegramUser() ?? null, () => null)
 }
 
-const menu: { id: Exclude<Panel, null | 'tokens'>; label: MessageKey; icon: LucideIcon }[] = [
+const menu: { id: Exclude<Panel, null>; label: MessageKey; icon: LucideIcon }[] = [
+  { id: 'tokens', label: 'tokens.title', icon: Sparkles },
   { id: 'referral', label: 'profile.referral', icon: Gift },
   { id: 'history', label: 'profile.history', icon: Clock },
   { id: 'notifications', label: 'profile.notifications', icon: Bell },
@@ -59,7 +60,7 @@ export function ProfileScreen() {
     void refreshUser()
   }, [refreshUser])
 
-  const menuValue = (id: Exclude<Panel, null | 'tokens'>) => {
+  const menuValue = (id: Exclude<Panel, null>) => {
     if (id === 'notifications') return t(notificationsEnabled ? 'profile.notificationsOn' : 'profile.notificationsOff')
     if (id === 'language') return locale === 'ru' ? t('language.russian') : t('language.english')
     return null
