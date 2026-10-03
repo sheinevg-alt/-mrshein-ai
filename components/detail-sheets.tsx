@@ -960,6 +960,16 @@ function TrendFlow({ trend, onGenerationStarted }: { trend: Trend; onGenerationS
         </>
       )}
 
+      {trend.id === 'trend4-edit-test' && (
+        <div className="mt-4 rounded-2xl border border-brand/15 bg-brand-tint/35 px-4 py-3">
+          <p className="text-xs leading-5 text-muted-foreground">
+            {locale === 'ru'
+              ? '🎵 Музыка не добавляется автоматически. После генерации можно наложить любой трек в любом редакторе.'
+              : '🎵 Music is not added automatically. After generation, you can add any track in any editor.'}
+          </p>
+        </div>
+      )}
+
       <button
         type="button"
         onClick={() => void generate()}
