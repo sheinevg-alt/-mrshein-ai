@@ -3,9 +3,9 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, CreditCard, QrCode, ShieldCheck, Smartphone } from 'lucide-react'
+import { CreditCard, QrCode, ShieldCheck } from 'lucide-react'
 import { TOKEN_PURCHASE_MAX, TOKEN_PURCHASE_MIN, TOKEN_PURCHASE_STEP, getTokenPurchaseQuote, normalizeTokenPurchaseAmount } from '@/lib/public-pricing'
-import { getTelegramInitData } from '@/lib/telegram'
+import { getTelegramInitData, openExternalLink } from '@/lib/telegram'
 
 export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = false }: { enabled: boolean; initialTokens?: number; testModeRequested?: boolean }) {
   const router = useRouter()
@@ -16,9 +16,6 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
   const [busy, setBusy] = useState(false)
   const [testCheckout, setTestCheckout] = useState<{ enabled: boolean; amountRub: number; tokenAmount: number } | null>(null)
   const [error, setError] = useState('')
-  const [preparingPayment, setPreparingPayment] = useState(false)
-  const [preparedPayment, setPreparedPayment] = useState<{ key: string; orderId: string; paymentLink: string } | null>(null)
-  const [paymentMethod, setPaymentMethod] = useState<'sbp' | 'card' | 'tinkoff' | null>(null)
 
   const isTestMode = testModeRequested && testCheckout?.enabled === true
   const pack = isTestMode
@@ -30,86 +27,6 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
         discountPct: 0,
       }
     : getTokenPurchaseQuote(tokenAmount)
-
-  const checkoutKey = [
-    isTestMode ? 'test' : 'regular',
-    String(pack.tokens),
-    email.trim().toLowerCase(),
-    name.trim(),
-    paymentMethod || 'none',
-  ].join('|')
-
-  useEffect(() => {
-    setPreparedPayment(null)
-
-    if (!enabled || !accepted || !email.includes('@') || !paymentMethod) {
-      setPreparingPayment(false)
-      return
-    }
-    if (testModeRequested && !testCheckout?.enabled) return
-
-    let cancelled = false
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        setPreparingPayment(true)
-        setError('')
-        const orderId = crypto.randomUUID()
-
-        try {
-          const response = await fetch('/api/payments/tochka/create', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Telegram-Init-Data': getTelegramInitData(),
-            },
-            body: JSON.stringify({
-              orderId,
-              tokenAmount: isTestMode ? (testCheckout?.tokenAmount || 100) : pack.tokens,
-              email,
-              name,
-              testPayment: isTestMode,
-              paymentMethod,
-            }),
-          })
-          const data = await response.json()
-          if (!response.ok || !data?.paymentLink || !data?.orderId) {
-            throw new Error(data?.error || 'Не удалось подготовить платёж')
-          }
-          if (!cancelled) {
-            setPreparedPayment({
-              key: checkoutKey,
-              orderId: data.orderId,
-              paymentLink: data.paymentLink,
-            })
-          }
-        } catch (e) {
-          if (!cancelled) {
-            setError(e instanceof Error ? e.message : 'Не удалось подготовить платёж')
-          }
-        } finally {
-          if (!cancelled) setPreparingPayment(false)
-        }
-      })()
-    }, 350)
-
-    return () => {
-      cancelled = true
-      window.clearTimeout(timer)
-    }
-  }, [
-    accepted,
-    checkoutKey,
-    email,
-    enabled,
-    isTestMode,
-    name,
-    pack.tokens,
-    paymentMethod,
-    testCheckout?.enabled,
-    testCheckout?.tokenAmount,
-    testModeRequested,
-  ])
-
 
   useEffect(() => {
     const initData = getTelegramInitData()
@@ -182,9 +99,48 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
     }
   }, [router])
 
-  function markPaymentOpened() {
-    if (!preparedPayment || preparedPayment.key !== checkoutKey) return
-    window.sessionStorage.setItem('banana-zero.pending-payment', preparedPayment.orderId)
+  async function checkout() {
+    setError('')
+    if (!email.includes('@')) {
+      setError('Укажите email — он нужен для электронного чека.')
+      return
+    }
+    if (!accepted) {
+      setError('Подтвердите согласие с условиями покупки.')
+      return
+    }
+    if (!enabled) {
+      setError('Рублёвая оплата временно недоступна.')
+      return
+    }
+
+    setBusy(true)
+    try {
+      const response = await fetch('/api/payments/tochka/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Telegram-Init-Data': getTelegramInitData(),
+        },
+        body: JSON.stringify({
+          tokenAmount: pack.tokens,
+          email,
+          name,
+          testPayment: isTestMode,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data?.paymentLink || !data?.orderId) {
+        throw new Error(data?.error || 'Не удалось создать платёж')
+      }
+
+      window.sessionStorage.setItem('banana-zero.pending-payment', data.orderId)
+      openExternalLink(data.paymentLink)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось создать платёж')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -206,6 +162,7 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
           </div>
           {pack.savingsRub > 0 && <p className="mt-1 text-xs font-medium text-emerald-700">Экономия {pack.savingsRub.toLocaleString('ru-RU')} ₽</p>}
         </div>
+
         {isTestMode ? (
           <div className="mt-5 rounded-2xl border border-dashed border-amber-500/40 bg-amber-500/8 px-4 py-3 text-center text-xs font-semibold text-amber-700">
             Тестовый платёж · {pack.tokens.toLocaleString('ru-RU')} Tokens за {pack.priceRub.toLocaleString('ru-RU')} ₽
@@ -245,63 +202,10 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
         </label>
       </div>
 
-      <div className="rounded-3xl border bg-card p-4">
-        <div className="mb-3">
-          <p className="text-sm font-bold">Выберите способ оплаты</p>
-          <p className="mt-1 text-xs text-muted-foreground">Оплата проходит через защищённый процессинг Точка Банка.</p>
-        </div>
-
-        <div className="grid gap-3">
-          <button
-            type="button"
-            onClick={() => setPaymentMethod('sbp')}
-            className={`flex items-center justify-between rounded-2xl border p-4 text-left transition ${paymentMethod === 'sbp' ? 'border-brand bg-brand/8' : 'bg-background'}`}
-          >
-            <span className="flex items-center gap-3">
-              <span className="grid size-11 place-items-center rounded-2xl bg-muted"><QrCode className="size-5" /></span>
-              <span>
-                <span className="block text-sm font-bold">СБП</span>
-                <span className="block text-xs text-muted-foreground">Сбербанк, T-Банк и другие банки</span>
-              </span>
-            </span>
-            {paymentMethod === 'sbp' && <Check className="size-5 text-brand" />}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setPaymentMethod('card')}
-            className={`flex items-center justify-between rounded-2xl border p-4 text-left transition ${paymentMethod === 'card' ? 'border-brand bg-brand/8' : 'bg-background'}`}
-          >
-            <span className="flex items-center gap-3">
-              <span className="grid size-11 place-items-center rounded-2xl bg-muted"><CreditCard className="size-5" /></span>
-              <span>
-                <span className="block text-sm font-bold">Банковская карта</span>
-                <span className="block text-xs text-muted-foreground">Карты российских банков</span>
-              </span>
-            </span>
-            {paymentMethod === 'card' && <Check className="size-5 text-brand" />}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setPaymentMethod('tinkoff')}
-            className={`flex items-center justify-between rounded-2xl border p-4 text-left transition ${paymentMethod === 'tinkoff' ? 'border-brand bg-brand/8' : 'bg-background'}`}
-          >
-            <span className="flex items-center gap-3">
-              <span className="grid size-11 place-items-center rounded-2xl bg-muted"><Smartphone className="size-5" /></span>
-              <span>
-                <span className="block text-sm font-bold">T-Pay</span>
-                <span className="block text-xs text-muted-foreground">Быстрая оплата через T-Банк</span>
-              </span>
-            </span>
-            {paymentMethod === 'tinkoff' && <Check className="size-5 text-brand" />}
-          </button>
-        </div>
-
-        <div className="mt-3 flex items-center gap-2 rounded-2xl bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
-          <ShieldCheck className="size-4 shrink-0 text-brand" />
-          Электронный чек отправим на указанный email.
-        </div>
+      <div className="grid gap-2 rounded-2xl bg-muted/60 p-4 text-sm sm:grid-cols-3">
+        <span className="flex items-center gap-2"><CreditCard className="size-4 text-brand" />Банковская карта</span>
+        <span className="flex items-center gap-2"><QrCode className="size-4 text-brand" />СБП</span>
+        <span className="flex items-center gap-2"><ShieldCheck className="size-4 text-brand" />Электронный чек</span>
       </div>
 
       <label className="flex items-start gap-3 rounded-2xl border bg-card p-4 text-xs leading-5">
@@ -321,34 +225,15 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
         </span>
       </label>
 
-      {!paymentMethod ? (
-        <button
-          type="button"
-          disabled
-          className="brand-gradient h-12 w-full rounded-full font-semibold text-white opacity-50"
-        >
-          Выберите способ оплаты
-        </button>
-      ) : preparedPayment && preparedPayment.key === checkoutKey && !preparingPayment ? (
-        <a
-          href={'/pay/go?order=' + encodeURIComponent(preparedPayment.orderId)}
-          onClick={markPaymentOpened}
-          className="brand-gradient flex h-12 w-full items-center justify-center rounded-full font-semibold text-white"
-        >
-          {'Оплатить ' + pack.priceRub.toLocaleString('ru-RU') + ' ₽'}
-        </a>
-      ) : (
-        <button
-          type="button"
-          disabled
-          className="brand-gradient h-12 w-full rounded-full font-semibold text-white opacity-50"
-        >
-          {preparingPayment ? 'Подготавливаем оплату…' : 'Готовим оплату…'}
-        </button>
-      )}
+      <button type="button" onClick={() => void checkout()} disabled={busy} className="brand-gradient h-12 w-full rounded-full font-semibold text-white disabled:opacity-50">
+        {busy ? 'Создаём платёж…' : 'Оплатить ' + pack.priceRub.toLocaleString('ru-RU') + ' ₽'}
+      </button>
 
       {error && <p className="text-center text-sm text-destructive">{error}</p>}
-      <p className="text-center text-xs text-muted-foreground">После подтверждения оплаты Tokens зачисляются на баланс Banana Zero.</p>
+
+      <div className="rounded-2xl bg-muted/60 px-4 py-3 text-center text-xs leading-5 text-muted-foreground">
+        После оплаты вернитесь в Telegram. Banana Zero автоматически проверит платёж, обновит баланс Tokens и откроет профиль.
+      </div>
     </div>
   )
 }
