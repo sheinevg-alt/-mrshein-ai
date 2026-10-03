@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CreditCard, QrCode, ShieldCheck } from 'lucide-react'
 import { TOKEN_PURCHASE_MAX, TOKEN_PURCHASE_MIN, TOKEN_PURCHASE_STEP, getTokenPurchaseQuote, normalizeTokenPurchaseAmount } from '@/lib/public-pricing'
-import { getTelegramInitData } from '@/lib/telegram'
+import { getTelegramInitData, openExternalLink } from '@/lib/telegram'
 
 export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = false }: { enabled: boolean; initialTokens?: number; testModeRequested?: boolean }) {
   const router = useRouter()
@@ -16,6 +16,8 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
   const [busy, setBusy] = useState(false)
   const [testCheckout, setTestCheckout] = useState<{ enabled: boolean; amountRub: number; tokenAmount: number } | null>(null)
   const [error, setError] = useState('')
+  const [preparingPayment, setPreparingPayment] = useState(false)
+  const [preparedPayment, setPreparedPayment] = useState<{ key: string; orderId: string; paymentLink: string } | null>(null)
 
   const isTestMode = testModeRequested && testCheckout?.enabled === true
   const pack = isTestMode
@@ -27,6 +29,82 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
         discountPct: 0,
       }
     : getTokenPurchaseQuote(tokenAmount)
+
+  const checkoutKey = [
+    isTestMode ? 'test' : 'regular',
+    String(pack.tokens),
+    email.trim().toLowerCase(),
+    name.trim(),
+  ].join('|')
+
+  useEffect(() => {
+    setPreparedPayment(null)
+
+    if (!enabled || !accepted || !email.includes('@')) {
+      setPreparingPayment(false)
+      return
+    }
+    if (testModeRequested && !testCheckout?.enabled) return
+
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setPreparingPayment(true)
+        setError('')
+        const orderId = crypto.randomUUID()
+
+        try {
+          const response = await fetch('/api/payments/tochka/create', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Telegram-Init-Data': getTelegramInitData(),
+            },
+            body: JSON.stringify({
+              orderId,
+              tokenAmount: isTestMode ? (testCheckout?.tokenAmount || 100) : pack.tokens,
+              email,
+              name,
+              testPayment: isTestMode,
+            }),
+          })
+          const data = await response.json()
+          if (!response.ok || !data?.paymentLink || !data?.orderId) {
+            throw new Error(data?.error || 'Не удалось подготовить платёж')
+          }
+          if (!cancelled) {
+            setPreparedPayment({
+              key: checkoutKey,
+              orderId: data.orderId,
+              paymentLink: data.paymentLink,
+            })
+          }
+        } catch (e) {
+          if (!cancelled) {
+            setError(e instanceof Error ? e.message : 'Не удалось подготовить платёж')
+          }
+        } finally {
+          if (!cancelled) setPreparingPayment(false)
+        }
+      })()
+    }, 350)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [
+    accepted,
+    checkoutKey,
+    email,
+    enabled,
+    isTestMode,
+    name,
+    pack.tokens,
+    testCheckout?.enabled,
+    testCheckout?.tokenAmount,
+    testModeRequested,
+  ])
 
 
   useEffect(() => {
@@ -100,7 +178,7 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
     }
   }, [router])
 
-  async function checkout(testPayment = false) {
+  function checkout() {
     setError('')
     if (!email.includes('@')) {
       setError('Укажите email — он нужен для электронного чека.')
@@ -114,47 +192,16 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
       setError('Рублёвая оплата временно недоступна.')
       return
     }
-
-    setBusy(true)
-    const orderId = crypto.randomUUID()
-    window.sessionStorage.setItem('banana-zero.pending-payment', orderId)
-
-    try {
-      // Start creating the payment immediately, but open the Telegram browser bridge
-      // in the same user gesture. Telegram only honors WebApp.openLink for about
-      // one second after a tap; waiting for Tochka first makes iOS keep the checkout
-      // inside the Mini App WebView, where SBP bank-app deep links can stall.
-      const paymentRequest = fetch('/api/payments/tochka/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Telegram-Init-Data': getTelegramInitData(),
-        },
-        body: JSON.stringify({
-          orderId,
-          tokenAmount: isTestMode || testPayment ? (testCheckout?.tokenAmount || 100) : pack.tokens,
-          email,
-          name,
-          testPayment: isTestMode || testPayment,
-        }),
-      })
-
-      // Keep checkout inside the Telegram webview: navigate immediately while the tap
-      // is still active. The launch page waits for Tochka in the background and then
-      // replaces itself with the real payment page.
-      window.location.assign('/pay/launch?order=' + encodeURIComponent(orderId))
-
-      const response = await paymentRequest
-      const data = await response.json()
-      if (!response.ok || !data?.paymentLink || !data?.orderId) {
-        window.sessionStorage.removeItem('banana-zero.pending-payment')
-        throw new Error(data?.error || 'Не удалось создать платёж')
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось создать платёж')
-    } finally {
-      setBusy(false)
+    if (!preparedPayment || preparedPayment.key !== checkoutKey) {
+      setError('Платёж ещё подготавливается. Подождите секунду и нажмите ещё раз.')
+      return
     }
+
+    // The Tochka link is already prepared before the tap, so Telegram receives
+    // a real external URL directly inside the user gesture. This lets iOS hand
+    // SBP deep links off to Sber/T-Bank instead of trapping them in the Mini App webview.
+    window.sessionStorage.setItem('banana-zero.pending-payment', preparedPayment.orderId)
+    openExternalLink(preparedPayment.paymentLink)
   }
 
   return (
@@ -238,8 +285,15 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
         </span>
       </label>
 
-      <button type="button" onClick={() => void checkout(isTestMode)} disabled={busy} className="brand-gradient h-12 w-full rounded-full font-semibold text-white disabled:opacity-50">
-        {busy ? 'Создаём платёж…' : 'Оплатить ' + pack.priceRub.toLocaleString('ru-RU') + ' ₽'}
+      <button
+        type="button"
+        onClick={checkout}
+        disabled={busy || preparingPayment}
+        className="brand-gradient h-12 w-full rounded-full font-semibold text-white disabled:opacity-50"
+      >
+        {preparingPayment
+          ? 'Подготавливаем оплату…'
+          : 'Оплатить ' + pack.priceRub.toLocaleString('ru-RU') + ' ₽'}
       </button>
 
       {error && <p className="text-center text-sm text-destructive">{error}</p>}
