@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CreditCard, QrCode, ShieldCheck } from 'lucide-react'
+import { Check, CreditCard, QrCode, ShieldCheck, Smartphone } from 'lucide-react'
 import { TOKEN_PURCHASE_MAX, TOKEN_PURCHASE_MIN, TOKEN_PURCHASE_STEP, getTokenPurchaseQuote, normalizeTokenPurchaseAmount } from '@/lib/public-pricing'
 import { getTelegramInitData } from '@/lib/telegram'
 
@@ -18,6 +18,7 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
   const [error, setError] = useState('')
   const [preparingPayment, setPreparingPayment] = useState(false)
   const [preparedPayment, setPreparedPayment] = useState<{ key: string; orderId: string; paymentLink: string } | null>(null)
+  const [paymentMethod, setPaymentMethod] = useState<'sbp' | 'card' | 'tinkoff' | null>(null)
 
   const isTestMode = testModeRequested && testCheckout?.enabled === true
   const pack = isTestMode
@@ -35,12 +36,13 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
     String(pack.tokens),
     email.trim().toLowerCase(),
     name.trim(),
+    paymentMethod || 'none',
   ].join('|')
 
   useEffect(() => {
     setPreparedPayment(null)
 
-    if (!enabled || !accepted || !email.includes('@')) {
+    if (!enabled || !accepted || !email.includes('@') || !paymentMethod) {
       setPreparingPayment(false)
       return
     }
@@ -66,6 +68,7 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
               email,
               name,
               testPayment: isTestMode,
+              paymentMethod,
             }),
           })
           const data = await response.json()
@@ -101,6 +104,7 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
     isTestMode,
     name,
     pack.tokens,
+    paymentMethod,
     testCheckout?.enabled,
     testCheckout?.tokenAmount,
     testModeRequested,
@@ -241,10 +245,63 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
         </label>
       </div>
 
-      <div className="grid gap-2 rounded-2xl bg-muted/60 p-4 text-sm sm:grid-cols-3">
-        <span className="flex items-center gap-2"><CreditCard className="size-4 text-brand" />Банковская карта</span>
-        <span className="flex items-center gap-2"><QrCode className="size-4 text-brand" />СБП</span>
-        <span className="flex items-center gap-2"><ShieldCheck className="size-4 text-brand" />Электронный чек</span>
+      <div className="rounded-3xl border bg-card p-4">
+        <div className="mb-3">
+          <p className="text-sm font-bold">Выберите способ оплаты</p>
+          <p className="mt-1 text-xs text-muted-foreground">Оплата проходит через защищённый процессинг Точка Банка.</p>
+        </div>
+
+        <div className="grid gap-3">
+          <button
+            type="button"
+            onClick={() => setPaymentMethod('sbp')}
+            className={`flex items-center justify-between rounded-2xl border p-4 text-left transition ${paymentMethod === 'sbp' ? 'border-brand bg-brand/8' : 'bg-background'}`}
+          >
+            <span className="flex items-center gap-3">
+              <span className="grid size-11 place-items-center rounded-2xl bg-muted"><QrCode className="size-5" /></span>
+              <span>
+                <span className="block text-sm font-bold">СБП</span>
+                <span className="block text-xs text-muted-foreground">Сбербанк, T-Банк и другие банки</span>
+              </span>
+            </span>
+            {paymentMethod === 'sbp' && <Check className="size-5 text-brand" />}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPaymentMethod('card')}
+            className={`flex items-center justify-between rounded-2xl border p-4 text-left transition ${paymentMethod === 'card' ? 'border-brand bg-brand/8' : 'bg-background'}`}
+          >
+            <span className="flex items-center gap-3">
+              <span className="grid size-11 place-items-center rounded-2xl bg-muted"><CreditCard className="size-5" /></span>
+              <span>
+                <span className="block text-sm font-bold">Банковская карта</span>
+                <span className="block text-xs text-muted-foreground">Карты российских банков</span>
+              </span>
+            </span>
+            {paymentMethod === 'card' && <Check className="size-5 text-brand" />}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPaymentMethod('tinkoff')}
+            className={`flex items-center justify-between rounded-2xl border p-4 text-left transition ${paymentMethod === 'tinkoff' ? 'border-brand bg-brand/8' : 'bg-background'}`}
+          >
+            <span className="flex items-center gap-3">
+              <span className="grid size-11 place-items-center rounded-2xl bg-muted"><Smartphone className="size-5" /></span>
+              <span>
+                <span className="block text-sm font-bold">T-Pay</span>
+                <span className="block text-xs text-muted-foreground">Быстрая оплата через T-Банк</span>
+              </span>
+            </span>
+            {paymentMethod === 'tinkoff' && <Check className="size-5 text-brand" />}
+          </button>
+        </div>
+
+        <div className="mt-3 flex items-center gap-2 rounded-2xl bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+          <ShieldCheck className="size-4 shrink-0 text-brand" />
+          Электронный чек отправим на указанный email.
+        </div>
       </div>
 
       <label className="flex items-start gap-3 rounded-2xl border bg-card p-4 text-xs leading-5">
@@ -264,7 +321,15 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
         </span>
       </label>
 
-      {preparedPayment && preparedPayment.key === checkoutKey && !preparingPayment ? (
+      {!paymentMethod ? (
+        <button
+          type="button"
+          disabled
+          className="brand-gradient h-12 w-full rounded-full font-semibold text-white opacity-50"
+        >
+          Выберите способ оплаты
+        </button>
+      ) : preparedPayment && preparedPayment.key === checkoutKey && !preparingPayment ? (
         <a
           href={'/pay/launch?order=' + encodeURIComponent(preparedPayment.orderId)}
           target="_blank"
