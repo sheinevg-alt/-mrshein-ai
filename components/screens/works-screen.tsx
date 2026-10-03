@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, CheckCircle2, Clock3, Download, Expand, ExternalLink, FolderOpen, LoaderCircle, RefreshCw, RotateCcw } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Clock3, Download, Expand, ExternalLink, FolderOpen, LoaderCircle, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
 import { getTelegramInitData, getWebApp, haptics, openExternalLink } from '@/lib/telegram'
 import { useI18n } from '../i18n-provider'
 import { useUserState, type HistoryItem } from '../user-provider'
@@ -73,6 +73,9 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
   const [downloadErrorId, setDownloadErrorId] = useState<string | null>(null)
   const [retryingId, setRetryingId] = useState<string | null>(null)
   const [retryErrorId, setRetryErrorId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<HistoryItem | 'all' | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState(false)
   const [mediaInfo, setMediaInfo] = useState<Record<string, { width: number; height: number; duration: number }>>({})
 
   const visibleHistory = useMemo(() => history.filter((item) => {
@@ -81,6 +84,11 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
     if (!Number.isFinite(failed)) return false
     return Date.now() - failed < 24 * 60 * 60 * 1000
   }), [history])
+
+  const deletableCount = useMemo(
+    () => visibleHistory.filter((item) => item.status === 'completed' || item.status === 'failed').length,
+    [visibleHistory],
+  )
 
   useEffect(() => {
     markWorksSeen()
@@ -129,6 +137,35 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
       setRetryErrorId(item.id)
     } finally {
       setRetryingId(null)
+    }
+  }
+
+  async function deleteWorks() {
+    const initData = getTelegramInitData()
+    if (!initData || !deleteTarget || deleting) return
+
+    setDeleting(true)
+    setDeleteError(false)
+    try {
+      const endpoint = deleteTarget === 'all'
+        ? '/api/history?all=1'
+        : `/api/history?jobId=${encodeURIComponent(deleteTarget.id)}`
+      const response = await fetch(endpoint, {
+        method: 'DELETE',
+        headers: { 'X-Telegram-Init-Data': initData },
+        cache: 'no-store',
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || !data?.ok) throw new Error(String(data?.error || 'DELETE_FAILED'))
+
+      haptics.success()
+      setDeleteTarget(null)
+      await refreshUser()
+    } catch {
+      haptics.impact('medium')
+      setDeleteError(true)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -225,15 +262,31 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
               : 'Active, completed, and recent failed generations appear here. Save completed media to your device: in-service availability is limited to 14 days.'}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void manualRefresh()}
-          disabled={refreshing}
-          aria-label={locale === 'ru' ? 'Обновить' : 'Refresh'}
-          className="glass flex size-10 shrink-0 items-center justify-center rounded-full text-muted-foreground transition active:scale-95 disabled:opacity-50"
-        >
-          <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {deletableCount > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                haptics.impact('light')
+                setDeleteError(false)
+                setDeleteTarget('all')
+              }}
+              className="glass flex h-10 items-center justify-center gap-1.5 rounded-full px-3 text-xs font-semibold text-destructive transition active:scale-95"
+            >
+              <Trash2 className="size-4" />
+              {locale === 'ru' ? 'Удалить всё' : 'Delete all'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => void manualRefresh()}
+            disabled={refreshing}
+            aria-label={locale === 'ru' ? 'Обновить' : 'Refresh'}
+            className="glass flex size-10 items-center justify-center rounded-full text-muted-foreground transition active:scale-95 disabled:opacity-50"
+          >
+            <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </header>
 
       {visibleHistory.length === 0 ? (
@@ -428,9 +481,78 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
                     )}
                   </div>
                 )}
+
+                {(item.status === 'completed' || item.status === 'failed') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      haptics.impact('light')
+                      setDeleteError(false)
+                      setDeleteTarget(item)
+                    }}
+                    className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-full border border-destructive/20 bg-destructive/5 text-sm font-semibold text-destructive transition active:scale-[0.98]"
+                  >
+                    <Trash2 className="size-4" />
+                    {locale === 'ru' ? 'Удалить' : 'Delete'}
+                  </button>
+                )}
               </article>
             )
           })}
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/45 px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-20 backdrop-blur-[2px] sm:items-center">
+          <div className="w-full max-w-md rounded-[28px] bg-background p-5 shadow-2xl">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
+              <Trash2 className="size-6" />
+            </div>
+            <h2 className="mt-4 text-center text-lg font-semibold">
+              {deleteTarget === 'all'
+                ? (locale === 'ru' ? 'Удалить все работы?' : 'Delete all works?')
+                : (locale === 'ru' ? 'Удалить эту работу?' : 'Delete this work?')}
+            </h2>
+            <p className="mt-2 text-center text-sm leading-5 text-muted-foreground">
+              {deleteTarget === 'all'
+                ? (locale === 'ru'
+                    ? `Будут навсегда удалены все готовые и неудачные работы (${deletableCount}), а также их загруженные исходники из хранилища Banana Zero. Активные генерации останутся. Восстановить удалённое нельзя.`
+                    : `All completed and failed works (${deletableCount}) and their uploaded source files will be permanently removed from Banana Zero storage. Active generations will remain. This cannot be undone.`)
+                : (locale === 'ru'
+                    ? 'Результат исчезнет из «Моих работ», а связанные загруженные исходники будут удалены из хранилища Banana Zero. Восстановить работу нельзя.'
+                    : 'The result will disappear from My works and related uploaded source files will be removed from Banana Zero storage. This cannot be undone.')}
+            </p>
+
+            {deleteError && (
+              <p className="mt-3 text-center text-xs font-medium text-destructive">
+                {locale === 'ru' ? 'Не удалось удалить. Попробуйте ещё раз.' : 'Could not delete. Please try again.'}
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={() => void deleteWorks()}
+              disabled={deleting}
+              className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-destructive text-sm font-semibold text-destructive-foreground transition active:scale-[0.98] disabled:opacity-55"
+            >
+              {deleting ? <LoaderCircle className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+              {deleting
+                ? (locale === 'ru' ? 'Удаляю…' : 'Deleting…')
+                : (locale === 'ru' ? 'Удалить навсегда' : 'Delete permanently')}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (deleting) return
+                setDeleteTarget(null)
+                setDeleteError(false)
+              }}
+              disabled={deleting}
+              className="mt-2 h-11 w-full rounded-full text-sm font-semibold text-muted-foreground disabled:opacity-50"
+            >
+              {locale === 'ru' ? 'Отмена' : 'Cancel'}
+            </button>
+          </div>
         </div>
       )}
     </div>
