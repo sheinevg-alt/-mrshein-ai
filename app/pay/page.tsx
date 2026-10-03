@@ -37,11 +37,11 @@ export default async function PayPage({ searchParams }: { searchParams: Promise<
         </section>
 
         <footer className="mt-6 flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
-          <Link href="/pricing" className="underline underline-offset-4">Тарифы</Link>
-          <Link href="/offer" className="underline underline-offset-4">Оферта</Link>
-          <Link href="/privacy" className="underline underline-offset-4">Конфиденциальность</Link>
-          <Link href="/refund" className="underline underline-offset-4">Возвраты</Link>
-          <Link href="/contacts" className="underline underline-offset-4">Контакты</Link>
+          <Link href="https://bananazero.ru/pricing" className="underline underline-offset-4">Тарифы</Link>
+          <Link href="https://bananazero.ru/offer" className="underline underline-offset-4">Оферта</Link>
+          <Link href="https://bananazero.ru/privacy" className="underline underline-offset-4">Конфиденциальность</Link>
+          <Link href="https://bananazero.ru/refund" className="underline underline-offset-4">Возвраты</Link>
+          <Link href="https://bananazero.ru/contacts" className="underline underline-offset-4">Контакты</Link>
         </footer>
       </div>
     </main>
