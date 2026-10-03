@@ -117,10 +117,17 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       if (document.visibilityState === 'visible') void refreshUser()
     }
 
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshUser()
+    }, 15000)
+
     window.addEventListener('focus', refreshOnReturn)
+    window.addEventListener('pageshow', refreshOnReturn)
     document.addEventListener('visibilitychange', refreshOnReturn)
     return () => {
+      window.clearInterval(timer)
       window.removeEventListener('focus', refreshOnReturn)
+      window.removeEventListener('pageshow', refreshOnReturn)
       document.removeEventListener('visibilitychange', refreshOnReturn)
     }
   }, [refreshUser])
