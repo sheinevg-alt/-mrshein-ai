@@ -2,6 +2,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { normalizeTokenPurchaseAmount } from '@/lib/public-pricing'
 import { PaymentForm } from './payment-form'
+import { PayBackButton } from './pay-back-button'
 import { hasDatabase, supabaseFetch } from '@/lib/server/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -23,6 +24,7 @@ export default async function PayPage({ searchParams }: { searchParams: Promise<
     <main className="min-h-dvh px-4 py-8 sm:px-6">
       <div className="mx-auto max-w-2xl">
         <header className="flex items-center gap-3">
+          <PayBackButton />
           <Image src="/banana-zero-cake.jpg" alt="Banana Zero" width={44} height={44} className="rounded-2xl" />
           <div>
             <h1 className="text-xl font-bold">Banana Zero</h1>
