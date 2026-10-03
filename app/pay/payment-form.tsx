@@ -266,7 +266,7 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
 
       {preparedPayment && preparedPayment.key === checkoutKey && !preparingPayment ? (
         <a
-          href={preparedPayment.paymentLink}
+          href={'/pay/go?order=' + encodeURIComponent(preparedPayment.orderId)}
           target="_blank"
           rel="noopener noreferrer"
           onClick={markPaymentOpened}
