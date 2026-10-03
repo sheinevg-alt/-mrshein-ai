@@ -44,12 +44,41 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Tochka fiscal checkout is not configured' }, { status: 503 })
   }
 
-  const rawTokenAmount = Number(body?.tokenAmount)
-  const tokenAmount = normalizeTokenPurchaseAmount(rawTokenAmount)
-  if (!Number.isFinite(rawTokenAmount) || rawTokenAmount !== tokenAmount) {
-    return NextResponse.json({ error: 'Invalid checkout data' }, { status: 400 })
+  const isTestPayment = body?.testPayment === true || String(body?.testPayment || '') === '1'
+
+  let tokenAmount: number
+  let quote: { tokens: number; regularRub: number; priceRub: number; savingsRub: number; discountPct: number }
+
+  if (isTestPayment) {
+    if (!hasDatabase()) return NextResponse.json({ error: 'Test checkout unavailable' }, { status: 503 })
+    const testConfigResponse = await supabaseFetch(
+      'app_settings?select=value&key=eq.test_checkout_users&limit=1',
+    )
+    const testRows = testConfigResponse.ok ? await testConfigResponse.json() : []
+    const testConfig = testRows?.[0]?.value || {}
+    const allowedIds = Array.isArray(testConfig?.telegram_ids) ? testConfig.telegram_ids.map(Number) : []
+    if (testConfig?.enabled !== true || !allowedIds.includes(Number(user.id))) {
+      return NextResponse.json({ error: 'Test checkout unavailable' }, { status: 403 })
+    }
+
+    tokenAmount = Number(testConfig?.token_amount || 100)
+    const testAmount = Number(testConfig?.amount_rub || 100)
+    quote = {
+      tokens: tokenAmount,
+      regularRub: testAmount,
+      priceRub: testAmount,
+      savingsRub: 0,
+      discountPct: 0,
+    }
+  } else {
+    const rawTokenAmount = Number(body?.tokenAmount)
+    tokenAmount = normalizeTokenPurchaseAmount(rawTokenAmount)
+    if (!Number.isFinite(rawTokenAmount) || rawTokenAmount !== tokenAmount) {
+      return NextResponse.json({ error: 'Invalid checkout data' }, { status: 400 })
+    }
+    quote = getTokenPurchaseQuote(tokenAmount)
   }
-  const quote = getTokenPurchaseQuote(tokenAmount)
+
   const amount = quote.priceRub
   const email = String(body?.email || '').trim().slice(0, 254)
   const name = String(body?.name || '').trim().slice(0, 120) || 'Покупатель Banana Zero'
@@ -62,7 +91,7 @@ export async function POST(request: Request) {
     Data: {
       customerCode,
       amount,
-      purpose: `Пополнение Banana Zero: ${tokenAmount} токенов`,
+      purpose: isTestPayment ? `Тестовый платеж Banana Zero: ${tokenAmount} токенов` : `Пополнение Banana Zero: ${tokenAmount} токенов`,
       redirectUrl: `${siteUrl}/pay/success?order=${orderId}`,
       failRedirectUrl: `${siteUrl}/pay?status=failed`,
       paymentMode: ['sbp', 'card', 'tinkoff'],
@@ -72,7 +101,7 @@ export async function POST(request: Request) {
       Client: { name, email },
       Items: [{
         vatType,
-        name: `${tokenAmount} токенов Banana Zero`,
+        name: isTestPayment ? `Тестовый платеж Banana Zero — ${tokenAmount} токенов` : `${tokenAmount} токенов Banana Zero`,
         amount,
         quantity: 1,
         paymentMethod: 'full_payment',
@@ -105,6 +134,7 @@ export async function POST(request: Request) {
           offer_version: '2026-10-02-v2',
           pricing_version: 'commercial_model_v4_slider',
           purchase_snapshot: { token_amount: tokenAmount, amount_rub: amount, regular_rub: quote.regularRub, discount_pct: quote.discountPct, savings_rub: quote.savingsRub },
+          test_payment: isTestPayment,
           customer_code: customerCode,
           merchant_id: merchantId,
         },
@@ -120,14 +150,14 @@ export async function POST(request: Request) {
 
   const data = response.json
   if (!response.ok || !data?.Data?.paymentLink) {
-    if (hasDatabase()) await supabaseFetch(`payment_orders?id=eq.${orderId}`, { method: 'PATCH', body: JSON.stringify({ status: 'failed', metadata: { email, name, offer_version: '2026-10-02-v2', pricing_version: 'commercial_model_v4_slider', purchase_snapshot: { token_amount: tokenAmount, amount_rub: amount, regular_rub: quote.regularRub, discount_pct: quote.discountPct, savings_rub: quote.savingsRub }, provider_error: data } }) })
+    if (hasDatabase()) await supabaseFetch(`payment_orders?id=eq.${orderId}`, { method: 'PATCH', body: JSON.stringify({ status: 'failed', metadata: { email, name, offer_version: '2026-10-02-v2', pricing_version: 'commercial_model_v4_slider', purchase_snapshot: { token_amount: tokenAmount, amount_rub: amount, regular_rub: quote.regularRub, discount_pct: quote.discountPct, savings_rub: quote.savingsRub }, test_payment: isTestPayment, provider_error: data } }) })
     return NextResponse.json({ error: 'Payment provider error' }, { status: 502 })
   }
 
   if (hasDatabase()) {
     await supabaseFetch(`payment_orders?id=eq.${orderId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ external_payment_id: data.Data.operationId, payment_method: 'payment_link', metadata: { email, name, offer_version: '2026-10-02-v2', pricing_version: 'commercial_model_v4_slider', purchase_snapshot: { token_amount: tokenAmount, amount_rub: amount, regular_rub: quote.regularRub, discount_pct: quote.discountPct, savings_rub: quote.savingsRub }, payment_link_id: paymentLinkId, payment_link: data.Data.paymentLink } }),
+      body: JSON.stringify({ external_payment_id: data.Data.operationId, payment_method: 'payment_link', metadata: { email, name, offer_version: '2026-10-02-v2', pricing_version: 'commercial_model_v4_slider', purchase_snapshot: { token_amount: tokenAmount, amount_rub: amount, regular_rub: quote.regularRub, discount_pct: quote.discountPct, savings_rub: quote.savingsRub }, test_payment: isTestPayment, payment_link_id: paymentLinkId, payment_link: data.Data.paymentLink } }),
     })
   }
 
