@@ -116,28 +116,37 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
     }
 
     setBusy(true)
+    const orderId = crypto.randomUUID()
+    window.sessionStorage.setItem('banana-zero.pending-payment', orderId)
+
     try {
-      const response = await fetch('/api/payments/tochka/create', {
+      // Start creating the payment immediately, but open the Telegram browser bridge
+      // in the same user gesture. Telegram only honors WebApp.openLink for about
+      // one second after a tap; waiting for Tochka first makes iOS keep the checkout
+      // inside the Mini App WebView, where SBP bank-app deep links can stall.
+      const paymentRequest = fetch('/api/payments/tochka/create', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Telegram-Init-Data': getTelegramInitData(),
         },
-        body: JSON.stringify({ tokenAmount: isTestMode || testPayment ? (testCheckout?.tokenAmount || 100) : pack.tokens, email, name, testPayment: isTestMode || testPayment }),
+        body: JSON.stringify({
+          orderId,
+          tokenAmount: isTestMode || testPayment ? (testCheckout?.tokenAmount || 100) : pack.tokens,
+          email,
+          name,
+          testPayment: isTestMode || testPayment,
+        }),
       })
-      const data = await response.json()
-      if (!response.ok || !data?.paymentLink || !data?.orderId) throw new Error(data?.error || 'Не удалось создать платёж')
-      window.sessionStorage.setItem('banana-zero.pending-payment', data.orderId)
 
-      // Telegram iOS can silently ignore WebApp.openLink after an async payment-link request.
-      // Try the normal external-browser handoff first, then fall back to direct navigation
-      // only if the Mini App is still visible.
-      openExternalLink(data.paymentLink)
-      window.setTimeout(() => {
-        if (document.visibilityState === 'visible') {
-          window.location.assign(data.paymentLink)
-        }
-      }, 900)
+      openExternalLink('https://bananazero.ru/pay/launch?order=' + encodeURIComponent(orderId))
+
+      const response = await paymentRequest
+      const data = await response.json()
+      if (!response.ok || !data?.paymentLink || !data?.orderId) {
+        window.sessionStorage.removeItem('banana-zero.pending-payment')
+        throw new Error(data?.error || 'Не удалось создать платёж')
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось создать платёж')
     } finally {
