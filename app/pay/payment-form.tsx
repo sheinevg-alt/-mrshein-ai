@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 import { CreditCard, QrCode, ShieldCheck } from 'lucide-react'
 import { TOKEN_PURCHASE_MAX, TOKEN_PURCHASE_MIN, TOKEN_PURCHASE_STEP, getTokenPurchaseQuote, normalizeTokenPurchaseAmount } from '@/lib/public-pricing'
@@ -9,6 +10,7 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
   const [tokenAmount, setTokenAmount] = useState(normalizeTokenPurchaseAmount(initialTokens))
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
+  const [accepted, setAccepted] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -20,8 +22,12 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
       setError('Укажите email — он нужен для электронного чека.')
       return
     }
+    if (!accepted) {
+      setError('Подтвердите согласие с условиями покупки.')
+      return
+    }
     if (!enabled) {
-      setError('Рублёвая оплата временно недоступна. Тарифы и стоимость услуг уже опубликованы на сайте.')
+      setError('Рублёвая оплата временно недоступна.')
       return
     }
 
@@ -48,8 +54,8 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
   return (
     <div className="space-y-5" id="tokens">
       <div>
-        <p className="text-sm font-semibold">Разовая покупка Tokens</p>
-        <p className="mt-1 text-xs text-muted-foreground">Без тарифа и без подписки. Выберите количество Tokens бегунком.</p>
+        <p className="text-sm font-semibold">Покупка Tokens</p>
+        <p className="mt-1 text-xs text-muted-foreground">Выберите количество Tokens и перейдите к оплате.</p>
       </div>
 
       <div className="rounded-3xl border bg-card p-5">
@@ -99,8 +105,25 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
         <span className="flex items-center gap-2"><ShieldCheck className="size-4 text-brand" />Электронный чек</span>
       </div>
 
+      <label className="flex items-start gap-3 rounded-2xl border bg-card p-4 text-xs leading-5">
+        <input
+          type="checkbox"
+          checked={accepted}
+          onChange={(event) => setAccepted(event.target.checked)}
+          className="mt-0.5 size-4 shrink-0 accent-black"
+        />
+        <span className="text-muted-foreground">
+          Я соглашаюсь с{' '}
+          <Link href="/offer" target="_blank" className="font-medium text-foreground underline underline-offset-2">публичной офертой</Link>,{' '}
+          <Link href="/privacy" target="_blank" className="font-medium text-foreground underline underline-offset-2">политикой конфиденциальности</Link>,{' '}
+          <Link href="/legal/service-delivery" target="_blank" className="font-medium text-foreground underline underline-offset-2">правилами оказания услуг</Link>{' '}
+          и{' '}
+          <Link href="/pricing" target="_blank" className="font-medium text-foreground underline underline-offset-2">условиями тарифов и стоимости</Link>.
+        </span>
+      </label>
+
       <button type="button" onClick={() => void checkout()} disabled={busy} className="brand-gradient h-12 w-full rounded-full font-semibold text-white disabled:opacity-50">
-        {busy ? 'Создаём платёж…' : `Оплатить ${pack.priceRub.toLocaleString('ru-RU')} ₽`}
+        {busy ? 'Создаём платёж…' : 'Оплатить ' + pack.priceRub.toLocaleString('ru-RU') + ' ₽'}
       </button>
       {error && <p className="text-center text-sm text-destructive">{error}</p>}
       <p className="text-center text-xs text-muted-foreground">После подтверждения оплаты Tokens зачисляются на баланс Banana Zero.</p>
