@@ -11,7 +11,14 @@ export const dynamic = 'force-dynamic'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export async function POST(request: Request) {
-  const user = verifyTelegramInitData(request.headers.get('x-telegram-init-data') || '')
+  const contentType = request.headers.get('content-type') || ''
+  const isForm = contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')
+  const body: any = isForm
+    ? Object.fromEntries((await request.formData().catch(() => new FormData())).entries())
+    : await request.json().catch(() => ({}))
+
+  const initData = request.headers.get('x-telegram-init-data') || String(body?.initData || '')
+  const user = verifyTelegramInitData(initData)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!(await hasAppAccess(user.id))) return NextResponse.json({ error: 'CLOSED_BETA' }, { status: 403 })
 
@@ -37,7 +44,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Tochka fiscal checkout is not configured' }, { status: 503 })
   }
 
-  const body = await request.json().catch(() => ({}))
   const rawTokenAmount = Number(body?.tokenAmount)
   const tokenAmount = normalizeTokenPurchaseAmount(rawTokenAmount)
   if (!Number.isFinite(rawTokenAmount) || rawTokenAmount !== tokenAmount) {
@@ -123,6 +129,10 @@ export async function POST(request: Request) {
       method: 'PATCH',
       body: JSON.stringify({ external_payment_id: data.Data.operationId, payment_method: 'payment_link', metadata: { email, name, offer_version: '2026-10-02-v2', pricing_version: 'commercial_model_v4_slider', purchase_snapshot: { token_amount: tokenAmount, amount_rub: amount, regular_rub: quote.regularRub, discount_pct: quote.discountPct, savings_rub: quote.savingsRub }, payment_link_id: paymentLinkId, payment_link: data.Data.paymentLink } }),
     })
+  }
+
+  if (isForm && String(body?.redirect || '') === '1') {
+    return NextResponse.redirect(data.Data.paymentLink, 303)
   }
 
   return NextResponse.json({ orderId, paymentLink: data.Data.paymentLink })
