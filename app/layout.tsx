@@ -11,6 +11,18 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://bananazero.ru'),
   title: 'Banana Zero',
   description: 'Banana Zero — AI tools for video, image, audio and text, plus ready-made trends and prompts.',
+  robots: {
+    index: false,
+    follow: false,
+    nocache: true,
+    googleBot: {
+      index: false,
+      follow: false,
+      noimageindex: true,
+      'max-image-preview': 'none',
+      'max-snippet': 0,
+    },
+  },
   icons: {
     icon: [
       { url: '/icon-light-32x32.png', media: '(prefers-color-scheme: light)' },
