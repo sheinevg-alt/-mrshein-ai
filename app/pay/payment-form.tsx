@@ -7,18 +7,50 @@ import { CreditCard, QrCode, ShieldCheck } from 'lucide-react'
 import { TOKEN_PURCHASE_MAX, TOKEN_PURCHASE_MIN, TOKEN_PURCHASE_STEP, getTokenPurchaseQuote, normalizeTokenPurchaseAmount } from '@/lib/public-pricing'
 import { getTelegramInitData, openExternalLink } from '@/lib/telegram'
 
-export function PaymentForm({ enabled, initialTokens = 500, testModeRequested: _testModeRequested = false }: { enabled: boolean; initialTokens?: number; testModeRequested?: boolean }) {
+export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = false }: { enabled: boolean; initialTokens?: number; testModeRequested?: boolean }) {
   const router = useRouter()
   const [tokenAmount, setTokenAmount] = useState(normalizeTokenPurchaseAmount(initialTokens))
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [accepted, setAccepted] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [testCheckout, setTestCheckout] = useState<{ enabled: boolean; amountRub: number; tokenAmount: number } | null>(null)
   const [error, setError] = useState('')
   const [pendingOrderId, setPendingOrderId] = useState('')
   const [waitingForPayment, setWaitingForPayment] = useState(false)
 
-  const pack = getTokenPurchaseQuote(tokenAmount)
+  const isTestMode = testModeRequested && testCheckout?.enabled === true
+  const pack = isTestMode
+    ? {
+        tokens: testCheckout.tokenAmount,
+        regularRub: testCheckout.amountRub,
+        priceRub: testCheckout.amountRub,
+        savingsRub: 0,
+        discountPct: 0,
+      }
+    : getTokenPurchaseQuote(tokenAmount)
+
+  useEffect(() => {
+    const initData = getTelegramInitData()
+    if (!initData) return
+
+    void fetch('/api/payments/tochka/test-access', {
+      headers: { 'X-Telegram-Init-Data': initData },
+      cache: 'no-store',
+    })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!data?.enabled) return
+        const nextTestCheckout = {
+          enabled: true,
+          amountRub: Number(data.amountRub || 100),
+          tokenAmount: Number(data.tokenAmount || 100),
+        }
+        setTestCheckout(nextTestCheckout)
+        if (testModeRequested) setTokenAmount(nextTestCheckout.tokenAmount)
+      })
+      .catch(() => undefined)
+  }, [testModeRequested])
 
 
   useEffect(() => {
@@ -106,7 +138,7 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested: _
           'Content-Type': 'application/json',
           'X-Telegram-Init-Data': getTelegramInitData(),
         },
-        body: JSON.stringify({ tokenAmount: pack.tokens, email, name }),
+        body: JSON.stringify({ tokenAmount: pack.tokens, email, name, testPayment: isTestMode }),
       })
       const data = await response.json()
       if (!response.ok || !data?.paymentLink || !data?.orderId) throw new Error(data?.error || 'Не удалось создать платёж')
@@ -124,8 +156,10 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested: _
   return (
     <div className="space-y-5" id="tokens">
       <div>
-        <p className="text-sm font-semibold">Покупка Tokens</p>
-        <p className="mt-1 text-xs text-muted-foreground">Выберите количество Tokens и перейдите к оплате.</p>
+        <p className="text-sm font-semibold">{isTestMode ? 'Тестовый платёж' : 'Покупка Tokens'}</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {isTestMode ? '100 Tokens · 100 ₽ — тестовая покупка только для вашего аккаунта.' : 'Выберите количество Tokens и перейдите к оплате.'}
+        </p>
       </div>
 
       <div className="rounded-3xl border bg-card p-5">
@@ -138,24 +172,32 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested: _
           </div>
           {pack.savingsRub > 0 && <p className="mt-1 text-xs font-medium text-emerald-700">Экономия {pack.savingsRub.toLocaleString('ru-RU')} ₽</p>}
         </div>
-        <input
-          type="range"
-          min={TOKEN_PURCHASE_MIN}
-          max={TOKEN_PURCHASE_MAX}
-          step={TOKEN_PURCHASE_STEP}
-          value={tokenAmount}
-          onChange={(event) => setTokenAmount(Number(event.target.value))}
-          className="mt-5 w-full"
-          aria-label="Количество Tokens"
-        />
-        <div className="mt-2 flex justify-between text-[10px] text-muted-foreground">
-          <span>200</span><span>1000</span><span>2000</span><span>3000</span>
-        </div>
-        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[10px]">
-          <span className={tokenAmount >= 1000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>1000+ · −8%</span>
-          <span className={tokenAmount >= 2000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>2000+ · −10%</span>
-          <span className={tokenAmount >= 3000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>3000 · −13%</span>
-        </div>
+        {isTestMode ? (
+          <div className="mt-5 rounded-2xl border border-dashed border-amber-500/40 bg-amber-500/8 px-4 py-3 text-center text-xs font-semibold text-amber-700">
+            Тестовый платёж · {pack.tokens.toLocaleString('ru-RU')} Tokens за {pack.priceRub.toLocaleString('ru-RU')} ₽
+          </div>
+        ) : (
+          <>
+            <input
+              type="range"
+              min={TOKEN_PURCHASE_MIN}
+              max={TOKEN_PURCHASE_MAX}
+              step={TOKEN_PURCHASE_STEP}
+              value={tokenAmount}
+              onChange={(event) => setTokenAmount(Number(event.target.value))}
+              className="mt-5 w-full"
+              aria-label="Количество Tokens"
+            />
+            <div className="mt-2 flex justify-between text-[10px] text-muted-foreground">
+              <span>200</span><span>1000</span><span>2000</span><span>3000</span>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[10px]">
+              <span className={tokenAmount >= 1000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>1000+ · −8%</span>
+              <span className={tokenAmount >= 2000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>2000+ · −10%</span>
+              <span className={tokenAmount >= 3000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>3000 · −13%</span>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
