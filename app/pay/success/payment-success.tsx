@@ -1,0 +1,98 @@
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
+import { CheckCircle2, Clock3, RotateCw } from 'lucide-react'
+
+type PaymentState = {
+  status: string
+  tokenAmount: number
+  amountRub: number
+}
+
+export function PaymentSuccess({ orderId }: { orderId: string }) {
+  const [state, setState] = useState<PaymentState | null>(null)
+  const [error, setError] = useState('')
+  const telegramUrl = useMemo(
+    () => `https://t.me/BananaZeroBot?startapp=payment_${encodeURIComponent(orderId)}&mode=fullscreen`,
+    [orderId],
+  )
+
+  useEffect(() => {
+    if (!orderId) return
+    let cancelled = false
+    let timer: number | undefined
+
+    async function sync() {
+      try {
+        const response = await fetch(`/api/payments/tochka/status?order=${encodeURIComponent(orderId)}`, { cache: 'no-store' })
+        const data = await response.json()
+        if (!response.ok) throw new Error(data?.error || 'Не удалось проверить платёж')
+        if (cancelled) return
+        setState(data)
+        setError('')
+
+        if (data.status === 'succeeded') {
+          timer = window.setTimeout(() => {
+            window.location.href = telegramUrl
+          }, 1800)
+        } else if (data.status === 'pending' || data.status === 'waiting_for_capture') {
+          timer = window.setTimeout(() => void sync(), 1500)
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'Не удалось проверить платёж')
+          timer = window.setTimeout(() => void sync(), 2500)
+        }
+      }
+    }
+
+    void sync()
+    return () => {
+      cancelled = true
+      if (timer) window.clearTimeout(timer)
+    }
+  }, [orderId, telegramUrl])
+
+  const succeeded = state?.status === 'succeeded'
+  const failed = state && ['failed', 'canceled', 'refunded'].includes(state.status)
+
+  return (
+    <main className="flex min-h-dvh items-center justify-center px-4 py-10">
+      <div className="glass w-full max-w-lg rounded-4xl p-7 text-center">
+        {succeeded ? (
+          <>
+            <CheckCircle2 className="mx-auto size-14 text-emerald-600" />
+            <h1 className="mt-4 text-3xl font-bold">Оплата прошла</h1>
+            <p className="mt-3 text-lg font-semibold">+{state.tokenAmount.toLocaleString('ru-RU')} Tokens</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Tokens уже зачислены на баланс Banana Zero. Сейчас вернём вас в приложение.
+            </p>
+            <a href={telegramUrl} className="brand-gradient mt-6 inline-flex h-11 items-center rounded-full px-5 font-semibold text-white">
+              Вернуться в Banana Zero
+            </a>
+          </>
+        ) : failed ? (
+          <>
+            <RotateCw className="mx-auto size-12 text-destructive" />
+            <h1 className="mt-4 text-3xl font-bold">Платёж не завершён</h1>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              Оплата не была подтверждена. Можно вернуться в Banana Zero и повторить попытку.
+            </p>
+            <a href="https://t.me/BananaZeroBot?startapp&mode=fullscreen" className="brand-gradient mt-6 inline-flex h-11 items-center rounded-full px-5 font-semibold text-white">
+              Вернуться в Banana Zero
+            </a>
+          </>
+        ) : (
+          <>
+            <Clock3 className="mx-auto size-12 text-brand" />
+            <h1 className="mt-4 text-3xl font-bold">Подтверждаем оплату</h1>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              Платёж уже завершён в банке. Ждём подтверждение от платёжной системы и автоматически зачислим Tokens.
+            </p>
+            {error && <p className="mt-3 text-xs text-destructive">{error}</p>}
+          </>
+        )}
+      </div>
+    </main>
+  )
+}
