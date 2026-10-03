@@ -111,6 +111,9 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
       return
     }
 
+    const orderId = crypto.randomUUID()
+    openExternalLink('https://bananazero.ru/pay/launch?order=' + encodeURIComponent(orderId))
+
     setBusy(true)
     try {
       const response = await fetch('/api/payments/tochka/create', {
@@ -119,7 +122,7 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
           'Content-Type': 'application/json',
           'X-Telegram-Init-Data': getTelegramInitData(),
         },
-        body: JSON.stringify({ tokenAmount: pack.tokens, email, name }),
+        body: JSON.stringify({ orderId, tokenAmount: pack.tokens, email, name }),
       })
       const data = await response.json()
       if (!response.ok || !data?.paymentLink || !data?.orderId) throw new Error(data?.error || 'Не удалось создать платёж')
@@ -130,7 +133,6 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
         orderId: data.orderId,
         paymentLink: data.paymentLink,
       }))
-      openExternalLink(data.paymentLink)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось создать платёж')
     } finally {
