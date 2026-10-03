@@ -32,8 +32,21 @@ export function TrendCard({ trend, onOpen, featured = false, className }: TrendC
         className={cn('relative mx-auto w-full overflow-hidden rounded-[1.1rem] bg-muted', featured && trend.aspectRatio === '9:16' && 'max-w-[22rem]')}
         style={ratioStyle(trend.aspectRatio || (featured ? '16:11' : '4:5'))}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element -- trends may come from remote admin URLs */}
-        <img src={trend.image} alt={`${title} example`} className="absolute inset-0 size-full object-cover" />
+        {trend.previewVideo ? (
+          <video
+            src={trend.previewVideo}
+            poster={trend.image}
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            className="absolute inset-0 size-full object-cover"
+          />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element -- trends may come from remote admin URLs
+          <img src={trend.image} alt={`${title} example`} className="absolute inset-0 size-full object-cover" />
+        )}
         <button type="button" tabIndex={-1} aria-hidden="true" onClick={() => onOpen(trend)} className="absolute inset-0 transition active:bg-white/10" />
         {trend.cardBadge ? (
           <div className="absolute top-2 left-2 flex flex-col items-start gap-1.5">
