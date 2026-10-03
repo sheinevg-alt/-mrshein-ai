@@ -7,8 +7,8 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     const me = await telegramApi('getMe', {})
-    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || APP_CONFIG.appUrl).replace(/\/$/, '')
-    const expectedWebhook = `${appUrl}/api/telegram/webhook`
+    const appUrl = APP_CONFIG.appUrl.replace(/\/$/, '')
+    const expectedWebhook = `${APP_CONFIG.website}/api/telegram/webhook`
     const secret = process.env.TELEGRAM_WEBHOOK_SECRET
 
     let webhook = await telegramApi('getWebhookInfo', {})
