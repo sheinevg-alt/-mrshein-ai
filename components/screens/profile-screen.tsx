@@ -52,8 +52,12 @@ export function ProfileScreen() {
   const name = user ? [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || t('profile.guest') : t('profile.guest')
   const initial = name.charAt(0).toUpperCase()
   const { favorites } = useFavorites()
-  const { tokenBalance, history, notificationsEnabled } = useUserState()
+  const { tokenBalance, history, notificationsEnabled, refreshUser } = useUserState()
   const [panel, setPanel] = useState<Panel>(null)
+
+  useEffect(() => {
+    void refreshUser()
+  }, [refreshUser])
 
   const menuValue = (id: Exclude<Panel, null | 'tokens'>) => {
     if (id === 'notifications') return t(notificationsEnabled ? 'profile.notificationsOn' : 'profile.notificationsOff')
@@ -79,16 +83,18 @@ export function ProfileScreen() {
       </section>
 
       <section aria-label={t('profile.usage')} className="mt-3 grid grid-cols-3 gap-3">
-        {[
-          { label: t('profile.tokens'), value: String(tokenBalance) },
-          { label: t('profile.created'), value: String(history.length) },
-          { label: t('profile.saved'), value: String(favorites.size) },
-        ].map((stat) => (
-          <div key={stat.label} className="glass rounded-2xl p-3.5">
-            <p className="text-lg font-semibold tabular-nums">{stat.value}</p>
-            <p className="text-[11px] text-muted-foreground">{stat.label}</p>
-          </div>
-        ))}
+        <button type="button" onClick={() => setPanel('tokens')} className="glass rounded-2xl p-3.5 text-left transition active:scale-95">
+          <p className="text-lg font-semibold tabular-nums">{tokenBalance}</p>
+          <p className="flex items-center gap-1 text-[11px] text-muted-foreground">{t('profile.tokens')} <ChevronRight className="size-3" /></p>
+        </button>
+        <div className="glass rounded-2xl p-3.5">
+          <p className="text-lg font-semibold tabular-nums">{history.length}</p>
+          <p className="text-[11px] text-muted-foreground">{t('profile.created')}</p>
+        </div>
+        <div className="glass rounded-2xl p-3.5">
+          <p className="text-lg font-semibold tabular-nums">{favorites.size}</p>
+          <p className="text-[11px] text-muted-foreground">{t('profile.saved')}</p>
+        </div>
       </section>
 
       <Link href="/app?tab=pricing" className="brand-gradient mt-3 flex w-full items-center gap-3 rounded-2xl p-4 text-left text-white shadow-[0_12px_28px_-14px_oklch(0.5_0.21_264/0.8)] transition active:scale-[0.98]">
@@ -240,60 +246,129 @@ function ProfilePanel({ panel, onClose }: { panel: Panel; onClose: () => void })
 }
 
 
-const tokenPlans = [
-  { name: 'Beginner', price: 1490, tokens: 630, discount: 5 },
-  { name: 'Creator', price: 2990, tokens: 1330, discount: 10 },
-  { name: 'Professional', price: 4990, tokens: 2350, discount: 15 },
-] as const
-
-const tokenPacks = [
-  { tokens: 200, price: 500 },
-  { tokens: 500, price: 1250 },
-  { tokens: 1000, price: 2500 },
-  { tokens: 2000, price: 5000 },
-] as const
+type TokenHistoryItem = {
+  id: string
+  amount: number
+  kind: string
+  title: string
+  createdAt: string
+  rubAmount?: number | null
+  paymentMethod?: string | null
+}
 
 function TokensPanel() {
   const { locale } = useI18n()
+  const { tokenBalance, refreshUser } = useUserState()
   const ru = locale === 'ru'
+  const [period, setPeriod] = useState<'30' | '90' | 'all'>('30')
+  const [filter, setFilter] = useState<'all' | 'purchase' | 'spend'>('all')
+  const [items, setItems] = useState<TokenHistoryItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  async function loadHistory(nextPeriod = period) {
+    const initData = getTelegramInitData()
+    if (!initData) return
+    setLoading(true)
+    setError('')
+    try {
+      const response = await fetch('/api/tokens/history?period=' + nextPeriod, {
+        headers: { 'X-Telegram-Init-Data': initData },
+        cache: 'no-store',
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok || !Array.isArray(data?.history)) throw new Error('HISTORY_UNAVAILABLE')
+      setItems(data.history)
+      await refreshUser()
+    } catch {
+      setError(ru ? 'Не удалось загрузить историю Tokens.' : 'Could not load Token history.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadHistory(period)
+  }, [period])
+
+  const visibleItems = items.filter((item) => {
+    if (filter === 'purchase') return item.kind === 'purchase'
+    if (filter === 'spend') return item.amount < 0
+    return true
+  })
 
   return (
     <div className="pb-3">
-      <p className="text-sm leading-6 text-muted-foreground">
-        {ru
-          ? 'Выберите тариф на 30 дней или купите Tokens отдельно. Все цены фиксированы и показываются до оплаты.'
-          : 'Choose a 30-day plan or buy Tokens separately. All prices are fixed and shown before payment.'}
-      </p>
-
-      <div className="mt-4 space-y-2">
-        {tokenPlans.map((plan) => (
-          <div key={plan.name} className="rounded-2xl border bg-card p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-bold">{plan.name}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{plan.tokens.toLocaleString(ru ? 'ru-RU' : 'en-US')} Tokens · {ru ? '30 дней' : '30 days'}</p>
-              </div>
-              <p className="text-base font-black">{plan.price.toLocaleString(ru ? 'ru-RU' : 'en-US')} ₽</p>
-            </div>
-            <p className="mt-2 text-xs text-brand">{ru ? 'Скидка на пополнение' : 'Top-up discount'}: {plan.discount}%</p>
-          </div>
-        ))}
+      <div className="rounded-3xl border bg-card p-4">
+        <p className="text-xs font-medium text-muted-foreground">{ru ? 'Текущий баланс' : 'Current balance'}</p>
+        <div className="mt-1 flex items-end justify-between gap-3">
+          <p className="text-3xl font-black tabular-nums">{tokenBalance.toLocaleString(ru ? 'ru-RU' : 'en-US')} Tokens</p>
+          <button type="button" onClick={() => void loadHistory(period)} className="rounded-full border px-3 py-1.5 text-[11px] font-semibold">
+            {ru ? 'Обновить' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
-      <div className="mt-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{ru ? 'Разовые пакеты' : 'One-time packs'}</p>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          {tokenPacks.map((pack) => (
-            <div key={pack.tokens} className="rounded-2xl border bg-card p-3">
-              <p className="text-sm font-bold">{pack.tokens.toLocaleString(ru ? 'ru-RU' : 'en-US')} Tokens</p>
-              <p className="mt-1 text-sm">{pack.price.toLocaleString(ru ? 'ru-RU' : 'en-US')} ₽</p>
-            </div>
+      <div className="mt-4">
+        <div className="grid grid-cols-3 gap-2">
+          {([
+            ['all', ru ? 'Все' : 'All'],
+            ['purchase', ru ? 'Покупки' : 'Purchases'],
+            ['spend', ru ? 'Списания' : 'Spent'],
+          ] as const).map(([id, label]) => (
+            <button key={id} type="button" onClick={() => setFilter(id)} className={`h-9 rounded-xl border text-xs font-semibold ${filter === id ? 'border-brand bg-brand-tint text-brand' : 'bg-card'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          {([
+            ['30', ru ? '30 дней' : '30 days'],
+            ['90', ru ? '90 дней' : '90 days'],
+            ['all', ru ? 'Всё время' : 'All time'],
+          ] as const).map(([id, label]) => (
+            <button key={id} type="button" onClick={() => setPeriod(id)} className={`h-8 rounded-xl text-[11px] font-medium ${period === id ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground'}`}>
+              {label}
+            </button>
           ))}
         </div>
       </div>
 
-      <Link href="/pay" className="brand-gradient mt-5 flex h-12 w-full items-center justify-center rounded-full text-sm font-semibold text-white">
-        {ru ? 'Перейти к покупке' : 'Continue to purchase'}
+      <div className="mt-4 rounded-2xl border bg-card">
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <p className="text-sm font-semibold">{ru ? 'История операций' : 'Transaction history'}</p>
+          <span className="text-[11px] text-muted-foreground">{visibleItems.length}</span>
+        </div>
+
+        {loading ? (
+          <p className="px-4 py-6 text-center text-xs text-muted-foreground">{ru ? 'Загрузка…' : 'Loading…'}</p>
+        ) : error ? (
+          <p className="px-4 py-6 text-center text-xs text-destructive">{error}</p>
+        ) : visibleItems.length === 0 ? (
+          <p className="px-4 py-6 text-center text-xs text-muted-foreground">{ru ? 'Операций за выбранный период нет.' : 'No transactions in this period.'}</p>
+        ) : (
+          <div className="divide-y">
+            {visibleItems.map((item) => (
+              <div key={item.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{item.title}</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    {new Date(item.createdAt).toLocaleString(ru ? 'ru-RU' : 'en-US')}
+                    {item.rubAmount ? ` · ${item.rubAmount.toLocaleString(ru ? 'ru-RU' : 'en-US')} ₽` : ''}
+                  </p>
+                </div>
+                <p className={`shrink-0 text-sm font-bold tabular-nums ${item.amount >= 0 ? 'text-emerald-700' : 'text-foreground'}`}>
+                  {item.amount > 0 ? '+' : ''}{item.amount.toLocaleString(ru ? 'ru-RU' : 'en-US')}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Link href="/app?tab=pricing" className="brand-gradient mt-5 flex h-12 w-full items-center justify-center rounded-full text-sm font-semibold text-white">
+        {ru ? 'Купить Tokens' : 'Buy Tokens'}
       </Link>
     </div>
   )
