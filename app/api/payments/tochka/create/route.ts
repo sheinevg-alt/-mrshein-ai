@@ -8,6 +8,8 @@ import { getTokenPurchaseQuote, normalizeTokenPurchaseAmount } from '@/lib/publi
 
 export const dynamic = 'force-dynamic'
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 export async function POST(request: Request) {
   const user = verifyTelegramInitData(request.headers.get('x-telegram-init-data') || '')
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -47,7 +49,8 @@ export async function POST(request: Request) {
   const name = String(body?.name || '').trim().slice(0, 120) || 'Покупатель Banana Zero'
   if (!email.includes('@')) return NextResponse.json({ error: 'Invalid checkout data' }, { status: 400 })
 
-  const orderId = randomUUID()
+  const requestedOrderId = String(body?.orderId || '')
+  const orderId = UUID_RE.test(requestedOrderId) ? requestedOrderId : randomUUID()
   const paymentLinkId = orderId
   const providerPayload: any = {
     Data: {
@@ -118,7 +121,7 @@ export async function POST(request: Request) {
   if (hasDatabase()) {
     await supabaseFetch(`payment_orders?id=eq.${orderId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ external_payment_id: data.Data.operationId, payment_method: 'payment_link', metadata: { email, name, offer_version: '2026-10-02-v2', pricing_version: 'commercial_model_v4_slider', purchase_snapshot: { token_amount: tokenAmount, amount_rub: amount, regular_rub: quote.regularRub, discount_pct: quote.discountPct, savings_rub: quote.savingsRub }, payment_link_id: paymentLinkId } }),
+      body: JSON.stringify({ external_payment_id: data.Data.operationId, payment_method: 'payment_link', metadata: { email, name, offer_version: '2026-10-02-v2', pricing_version: 'commercial_model_v4_slider', purchase_snapshot: { token_amount: tokenAmount, amount_rub: amount, regular_rub: quote.regularRub, discount_pct: quote.discountPct, savings_rub: quote.savingsRub }, payment_link_id: paymentLinkId, payment_link: data.Data.paymentLink } }),
     })
   }
 
