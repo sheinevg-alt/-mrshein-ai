@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { CreditCard, QrCode, ShieldCheck } from 'lucide-react'
 import { TOKEN_PURCHASE_MAX, TOKEN_PURCHASE_MIN, TOKEN_PURCHASE_STEP, getTokenPurchaseQuote, normalizeTokenPurchaseAmount } from '@/lib/public-pricing'
-import { getTelegramInitData } from '@/lib/telegram'
+import { getTelegramInitData, openExternalLink } from '@/lib/telegram'
 
 export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean; initialTokens?: number }) {
   const [tokenAmount, setTokenAmount] = useState(normalizeTokenPurchaseAmount(initialTokens))
@@ -43,7 +43,7 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
       })
       const data = await response.json()
       if (!response.ok || !data?.paymentLink) throw new Error(data?.error || 'Не удалось создать платёж')
-      window.location.href = data.paymentLink
+      openExternalLink(data.paymentLink)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось создать платёж')
     } finally {
