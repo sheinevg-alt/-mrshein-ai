@@ -13,7 +13,7 @@ export function PaymentSuccess({ orderId }: { orderId: string }) {
   const [state, setState] = useState<PaymentState | null>(null)
   const [error, setError] = useState('')
   const telegramUrl = useMemo(
-    () => `https://t.me/BananaZeroBot?startapp=payment_${encodeURIComponent(orderId)}&mode=fullscreen`,
+    () => `tg://resolve?domain=BananaZeroBot&startapp=payment_${encodeURIComponent(orderId)}&mode=fullscreen`,
     [orderId],
   )
 
@@ -32,9 +32,7 @@ export function PaymentSuccess({ orderId }: { orderId: string }) {
         setError('')
 
         if (data.status === 'succeeded') {
-          timer = window.setTimeout(() => {
-            window.location.href = telegramUrl
-          }, 1800)
+          window.location.replace(telegramUrl)
         } else if (data.status === 'pending' || data.status === 'waiting_for_capture') {
           timer = window.setTimeout(() => void sync(), 1500)
         }
@@ -65,10 +63,10 @@ export function PaymentSuccess({ orderId }: { orderId: string }) {
             <h1 className="mt-4 text-3xl font-bold">Оплата прошла</h1>
             <p className="mt-3 text-lg font-semibold">+{state.tokenAmount.toLocaleString('ru-RU')} Tokens</p>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              Tokens уже зачислены на баланс Banana Zero. Сейчас вернём вас в приложение.
+              Tokens уже зачислены. Открываем Banana Zero в Telegram.
             </p>
             <a href={telegramUrl} className="brand-gradient mt-6 inline-flex h-11 items-center rounded-full px-5 font-semibold text-white">
-              Вернуться в Banana Zero
+              Открыть Banana Zero
             </a>
           </>
         ) : failed ? (
@@ -78,8 +76,8 @@ export function PaymentSuccess({ orderId }: { orderId: string }) {
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               Оплата не была подтверждена. Можно вернуться в Banana Zero и повторить попытку.
             </p>
-            <a href="https://t.me/BananaZeroBot?startapp&mode=fullscreen" className="brand-gradient mt-6 inline-flex h-11 items-center rounded-full px-5 font-semibold text-white">
-              Вернуться в Banana Zero
+            <a href="tg://resolve?domain=BananaZeroBot&startapp&mode=fullscreen" className="brand-gradient mt-6 inline-flex h-11 items-center rounded-full px-5 font-semibold text-white">
+              Открыть Banana Zero
             </a>
           </>
         ) : (
