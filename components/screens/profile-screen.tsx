@@ -47,7 +47,7 @@ const menu: { id: Exclude<Panel, null>; label: MessageKey; icon: LucideIcon }[] 
   { id: 'help', label: 'profile.help', icon: LifeBuoy },
 ]
 
-export function ProfileScreen() {
+export function ProfileScreen({ onOpenPricing }: { onOpenPricing: () => void }) {
   const { t, locale } = useI18n()
   const user = useTelegramProfile()
   const name = user ? [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || t('profile.guest') : t('profile.guest')
@@ -98,14 +98,14 @@ export function ProfileScreen() {
         </div>
       </section>
 
-      <a href="/app?tab=pricing" className="brand-gradient mt-3 flex w-full items-center gap-3 rounded-2xl p-4 text-left text-white shadow-[0_12px_28px_-14px_oklch(0.5_0.21_264/0.8)] transition active:scale-[0.98]">
+      <button type="button" onClick={onOpenPricing} className="brand-gradient mt-3 flex w-full items-center gap-3 rounded-2xl p-4 text-left text-white shadow-[0_12px_28px_-14px_oklch(0.5_0.21_264/0.8)] transition active:scale-[0.98]">
         <Sparkles className="size-5" strokeWidth={2} aria-hidden="true" />
         <span className="flex-1">
           <span className="block text-sm font-semibold">{locale === 'ru' ? 'Тарифы и Tokens' : 'Plans and Tokens'}</span>
           <span className="block text-xs opacity-80">{locale === 'ru' ? 'Выбрать тариф или купить Tokens отдельно' : 'Choose a plan or buy Tokens separately'}</span>
         </span>
         <ChevronRight className="size-4" aria-hidden="true" />
-      </a>
+      </button>
 
       <a
         href={APP_CONFIG.website}
@@ -135,12 +135,12 @@ export function ProfileScreen() {
       </ul>
 
       <p className="mt-6 text-center text-[11px] text-muted-foreground">{t('profile.version', { version: APP_CONFIG.version })}</p>
-      <ProfilePanel panel={panel} onClose={() => setPanel(null)} />
+      <ProfilePanel panel={panel} onClose={() => setPanel(null)} onOpenPricing={onOpenPricing} />
     </div>
   )
 }
 
-function ProfilePanel({ panel, onClose }: { panel: Panel; onClose: () => void }) {
+function ProfilePanel({ panel, onClose, onOpenPricing }: { panel: Panel; onClose: () => void; onOpenPricing: () => void }) {
   const { t, locale, setLocale } = useI18n()
   const { theme, setTheme } = useTheme()
   const { history, notificationsEnabled, setNotificationsEnabled } = useUserState()
@@ -241,7 +241,7 @@ function ProfilePanel({ panel, onClose }: { panel: Panel; onClose: () => void })
       {panel === 'help' && <SupportPanel />}
       {panel === 'referral' && <ReferralPanel />}
 
-      {panel === 'tokens' && <TokensPanel />}
+      {panel === 'tokens' && <TokensPanel onOpenPricing={onOpenPricing} />}
     </BottomSheet>
   )
 }
@@ -257,7 +257,7 @@ type TokenHistoryItem = {
   paymentMethod?: string | null
 }
 
-function TokensPanel() {
+function TokensPanel({ onOpenPricing }: { onOpenPricing: () => void }) {
   const { locale } = useI18n()
   const { tokenBalance, refreshUser } = useUserState()
   const ru = locale === 'ru'
@@ -368,9 +368,9 @@ function TokensPanel() {
         )}
       </div>
 
-      <a href="/app?tab=pricing" className="brand-gradient mt-5 flex h-12 w-full items-center justify-center rounded-full text-sm font-semibold text-white">
+      <button type="button" onClick={onOpenPricing} className="brand-gradient mt-5 flex h-12 w-full items-center justify-center rounded-full text-sm font-semibold text-white">
         {ru ? 'Купить Tokens' : 'Buy Tokens'}
-      </a>
+      </button>
     </div>
   )
 }
