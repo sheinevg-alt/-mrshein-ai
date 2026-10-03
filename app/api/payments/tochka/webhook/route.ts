@@ -105,6 +105,7 @@ export async function POST(request: Request) {
   })
 
   if (!complete.ok) {
+    console.error('Tochka payment completion failed', complete.status, complete.text)
     return NextResponse.json({ ok: false }, { status: 500 })
   }
 
