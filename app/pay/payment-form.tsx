@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CreditCard, QrCode, ShieldCheck } from 'lucide-react'
 import { TOKEN_PURCHASE_MAX, TOKEN_PURCHASE_MIN, TOKEN_PURCHASE_STEP, getTokenPurchaseQuote, normalizeTokenPurchaseAmount } from '@/lib/public-pricing'
-import { getTelegramInitData, openExternalLink } from '@/lib/telegram'
+import { getTelegramInitData } from '@/lib/telegram'
 
 export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = false }: { enabled: boolean; initialTokens?: number; testModeRequested?: boolean }) {
   const router = useRouter()
@@ -16,6 +16,8 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
   const [busy, setBusy] = useState(false)
   const [testCheckout, setTestCheckout] = useState<{ enabled: boolean; amountRub: number; tokenAmount: number } | null>(null)
   const [error, setError] = useState('')
+  const [preparingPayment, setPreparingPayment] = useState(false)
+  const [preparedPayment, setPreparedPayment] = useState<{ key: string; orderId: string; paymentLink: string } | null>(null)
 
   const isTestMode = testModeRequested && testCheckout?.enabled === true
   const pack = isTestMode
@@ -27,6 +29,83 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
         discountPct: 0,
       }
     : getTokenPurchaseQuote(tokenAmount)
+
+  const checkoutKey = [
+    isTestMode ? 'test' : 'regular',
+    String(pack.tokens),
+    email.trim().toLowerCase(),
+    name.trim(),
+  ].join('|')
+
+  useEffect(() => {
+    setPreparedPayment(null)
+
+    if (!enabled || !accepted || !email.includes('@')) {
+      setPreparingPayment(false)
+      return
+    }
+    if (testModeRequested && !testCheckout?.enabled) return
+
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setPreparingPayment(true)
+        setError('')
+        const orderId = crypto.randomUUID()
+
+        try {
+          const response = await fetch('/api/payments/tochka/create', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Telegram-Init-Data': getTelegramInitData(),
+            },
+            body: JSON.stringify({
+              orderId,
+              tokenAmount: isTestMode ? (testCheckout?.tokenAmount || 100) : pack.tokens,
+              email,
+              name,
+              testPayment: isTestMode,
+            }),
+          })
+          const data = await response.json()
+          if (!response.ok || !data?.paymentLink || !data?.orderId) {
+            throw new Error(data?.error || 'Не удалось подготовить платёж')
+          }
+          if (!cancelled) {
+            setPreparedPayment({
+              key: checkoutKey,
+              orderId: data.orderId,
+              paymentLink: data.paymentLink,
+            })
+          }
+        } catch (e) {
+          if (!cancelled) {
+            setError(e instanceof Error ? e.message : 'Не удалось подготовить платёж')
+          }
+        } finally {
+          if (!cancelled) setPreparingPayment(false)
+        }
+      })()
+    }, 350)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [
+    accepted,
+    checkoutKey,
+    email,
+    enabled,
+    isTestMode,
+    name,
+    pack.tokens,
+    testCheckout?.enabled,
+    testCheckout?.tokenAmount,
+    testModeRequested,
+  ])
+
 
   useEffect(() => {
     const initData = getTelegramInitData()
@@ -99,48 +178,9 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
     }
   }, [router])
 
-  async function checkout() {
-    setError('')
-    if (!email.includes('@')) {
-      setError('Укажите email — он нужен для электронного чека.')
-      return
-    }
-    if (!accepted) {
-      setError('Подтвердите согласие с условиями покупки.')
-      return
-    }
-    if (!enabled) {
-      setError('Рублёвая оплата временно недоступна.')
-      return
-    }
-
-    setBusy(true)
-    try {
-      const response = await fetch('/api/payments/tochka/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Telegram-Init-Data': getTelegramInitData(),
-        },
-        body: JSON.stringify({
-          tokenAmount: pack.tokens,
-          email,
-          name,
-          testPayment: isTestMode,
-        }),
-      })
-      const data = await response.json()
-      if (!response.ok || !data?.paymentLink || !data?.orderId) {
-        throw new Error(data?.error || 'Не удалось создать платёж')
-      }
-
-      window.sessionStorage.setItem('banana-zero.pending-payment', data.orderId)
-      openExternalLink(data.paymentLink)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось создать платёж')
-    } finally {
-      setBusy(false)
-    }
+  function markPaymentOpened() {
+    if (!preparedPayment || preparedPayment.key !== checkoutKey) return
+    window.sessionStorage.setItem('banana-zero.pending-payment', preparedPayment.orderId)
   }
 
   return (
@@ -162,7 +202,6 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
           </div>
           {pack.savingsRub > 0 && <p className="mt-1 text-xs font-medium text-emerald-700">Экономия {pack.savingsRub.toLocaleString('ru-RU')} ₽</p>}
         </div>
-
         {isTestMode ? (
           <div className="mt-5 rounded-2xl border border-dashed border-amber-500/40 bg-amber-500/8 px-4 py-3 text-center text-xs font-semibold text-amber-700">
             Тестовый платёж · {pack.tokens.toLocaleString('ru-RU')} Tokens за {pack.priceRub.toLocaleString('ru-RU')} ₽
@@ -225,15 +264,28 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
         </span>
       </label>
 
-      <button type="button" onClick={() => void checkout()} disabled={busy} className="brand-gradient h-12 w-full rounded-full font-semibold text-white disabled:opacity-50">
-        {busy ? 'Создаём платёж…' : 'Оплатить ' + pack.priceRub.toLocaleString('ru-RU') + ' ₽'}
-      </button>
+      {preparedPayment && preparedPayment.key === checkoutKey && !preparingPayment ? (
+        <a
+          href={preparedPayment.paymentLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={markPaymentOpened}
+          className="brand-gradient flex h-12 w-full items-center justify-center rounded-full font-semibold text-white"
+        >
+          {'Оплатить ' + pack.priceRub.toLocaleString('ru-RU') + ' ₽'}
+        </a>
+      ) : (
+        <button
+          type="button"
+          disabled
+          className="brand-gradient h-12 w-full rounded-full font-semibold text-white opacity-50"
+        >
+          {preparingPayment ? 'Подготавливаем оплату…' : 'Готовим оплату…'}
+        </button>
+      )}
 
       {error && <p className="text-center text-sm text-destructive">{error}</p>}
-
-      <div className="rounded-2xl bg-muted/60 px-4 py-3 text-center text-xs leading-5 text-muted-foreground">
-        После оплаты вернитесь в Telegram. Banana Zero автоматически проверит платёж, обновит баланс Tokens и откроет профиль.
-      </div>
+      <p className="text-center text-xs text-muted-foreground">После подтверждения оплаты Tokens зачисляются на баланс Banana Zero.</p>
     </div>
   )
 }
