@@ -177,34 +177,6 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
 
     try {
       const video = isVideoUrl(item.resultUrl)
-      const isAppleMobile = /iPad|iPhone|iPod/.test(navigator.userAgent)
-      const shareNavigator = navigator as Navigator & {
-        canShare?: (data?: ShareData) => boolean
-        share?: (data: ShareData) => Promise<void>
-      }
-
-      if (isAppleMobile) {
-        const response = await fetch(`/api/download?jobId=${encodeURIComponent(item.id)}`, {
-          headers: { 'X-Telegram-Init-Data': initData },
-          cache: 'no-store',
-        })
-        if (!response.ok) throw new Error(`DOWNLOAD_${response.status}`)
-
-        const blob = await response.blob()
-        const mimeType = video ? 'video/mp4' : (blob.type || response.headers.get('content-type') || 'image/png')
-        const ext = extensionForType(mimeType, video)
-        const filename = `Banana-Zero-${video ? 'video' : 'image'}-${item.id.slice(0, 8)}.${ext}`
-        const file = new File([blob], filename, { type: mimeType })
-
-        if (!shareNavigator.share || (shareNavigator.canShare && !shareNavigator.canShare({ files: [file] }))) {
-          throw new Error('IOS_SHARE_UNAVAILABLE')
-        }
-
-        await shareNavigator.share({ files: [file], title: filename })
-        haptics.success()
-        return
-      }
-
       const prepare = await fetch(`/api/download?prepare=1&jobId=${encodeURIComponent(item.id)}`, {
         headers: { 'X-Telegram-Init-Data': initData },
         cache: 'no-store',
@@ -215,9 +187,13 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
       const app = getWebApp()
       const supportsNativeDownload = Boolean(
         app?.downloadFile &&
-        (!app.isVersionAtLeast || app.isVersionAtLeast('9.0')),
+        (!app.isVersionAtLeast || app.isVersionAtLeast('8.0')),
       )
 
+      // Telegram's native download flow is the primary path on every supported
+      // platform, including iOS. It avoids loading the whole video into the
+      // WebView and then trying to open navigator.share after user activation
+      // may already have expired.
       if (supportsNativeDownload && app?.downloadFile) {
         await new Promise<void>((resolve, reject) => {
           let settled = false
@@ -226,7 +202,7 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
               settled = true
               reject(new Error('DOWNLOAD_DIALOG_TIMEOUT'))
             }
-          }, 15_000)
+          }, 30_000)
 
           app.downloadFile?.(
             { url: String(data.url), file_name: String(data.fileName) },
@@ -239,13 +215,52 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
             },
           )
         })
-      } else {
-        openExternalLink(String(data.url))
+        haptics.success()
+        return
       }
 
+      const isAppleMobile = /iPad|iPhone|iPod/.test(navigator.userAgent)
+      if (isAppleMobile) {
+        const response = await fetch(`/api/download?jobId=${encodeURIComponent(item.id)}`, {
+          headers: { 'X-Telegram-Init-Data': initData },
+          cache: 'no-store',
+        })
+        if (!response.ok) throw new Error(`DOWNLOAD_${response.status}`)
+
+        const blob = await response.blob()
+        const mimeType = video ? 'video/mp4' : (blob.type || response.headers.get('content-type') || 'image/png')
+        const ext = extensionForType(mimeType, video)
+        const filename = `Banana-Zero-${video ? 'video' : 'image'}-${item.id.slice(0, 8)}.${ext}`
+        const file = new File([blob], filename, { type: mimeType })
+        const shareNavigator = navigator as Navigator & {
+          canShare?: (data?: ShareData) => boolean
+          share?: (data: ShareData) => Promise<void>
+        }
+
+        if (shareNavigator.share && (!shareNavigator.canShare || shareNavigator.canShare({ files: [file] }))) {
+          try {
+            await shareNavigator.share({ files: [file], title: filename })
+            haptics.success()
+            return
+          } catch (error) {
+            if (error instanceof DOMException && error.name === 'AbortError') throw error
+          }
+        }
+
+        // Last-resort iOS fallback: open the already prepared signed download URL
+        // instead of forcing the user to press Download repeatedly.
+        openExternalLink(String(data.url))
+        haptics.success()
+        return
+      }
+
+      openExternalLink(String(data.url))
       haptics.success()
-    } catch {
-      setDownloadErrorId(item.id)
+    } catch (error) {
+      // A deliberate cancel is not a broken download.
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        setDownloadErrorId(item.id)
+      }
     } finally {
       setDownloadingId(null)
     }
