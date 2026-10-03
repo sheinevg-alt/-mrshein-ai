@@ -7,7 +7,7 @@ import { CreditCard, QrCode, ShieldCheck } from 'lucide-react'
 import { TOKEN_PURCHASE_MAX, TOKEN_PURCHASE_MIN, TOKEN_PURCHASE_STEP, getTokenPurchaseQuote, normalizeTokenPurchaseAmount } from '@/lib/public-pricing'
 import { getTelegramInitData, openExternalLink } from '@/lib/telegram'
 
-export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean; initialTokens?: number }) {
+export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = false }: { enabled: boolean; initialTokens?: number; testModeRequested?: boolean }) {
   const router = useRouter()
   const [tokenAmount, setTokenAmount] = useState(normalizeTokenPurchaseAmount(initialTokens))
   const [email, setEmail] = useState('')
@@ -17,7 +17,16 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
   const [testCheckout, setTestCheckout] = useState<{ enabled: boolean; amountRub: number; tokenAmount: number } | null>(null)
   const [error, setError] = useState('')
 
-  const pack = getTokenPurchaseQuote(tokenAmount)
+  const isTestMode = testModeRequested && testCheckout?.enabled === true
+  const pack = isTestMode
+    ? {
+        tokens: testCheckout.tokenAmount,
+        regularRub: testCheckout.amountRub,
+        priceRub: testCheckout.amountRub,
+        savingsRub: 0,
+        discountPct: 0,
+      }
+    : getTokenPurchaseQuote(tokenAmount)
 
 
   useEffect(() => {
@@ -31,15 +40,17 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
       .then(async (response) => (response.ok ? response.json() : null))
       .then((data) => {
         if (data?.enabled) {
-          setTestCheckout({
+          const nextTestCheckout = {
             enabled: true,
             amountRub: Number(data.amountRub || 100),
             tokenAmount: Number(data.tokenAmount || 100),
-          })
+          }
+          setTestCheckout(nextTestCheckout)
+          if (testModeRequested) setTokenAmount(nextTestCheckout.tokenAmount)
         }
       })
       .catch(() => undefined)
-  }, [])
+  }, [testModeRequested])
 
   useEffect(() => {
     let checking = false
@@ -112,7 +123,7 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
           'Content-Type': 'application/json',
           'X-Telegram-Init-Data': getTelegramInitData(),
         },
-        body: JSON.stringify({ tokenAmount: testPayment ? (testCheckout?.tokenAmount || 100) : pack.tokens, email, name, testPayment }),
+        body: JSON.stringify({ tokenAmount: isTestMode || testPayment ? (testCheckout?.tokenAmount || 100) : pack.tokens, email, name, testPayment: isTestMode || testPayment }),
       })
       const data = await response.json()
       if (!response.ok || !data?.paymentLink || !data?.orderId) throw new Error(data?.error || 'Не удалось создать платёж')
@@ -128,8 +139,10 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
   return (
     <div className="space-y-5" id="tokens">
       <div>
-        <p className="text-sm font-semibold">Покупка Tokens</p>
-        <p className="mt-1 text-xs text-muted-foreground">Выберите количество Tokens и перейдите к оплате.</p>
+        <p className="text-sm font-semibold">{isTestMode ? 'Тестовый платёж' : 'Покупка Tokens'}</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {isTestMode ? 'Тестовая покупка доступна только вашему аккаунту.' : 'Выберите количество Tokens и перейдите к оплате.'}
+        </p>
       </div>
 
       <div className="rounded-3xl border bg-card p-5">
@@ -142,24 +155,32 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
           </div>
           {pack.savingsRub > 0 && <p className="mt-1 text-xs font-medium text-emerald-700">Экономия {pack.savingsRub.toLocaleString('ru-RU')} ₽</p>}
         </div>
-        <input
-          type="range"
-          min={TOKEN_PURCHASE_MIN}
-          max={TOKEN_PURCHASE_MAX}
-          step={TOKEN_PURCHASE_STEP}
-          value={tokenAmount}
-          onChange={(event) => setTokenAmount(Number(event.target.value))}
-          className="mt-5 w-full"
-          aria-label="Количество Tokens"
-        />
-        <div className="mt-2 flex justify-between text-[10px] text-muted-foreground">
-          <span>200</span><span>1000</span><span>2000</span><span>3000</span>
-        </div>
-        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[10px]">
-          <span className={tokenAmount >= 1000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>1000+ · −8%</span>
-          <span className={tokenAmount >= 2000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>2000+ · −10%</span>
-          <span className={tokenAmount >= 3000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>3000 · −13%</span>
-        </div>
+        {isTestMode ? (
+          <div className="mt-5 rounded-2xl border border-dashed border-amber-500/40 bg-amber-500/8 px-4 py-3 text-center text-xs font-semibold text-amber-700">
+            Тестовый платёж · {pack.tokens.toLocaleString('ru-RU')} Tokens за {pack.priceRub.toLocaleString('ru-RU')} ₽
+          </div>
+        ) : (
+          <>
+            <input
+              type="range"
+              min={TOKEN_PURCHASE_MIN}
+              max={TOKEN_PURCHASE_MAX}
+              step={TOKEN_PURCHASE_STEP}
+              value={tokenAmount}
+              onChange={(event) => setTokenAmount(Number(event.target.value))}
+              className="mt-5 w-full"
+              aria-label="Количество Tokens"
+            />
+            <div className="mt-2 flex justify-between text-[10px] text-muted-foreground">
+              <span>200</span><span>1000</span><span>2000</span><span>3000</span>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[10px]">
+              <span className={tokenAmount >= 1000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>1000+ · −8%</span>
+              <span className={tokenAmount >= 2000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>2000+ · −10%</span>
+              <span className={tokenAmount >= 3000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>3000 · −13%</span>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -196,20 +217,9 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
         </span>
       </label>
 
-      <button type="button" onClick={() => void checkout(false)} disabled={busy} className="brand-gradient h-12 w-full rounded-full font-semibold text-white disabled:opacity-50">
+      <button type="button" onClick={() => void checkout(isTestMode)} disabled={busy} className="brand-gradient h-12 w-full rounded-full font-semibold text-white disabled:opacity-50">
         {busy ? 'Создаём платёж…' : 'Оплатить ' + pack.priceRub.toLocaleString('ru-RU') + ' ₽'}
       </button>
-
-      {testCheckout?.enabled && (
-        <button
-          type="button"
-          onClick={() => void checkout(true)}
-          disabled={busy}
-          className="h-11 w-full rounded-full border border-dashed border-brand/50 bg-brand-tint text-sm font-semibold text-brand disabled:opacity-50"
-        >
-          Тестовый платёж {testCheckout.amountRub.toLocaleString('ru-RU')} ₽ · +{testCheckout.tokenAmount.toLocaleString('ru-RU')} Tokens
-        </button>
-      )}
 
       {error && <p className="text-center text-sm text-destructive">{error}</p>}
       <p className="text-center text-xs text-muted-foreground">После подтверждения оплаты Tokens зачисляются на баланс Banana Zero.</p>
