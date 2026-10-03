@@ -5,155 +5,59 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CreditCard, QrCode, ShieldCheck } from 'lucide-react'
 import { TOKEN_PURCHASE_MAX, TOKEN_PURCHASE_MIN, TOKEN_PURCHASE_STEP, getTokenPurchaseQuote, normalizeTokenPurchaseAmount } from '@/lib/public-pricing'
-import { getTelegramInitData } from '@/lib/telegram'
+import { getTelegramInitData, openExternalLink } from '@/lib/telegram'
 
-export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = false }: { enabled: boolean; initialTokens?: number; testModeRequested?: boolean }) {
+export function PaymentForm({ enabled, initialTokens = 500, testModeRequested: _testModeRequested = false }: { enabled: boolean; initialTokens?: number; testModeRequested?: boolean }) {
   const router = useRouter()
   const [tokenAmount, setTokenAmount] = useState(normalizeTokenPurchaseAmount(initialTokens))
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [accepted, setAccepted] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [testCheckout, setTestCheckout] = useState<{ enabled: boolean; amountRub: number; tokenAmount: number } | null>(null)
   const [error, setError] = useState('')
-  const [preparingPayment, setPreparingPayment] = useState(false)
-  const [preparedPayment, setPreparedPayment] = useState<{ key: string; orderId: string; paymentLink: string } | null>(null)
+  const [pendingOrderId, setPendingOrderId] = useState('')
+  const [waitingForPayment, setWaitingForPayment] = useState(false)
 
-  const isTestMode = testModeRequested && testCheckout?.enabled === true
-  const pack = isTestMode
-    ? {
-        tokens: testCheckout.tokenAmount,
-        regularRub: testCheckout.amountRub,
-        priceRub: testCheckout.amountRub,
-        savingsRub: 0,
-        discountPct: 0,
-      }
-    : getTokenPurchaseQuote(tokenAmount)
+  const pack = getTokenPurchaseQuote(tokenAmount)
 
-  const checkoutKey = [
-    isTestMode ? 'test' : 'regular',
-    String(pack.tokens),
-    email.trim().toLowerCase(),
-    name.trim(),
-  ].join('|')
 
   useEffect(() => {
-    setPreparedPayment(null)
-
-    if (!enabled || !accepted || !email.includes('@')) {
-      setPreparingPayment(false)
-      return
+    const stored = window.sessionStorage.getItem('banana-zero.pending-payment') || ''
+    if (stored) {
+      setPendingOrderId(stored)
+      setWaitingForPayment(true)
     }
-    if (testModeRequested && !testCheckout?.enabled) return
+  }, [])
+
+  useEffect(() => {
+    if (!pendingOrderId) return
 
     let cancelled = false
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        setPreparingPayment(true)
-        setError('')
-        const orderId = crypto.randomUUID()
-
-        try {
-          const response = await fetch('/api/payments/tochka/create', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Telegram-Init-Data': getTelegramInitData(),
-            },
-            body: JSON.stringify({
-              orderId,
-              tokenAmount: isTestMode ? (testCheckout?.tokenAmount || 100) : pack.tokens,
-              email,
-              name,
-              testPayment: isTestMode,
-            }),
-          })
-          const data = await response.json()
-          if (!response.ok || !data?.paymentLink || !data?.orderId) {
-            throw new Error(data?.error || 'Не удалось подготовить платёж')
-          }
-          if (!cancelled) {
-            setPreparedPayment({
-              key: checkoutKey,
-              orderId: data.orderId,
-              paymentLink: data.paymentLink,
-            })
-          }
-        } catch (e) {
-          if (!cancelled) {
-            setError(e instanceof Error ? e.message : 'Не удалось подготовить платёж')
-          }
-        } finally {
-          if (!cancelled) setPreparingPayment(false)
-        }
-      })()
-    }, 350)
-
-    return () => {
-      cancelled = true
-      window.clearTimeout(timer)
-    }
-  }, [
-    accepted,
-    checkoutKey,
-    email,
-    enabled,
-    isTestMode,
-    name,
-    pack.tokens,
-    testCheckout?.enabled,
-    testCheckout?.tokenAmount,
-    testModeRequested,
-  ])
-
-
-  useEffect(() => {
-    const initData = getTelegramInitData()
-    if (!initData) return
-
-    void fetch('/api/payments/tochka/test-access', {
-      headers: { 'X-Telegram-Init-Data': initData },
-      cache: 'no-store',
-    })
-      .then(async (response) => (response.ok ? response.json() : null))
-      .then((data) => {
-        if (data?.enabled) {
-          const nextTestCheckout = {
-            enabled: true,
-            amountRub: Number(data.amountRub || 100),
-            tokenAmount: Number(data.tokenAmount || 100),
-          }
-          setTestCheckout(nextTestCheckout)
-          if (testModeRequested) setTokenAmount(nextTestCheckout.tokenAmount)
-        }
-      })
-      .catch(() => undefined)
-  }, [testModeRequested])
-
-  useEffect(() => {
     let checking = false
 
-    async function syncPendingPayment() {
-      if (checking || document.visibilityState !== 'visible') return
-      const orderId = window.sessionStorage.getItem('banana-zero.pending-payment') || ''
-      if (!orderId) return
-
+    async function checkPayment() {
+      if (cancelled || checking) return
       checking = true
       try {
-        const response = await fetch('/api/payments/tochka/status?order=' + encodeURIComponent(orderId), {
+        const response = await fetch('/api/payments/tochka/status?order=' + encodeURIComponent(pendingOrderId), {
           cache: 'no-store',
         })
         const data = await response.json().catch(() => null)
-        if (!response.ok || !data) return
+        if (cancelled || !response.ok || !data) return
 
         if (data.status === 'succeeded') {
           window.sessionStorage.removeItem('banana-zero.pending-payment')
-          router.replace('/app?tab=profile&payment=' + encodeURIComponent(orderId))
+          setWaitingForPayment(false)
+          setPendingOrderId('')
+          router.replace('/app?tab=profile&payment=' + encodeURIComponent(pendingOrderId))
           return
         }
 
         if (['failed', 'canceled', 'refunded'].includes(data.status)) {
           window.sessionStorage.removeItem('banana-zero.pending-payment')
+          setWaitingForPayment(false)
+          setPendingOrderId('')
+          setError('Платёж не завершён. Можно повторить попытку.')
         }
       } finally {
         checking = false
@@ -161,35 +65,67 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
     }
 
     const onResume = () => {
-      if (document.visibilityState === 'visible') void syncPendingPayment()
+      if (document.visibilityState === 'visible') void checkPayment()
     }
 
-    void syncPendingPayment()
-    const timer = window.setInterval(() => void syncPendingPayment(), 2000)
+    void checkPayment()
+    const timer = window.setInterval(() => void checkPayment(), 2000)
     window.addEventListener('focus', onResume)
     window.addEventListener('pageshow', onResume)
     document.addEventListener('visibilitychange', onResume)
 
     return () => {
+      cancelled = true
       window.clearInterval(timer)
       window.removeEventListener('focus', onResume)
       window.removeEventListener('pageshow', onResume)
       document.removeEventListener('visibilitychange', onResume)
     }
-  }, [router])
+  }, [pendingOrderId, router])
 
-  function markPaymentOpened() {
-    if (!preparedPayment || preparedPayment.key !== checkoutKey) return
-    window.sessionStorage.setItem('banana-zero.pending-payment', preparedPayment.orderId)
+  async function checkout() {
+    setError('')
+    if (!email.includes('@')) {
+      setError('Укажите email — он нужен для электронного чека.')
+      return
+    }
+    if (!accepted) {
+      setError('Подтвердите согласие с условиями покупки.')
+      return
+    }
+    if (!enabled) {
+      setError('Рублёвая оплата временно недоступна.')
+      return
+    }
+
+    setBusy(true)
+    try {
+      const response = await fetch('/api/payments/tochka/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Telegram-Init-Data': getTelegramInitData(),
+        },
+        body: JSON.stringify({ tokenAmount: pack.tokens, email, name }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data?.paymentLink || !data?.orderId) throw new Error(data?.error || 'Не удалось создать платёж')
+      setPendingOrderId(data.orderId)
+      setWaitingForPayment(true)
+      window.sessionStorage.setItem('banana-zero.pending-payment', data.orderId)
+      openExternalLink(data.paymentLink)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось создать платёж')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
     <div className="space-y-5" id="tokens">
       <div>
-        <p className="text-sm font-semibold">{isTestMode ? 'Тестовый платёж' : 'Покупка Tokens'}</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {isTestMode ? 'Тестовая покупка доступна только вашему аккаунту.' : 'Выберите количество Tokens и перейдите к оплате.'}
-        </p>
+        <p className="text-sm font-semibold">Покупка Tokens</p>
+        <p className="mt-1 text-xs text-muted-foreground">Выберите количество Tokens и перейдите к оплате.</p>
       </div>
 
       <div className="rounded-3xl border bg-card p-5">
@@ -202,32 +138,24 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
           </div>
           {pack.savingsRub > 0 && <p className="mt-1 text-xs font-medium text-emerald-700">Экономия {pack.savingsRub.toLocaleString('ru-RU')} ₽</p>}
         </div>
-        {isTestMode ? (
-          <div className="mt-5 rounded-2xl border border-dashed border-amber-500/40 bg-amber-500/8 px-4 py-3 text-center text-xs font-semibold text-amber-700">
-            Тестовый платёж · {pack.tokens.toLocaleString('ru-RU')} Tokens за {pack.priceRub.toLocaleString('ru-RU')} ₽
-          </div>
-        ) : (
-          <>
-            <input
-              type="range"
-              min={TOKEN_PURCHASE_MIN}
-              max={TOKEN_PURCHASE_MAX}
-              step={TOKEN_PURCHASE_STEP}
-              value={tokenAmount}
-              onChange={(event) => setTokenAmount(Number(event.target.value))}
-              className="mt-5 w-full"
-              aria-label="Количество Tokens"
-            />
-            <div className="mt-2 flex justify-between text-[10px] text-muted-foreground">
-              <span>200</span><span>1000</span><span>2000</span><span>3000</span>
-            </div>
-            <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[10px]">
-              <span className={tokenAmount >= 1000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>1000+ · −8%</span>
-              <span className={tokenAmount >= 2000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>2000+ · −10%</span>
-              <span className={tokenAmount >= 3000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>3000 · −13%</span>
-            </div>
-          </>
-        )}
+        <input
+          type="range"
+          min={TOKEN_PURCHASE_MIN}
+          max={TOKEN_PURCHASE_MAX}
+          step={TOKEN_PURCHASE_STEP}
+          value={tokenAmount}
+          onChange={(event) => setTokenAmount(Number(event.target.value))}
+          className="mt-5 w-full"
+          aria-label="Количество Tokens"
+        />
+        <div className="mt-2 flex justify-between text-[10px] text-muted-foreground">
+          <span>200</span><span>1000</span><span>2000</span><span>3000</span>
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[10px]">
+          <span className={tokenAmount >= 1000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>1000+ · −8%</span>
+          <span className={tokenAmount >= 2000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>2000+ · −10%</span>
+          <span className={tokenAmount >= 3000 ? 'rounded-full bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700' : 'rounded-full bg-muted px-2 py-1 text-muted-foreground'}>3000 · −13%</span>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -264,28 +192,18 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
         </span>
       </label>
 
-      {preparedPayment && preparedPayment.key === checkoutKey && !preparingPayment ? (
-        <a
-          href={preparedPayment.paymentLink}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={markPaymentOpened}
-          className="brand-gradient flex h-12 w-full items-center justify-center rounded-full font-semibold text-white"
-        >
-          {'Оплатить ' + pack.priceRub.toLocaleString('ru-RU') + ' ₽'}
-        </a>
-      ) : (
-        <button
-          type="button"
-          disabled
-          className="brand-gradient h-12 w-full rounded-full font-semibold text-white opacity-50"
-        >
-          {preparingPayment ? 'Подготавливаем оплату…' : 'Готовим оплату…'}
-        </button>
+      {waitingForPayment && (
+        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm leading-6">
+          <p className="font-semibold text-emerald-700">Ожидаем подтверждение оплаты</p>
+          <p className="mt-1 text-xs text-muted-foreground">После оплаты просто вернитесь в Telegram. Banana Zero сам обновит баланс и откроет ваш профиль.</p>
+        </div>
       )}
 
+      <button type="button" onClick={() => void checkout()} disabled={busy || waitingForPayment} className="brand-gradient h-12 w-full rounded-full font-semibold text-white disabled:opacity-50">
+        {busy ? 'Создаём платёж…' : waitingForPayment ? 'Ожидаем оплату…' : 'Оплатить ' + pack.priceRub.toLocaleString('ru-RU') + ' ₽'}
+      </button>
       {error && <p className="text-center text-sm text-destructive">{error}</p>}
-      <p className="text-center text-xs text-muted-foreground">После подтверждения оплаты Tokens зачисляются на баланс Banana Zero.</p>
+      <p className="text-center text-xs text-muted-foreground">После подтверждения оплаты Tokens зачисляются на баланс Banana Zero автоматически.</p>
     </div>
   )
 }
