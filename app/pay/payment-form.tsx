@@ -128,7 +128,16 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
       const data = await response.json()
       if (!response.ok || !data?.paymentLink || !data?.orderId) throw new Error(data?.error || 'Не удалось создать платёж')
       window.sessionStorage.setItem('banana-zero.pending-payment', data.orderId)
+
+      // Telegram iOS can silently ignore WebApp.openLink after an async payment-link request.
+      // Try the normal external-browser handoff first, then fall back to direct navigation
+      // only if the Mini App is still visible.
       openExternalLink(data.paymentLink)
+      window.setTimeout(() => {
+        if (document.visibilityState === 'visible') {
+          window.location.assign(data.paymentLink)
+        }
+      }, 900)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось создать платёж')
     } finally {
