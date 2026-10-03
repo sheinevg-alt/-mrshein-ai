@@ -2,6 +2,7 @@ import { createPublicKey, verify } from 'crypto'
 import { NextResponse } from 'next/server'
 import { hasDatabase, supabaseFetch } from '@/lib/server/supabase'
 import { tochkaRequest } from '@/lib/server/tochka-http'
+import { telegramApi } from '@/lib/server/telegram-bot'
 
 export const dynamic = 'force-dynamic'
 
@@ -107,6 +108,35 @@ export async function POST(request: Request) {
   if (!complete.ok) {
     console.error('Tochka payment completion failed', complete.status, await complete.text())
     return NextResponse.json({ ok: false }, { status: 500 })
+  }
+
+  const completeRows = await complete.json().catch(() => [])
+  const completion = Array.isArray(completeRows) ? completeRows[0] : completeRows
+
+  if (completion?.credited === true) {
+    try {
+      const orderResponse = await supabaseFetch(
+        `payment_orders?select=telegram_id,token_amount&id=eq.${paymentLinkId}&limit=1`,
+      )
+      const orders = orderResponse.ok ? await orderResponse.json() : []
+      const order = orders?.[0]
+      if (order?.telegram_id) {
+        const tokens = Number(order.token_amount || 0)
+        const balance = Number(completion?.token_balance || 0)
+        await telegramApi('sendMessage', {
+          chat_id: order.telegram_id,
+          text: `✅ Оплата прошла\n+${tokens.toLocaleString('ru-RU')} Tokens зачислены на баланс Banana Zero.\nБаланс: ${balance.toLocaleString('ru-RU')} Tokens`,
+          reply_markup: {
+            inline_keyboard: [[{
+              text: 'Открыть Banana Zero',
+              url: `https://t.me/BananaZeroBot?startapp=payment_${paymentLinkId}&mode=fullscreen`,
+            }]],
+          },
+        })
+      }
+    } catch (error) {
+      console.error('Tochka payment notification failed', error)
+    }
   }
 
   return NextResponse.json({ ok: true })
