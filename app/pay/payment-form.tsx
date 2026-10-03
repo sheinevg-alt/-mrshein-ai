@@ -14,10 +14,32 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
   const [name, setName] = useState('')
   const [accepted, setAccepted] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [testCheckout, setTestCheckout] = useState<{ enabled: boolean; amountRub: number; tokenAmount: number } | null>(null)
   const [error, setError] = useState('')
 
   const pack = getTokenPurchaseQuote(tokenAmount)
 
+
+  useEffect(() => {
+    const initData = getTelegramInitData()
+    if (!initData) return
+
+    void fetch('/api/payments/tochka/test-access', {
+      headers: { 'X-Telegram-Init-Data': initData },
+      cache: 'no-store',
+    })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (data?.enabled) {
+          setTestCheckout({
+            enabled: true,
+            amountRub: Number(data.amountRub || 100),
+            tokenAmount: Number(data.tokenAmount || 100),
+          })
+        }
+      })
+      .catch(() => undefined)
+  }, [])
 
   useEffect(() => {
     let checking = false
@@ -67,7 +89,7 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
     }
   }, [router])
 
-  async function checkout() {
+  async function checkout(testPayment = false) {
     setError('')
     if (!email.includes('@')) {
       setError('Укажите email — он нужен для электронного чека.')
@@ -90,7 +112,7 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
           'Content-Type': 'application/json',
           'X-Telegram-Init-Data': getTelegramInitData(),
         },
-        body: JSON.stringify({ tokenAmount: pack.tokens, email, name }),
+        body: JSON.stringify({ tokenAmount: testPayment ? (testCheckout?.tokenAmount || 100) : pack.tokens, email, name, testPayment }),
       })
       const data = await response.json()
       if (!response.ok || !data?.paymentLink || !data?.orderId) throw new Error(data?.error || 'Не удалось создать платёж')
@@ -174,9 +196,21 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
         </span>
       </label>
 
-      <button type="button" onClick={() => void checkout()} disabled={busy} className="brand-gradient h-12 w-full rounded-full font-semibold text-white disabled:opacity-50">
+      <button type="button" onClick={() => void checkout(false)} disabled={busy} className="brand-gradient h-12 w-full rounded-full font-semibold text-white disabled:opacity-50">
         {busy ? 'Создаём платёж…' : 'Оплатить ' + pack.priceRub.toLocaleString('ru-RU') + ' ₽'}
       </button>
+
+      {testCheckout?.enabled && (
+        <button
+          type="button"
+          onClick={() => void checkout(true)}
+          disabled={busy}
+          className="h-11 w-full rounded-full border border-dashed border-brand/50 bg-brand-tint text-sm font-semibold text-brand disabled:opacity-50"
+        >
+          Тестовый платёж {testCheckout.amountRub.toLocaleString('ru-RU')} ₽ · +{testCheckout.tokenAmount.toLocaleString('ru-RU')} Tokens
+        </button>
+      )}
+
       {error && <p className="text-center text-sm text-destructive">{error}</p>}
       <p className="text-center text-xs text-muted-foreground">После подтверждения оплаты Tokens зачисляются на баланс Banana Zero.</p>
     </div>
