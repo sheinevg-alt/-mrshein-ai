@@ -80,12 +80,6 @@ export async function POST(request: Request) {
   }
 
   const amount = quote.priceRub
-  const requestedPaymentMethod = String(body?.paymentMethod || '').trim()
-  const paymentMethod = ['sbp', 'card', 'tinkoff'].includes(requestedPaymentMethod)
-    ? requestedPaymentMethod
-    : ''
-  if (!paymentMethod) return NextResponse.json({ error: 'Invalid payment method' }, { status: 400 })
-
   const email = String(body?.email || '').trim().slice(0, 254)
   const name = String(body?.name || '').trim().slice(0, 120) || 'Покупатель Banana Zero'
   if (!email.includes('@')) return NextResponse.json({ error: 'Invalid checkout data' }, { status: 400 })
@@ -100,7 +94,7 @@ export async function POST(request: Request) {
       purpose: isTestPayment ? `Тестовый платеж Banana Zero: ${tokenAmount} токенов` : `Пополнение Banana Zero: ${tokenAmount} токенов`,
       redirectUrl: `${siteUrl}/pay/success?order=${orderId}`,
       failRedirectUrl: `${siteUrl}/pay?status=failed`,
-      paymentMode: [paymentMethod],
+      paymentMode: ['sbp', 'card', 'tinkoff'],
       paymentLinkId,
       preAuthorization: false,
       taxSystemCode,
@@ -141,7 +135,6 @@ export async function POST(request: Request) {
           pricing_version: 'commercial_model_v4_slider',
           purchase_snapshot: { token_amount: tokenAmount, amount_rub: amount, regular_rub: quote.regularRub, discount_pct: quote.discountPct, savings_rub: quote.savingsRub },
           test_payment: isTestPayment,
-          selected_payment_method: paymentMethod,
           customer_code: customerCode,
           merchant_id: merchantId,
         },
@@ -157,14 +150,14 @@ export async function POST(request: Request) {
 
   const data = response.json
   if (!response.ok || !data?.Data?.paymentLink) {
-    if (hasDatabase()) await supabaseFetch(`payment_orders?id=eq.${orderId}`, { method: 'PATCH', body: JSON.stringify({ status: 'failed', metadata: { email, name, offer_version: '2026-10-02-v2', pricing_version: 'commercial_model_v4_slider', selected_payment_method: paymentMethod, purchase_snapshot: { token_amount: tokenAmount, amount_rub: amount, regular_rub: quote.regularRub, discount_pct: quote.discountPct, savings_rub: quote.savingsRub }, test_payment: isTestPayment, provider_error: data } }) })
+    if (hasDatabase()) await supabaseFetch(`payment_orders?id=eq.${orderId}`, { method: 'PATCH', body: JSON.stringify({ status: 'failed', metadata: { email, name, offer_version: '2026-10-02-v2', pricing_version: 'commercial_model_v4_slider', purchase_snapshot: { token_amount: tokenAmount, amount_rub: amount, regular_rub: quote.regularRub, discount_pct: quote.discountPct, savings_rub: quote.savingsRub }, test_payment: isTestPayment, provider_error: data } }) })
     return NextResponse.json({ error: 'Payment provider error' }, { status: 502 })
   }
 
   if (hasDatabase()) {
     await supabaseFetch(`payment_orders?id=eq.${orderId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ external_payment_id: data.Data.operationId, payment_method: paymentMethod, metadata: { email, name, selected_payment_method: paymentMethod, offer_version: '2026-10-02-v2', pricing_version: 'commercial_model_v4_slider', purchase_snapshot: { token_amount: tokenAmount, amount_rub: amount, regular_rub: quote.regularRub, discount_pct: quote.discountPct, savings_rub: quote.savingsRub }, test_payment: isTestPayment, payment_link_id: paymentLinkId, payment_link: data.Data.paymentLink } }),
+      body: JSON.stringify({ external_payment_id: data.Data.operationId, payment_method: 'payment_link', metadata: { email, name, offer_version: '2026-10-02-v2', pricing_version: 'commercial_model_v4_slider', purchase_snapshot: { token_amount: tokenAmount, amount_rub: amount, regular_rub: quote.regularRub, discount_pct: quote.discountPct, savings_rub: quote.savingsRub }, test_payment: isTestPayment, payment_link_id: paymentLinkId, payment_link: data.Data.paymentLink } }),
     })
   }
 
