@@ -1,100 +1,20 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { CreditCard, QrCode, ShieldCheck } from 'lucide-react'
 import { TOKEN_PURCHASE_MAX, TOKEN_PURCHASE_MIN, TOKEN_PURCHASE_STEP, getTokenPurchaseQuote, normalizeTokenPurchaseAmount } from '@/lib/public-pricing'
 import { getTelegramInitData, openExternalLink } from '@/lib/telegram'
 
 export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean; initialTokens?: number }) {
-  const router = useRouter()
   const [tokenAmount, setTokenAmount] = useState(normalizeTokenPurchaseAmount(initialTokens))
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [accepted, setAccepted] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [pendingOrderId, setPendingOrderId] = useState('')
-  const [waitingForPayment, setWaitingForPayment] = useState(false)
-  const [paymentLink, setPaymentLink] = useState('')
 
   const pack = getTokenPurchaseQuote(tokenAmount)
-
-
-  useEffect(() => {
-    const stored = window.sessionStorage.getItem('banana-zero.pending-payment') || ''
-    if (!stored) return
-
-    try {
-      const parsed = JSON.parse(stored)
-      if (parsed?.orderId && parsed?.paymentLink) {
-        setPendingOrderId(String(parsed.orderId))
-        setPaymentLink(String(parsed.paymentLink))
-        setWaitingForPayment(true)
-        return
-      }
-    } catch {}
-
-    window.sessionStorage.removeItem('banana-zero.pending-payment')
-  }, [])
-
-  useEffect(() => {
-    if (!pendingOrderId) return
-
-    let cancelled = false
-    let checking = false
-
-    async function checkPayment() {
-      if (cancelled || checking) return
-      checking = true
-      try {
-        const response = await fetch('/api/payments/tochka/status?order=' + encodeURIComponent(pendingOrderId), {
-          cache: 'no-store',
-        })
-        const data = await response.json().catch(() => null)
-        if (cancelled || !response.ok || !data) return
-
-        if (data.status === 'succeeded') {
-          window.sessionStorage.removeItem('banana-zero.pending-payment')
-          const completedOrderId = pendingOrderId
-          setWaitingForPayment(false)
-          setPaymentLink('')
-          setPendingOrderId('')
-          router.replace('/app?tab=profile&payment=' + encodeURIComponent(completedOrderId))
-          return
-        }
-
-        if (['failed', 'canceled', 'refunded'].includes(data.status)) {
-          window.sessionStorage.removeItem('banana-zero.pending-payment')
-          setWaitingForPayment(false)
-          setPaymentLink('')
-          setPendingOrderId('')
-          setError('Платёж не завершён. Можно повторить попытку.')
-        }
-      } finally {
-        checking = false
-      }
-    }
-
-    const onResume = () => {
-      if (document.visibilityState === 'visible') void checkPayment()
-    }
-
-    void checkPayment()
-    const timer = window.setInterval(() => void checkPayment(), 2000)
-    window.addEventListener('focus', onResume)
-    window.addEventListener('pageshow', onResume)
-    document.addEventListener('visibilitychange', onResume)
-
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
-      window.removeEventListener('focus', onResume)
-      window.removeEventListener('pageshow', onResume)
-      document.removeEventListener('visibilitychange', onResume)
-    }
-  }, [pendingOrderId, router])
 
   async function checkout() {
     setError('')
@@ -111,9 +31,6 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
       return
     }
 
-    const orderId = crypto.randomUUID()
-    openExternalLink('https://bananazero.ru/pay/launch?order=' + encodeURIComponent(orderId))
-
     setBusy(true)
     try {
       const response = await fetch('/api/payments/tochka/create', {
@@ -122,17 +39,11 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
           'Content-Type': 'application/json',
           'X-Telegram-Init-Data': getTelegramInitData(),
         },
-        body: JSON.stringify({ orderId, tokenAmount: pack.tokens, email, name }),
+        body: JSON.stringify({ tokenAmount: pack.tokens, email, name }),
       })
       const data = await response.json()
-      if (!response.ok || !data?.paymentLink || !data?.orderId) throw new Error(data?.error || 'Не удалось создать платёж')
-      setPendingOrderId(data.orderId)
-      setPaymentLink(data.paymentLink)
-      setWaitingForPayment(true)
-      window.sessionStorage.setItem('banana-zero.pending-payment', JSON.stringify({
-        orderId: data.orderId,
-        paymentLink: data.paymentLink,
-      }))
+      if (!response.ok || !data?.paymentLink) throw new Error(data?.error || 'Не удалось создать платёж')
+      openExternalLink(data.paymentLink)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось создать платёж')
     } finally {
@@ -211,40 +122,11 @@ export function PaymentForm({ enabled, initialTokens = 500 }: { enabled: boolean
         </span>
       </label>
 
-      {waitingForPayment && (
-        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm leading-6">
-          <p className="font-semibold text-emerald-700">Ожидаем подтверждение оплаты</p>
-          <p className="mt-1 text-xs text-muted-foreground">Если страница оплаты не открылась автоматически, нажмите кнопку ниже.</p>
-          {paymentLink && (
-            <a
-              href={paymentLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-3 flex h-11 w-full items-center justify-center rounded-full bg-foreground px-4 text-sm font-semibold text-background"
-            >
-              Перейти к оплате
-            </a>
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              window.sessionStorage.removeItem('banana-zero.pending-payment')
-              setPendingOrderId('')
-              setPaymentLink('')
-              setWaitingForPayment(false)
-            }}
-            className="mt-3 w-full text-center text-xs font-medium text-muted-foreground underline underline-offset-4"
-          >
-            Отменить эту попытку
-          </button>
-        </div>
-      )}
-
-      <button type="button" onClick={() => void checkout()} disabled={busy || waitingForPayment} className="brand-gradient h-12 w-full rounded-full font-semibold text-white disabled:opacity-50">
-        {busy ? 'Создаём платёж…' : waitingForPayment ? 'Проверяем оплату…' : 'Оплатить ' + pack.priceRub.toLocaleString('ru-RU') + ' ₽'}
+      <button type="button" onClick={() => void checkout()} disabled={busy} className="brand-gradient h-12 w-full rounded-full font-semibold text-white disabled:opacity-50">
+        {busy ? 'Создаём платёж…' : 'Оплатить ' + pack.priceRub.toLocaleString('ru-RU') + ' ₽'}
       </button>
       {error && <p className="text-center text-sm text-destructive">{error}</p>}
-      <p className="text-center text-xs text-muted-foreground">После подтверждения оплаты Tokens зачисляются на баланс Banana Zero автоматически.</p>
+      <p className="text-center text-xs text-muted-foreground">После подтверждения оплаты Tokens зачисляются на баланс Banana Zero.</p>
     </div>
   )
 }
