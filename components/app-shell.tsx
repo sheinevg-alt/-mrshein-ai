@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { CheckCircle2, X } from 'lucide-react'
 import type { CategoryId, Tool, Trend } from '@/lib/data'
-import { haptics, useTelegramBackButton, useTelegramInit } from '@/lib/telegram'
+import { getTelegramStartParam, haptics, useTelegramBackButton, useTelegramInit } from '@/lib/telegram'
 import { BottomNav, type TabId } from './bottom-nav'
 import { ToolSheet, TrendSheet } from './detail-sheets'
 import { FavoritesProvider } from './favorites-provider'
@@ -42,7 +42,7 @@ export function AppShell() {
 function InnerApp() {
   const { locale } = useI18n()
   const { trends } = useTrends()
-  const { completionNotice, clearCompletionNotice, unreadWorks, markWorksSeen } = useUserState()
+  const { completionNotice, clearCompletionNotice, unreadWorks, markWorksSeen, refreshUser } = useUserState()
   const [tab, setTab] = useState<TabId>('trends')
   const [category, setCategory] = useState<CategoryId | null>(null)
   const [activeTool, setActiveTool] = useState<Tool | null>(null)
@@ -50,6 +50,7 @@ function InnerApp() {
   const [seedanceOpen, setSeedanceOpen] = useState(false)
   const [repeatJobId, setRepeatJobId] = useState<string | null>(null)
   const [upscaleSource, setUpscaleSource] = useState<UpscaleSource | null>(null)
+  const [paymentNotice, setPaymentNotice] = useState<{ tokens: number } | null>(null)
   const deepLinkHandled = useRef(false)
 
   const sheetOpen = activeTool !== null || activeTrend !== null || seedanceOpen || repeatJobId !== null || upscaleSource !== null
@@ -59,6 +60,22 @@ function InnerApp() {
     if (deepLinkHandled.current) return
 
     const params = new URLSearchParams(window.location.search)
+    const startParam = getTelegramStartParam() || params.get('tgWebAppStartParam') || ''
+    if (startParam.startsWith('payment_')) {
+      const orderId = startParam.slice('payment_'.length)
+      deepLinkHandled.current = true
+      void fetch(`/api/payments/tochka/status?order=${encodeURIComponent(orderId)}`, { cache: 'no-store' })
+        .then(async (response) => (response.ok ? response.json() : null))
+        .then(async (data) => {
+          if (data?.status === 'succeeded' && typeof data?.tokenAmount === 'number') {
+            await refreshUser()
+            setPaymentNotice({ tokens: data.tokenAmount })
+          }
+        })
+        .catch(() => undefined)
+      return
+    }
+
     const workId = params.get('work')
     if (workId) {
       setTab('works')
@@ -94,7 +111,7 @@ function InnerApp() {
     }
 
     deepLinkHandled.current = true
-  }, [markWorksSeen, trends])
+  }, [markWorksSeen, refreshUser, trends])
 
   function goBack() {
     if (upscaleSource) setUpscaleSource(null)
@@ -197,7 +214,28 @@ function InnerApp() {
         </main>
       </div>
 
-      {completionNotice && (
+      {paymentNotice && (
+        <div className="fixed inset-x-0 z-50 mx-auto w-full max-w-md px-4" style={{ bottom: 'calc(var(--app-safe-bottom) + var(--nav-height) + 0.75rem)' }}>
+          <div className="glass-strong flex items-center gap-3 rounded-2xl p-3 shadow-xl">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-700">
+              <CheckCircle2 className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1 text-left">
+              <span className="block text-sm font-semibold">{locale === 'ru' ? 'Оплата прошла' : 'Payment successful'}</span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {locale === 'ru'
+                  ? `+${paymentNotice.tokens.toLocaleString('ru-RU')} Tokens зачислены на баланс`
+                  : `+${paymentNotice.tokens.toLocaleString('en-US')} Tokens added to your balance`}
+              </span>
+            </div>
+            <button type="button" onClick={() => setPaymentNotice(null)} className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground" aria-label={locale === 'ru' ? 'Закрыть' : 'Close'}>
+              <X className="size-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!paymentNotice && completionNotice && (
         <div className="fixed inset-x-0 z-50 mx-auto w-full max-w-md px-4" style={{ bottom: 'calc(var(--app-safe-bottom) + var(--nav-height) + 0.75rem)' }}>
           <div className="glass-strong flex items-center gap-3 rounded-2xl p-3 shadow-xl">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-700">
