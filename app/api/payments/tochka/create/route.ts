@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     customerCode = customerCode || String(acquiringConfig?.customerCode || '')
     merchantId = merchantId || String(acquiringConfig?.merchantId || '')
   }
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin
+  const siteUrl = 'https://bananazero.ru'
   const taxSystemCode = process.env.TOCHKA_TAX_SYSTEM_CODE || 'usn_income'
   const vatType = process.env.TOCHKA_VAT_TYPE || 'none'
   if (!token || !customerCode || !merchantId || acquiringConfig?.setupComplete !== true) {
