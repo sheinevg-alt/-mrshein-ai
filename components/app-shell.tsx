@@ -227,7 +227,7 @@ function InnerApp() {
           {tab === 'favorites' && (
             <FavoritesScreen onOpenTool={openTool} onOpenTrend={openTrend} onBrowse={() => changeTab('trends')} />
           )}
-          {tab === 'profile' && <ProfileScreen />}
+          {tab === 'profile' && <ProfileScreen onOpenPricing={() => changeTab('pricing')} />}
         </main>
       </div>
 
