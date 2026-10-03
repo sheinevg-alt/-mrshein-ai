@@ -1,18 +1,41 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { BadgePercent, WalletCards } from 'lucide-react'
 import { PUBLIC_PLANS, TOKEN_PURCHASE_MAX, TOKEN_PURCHASE_MIN, TOKEN_PURCHASE_STEP, getTokenPurchaseQuote } from '@/lib/public-pricing'
 import { useI18n } from '../i18n-provider'
 import { ScreenHeader } from '../screen-header'
 import { TokenBalancePill } from '../tokens'
+import { getTelegramInitData } from '@/lib/telegram'
 
 export function PricingScreen() {
   const { locale } = useI18n()
   const ru = locale === 'ru'
   const [tokenAmount, setTokenAmount] = useState(500)
+  const [testCheckout, setTestCheckout] = useState<{ enabled: boolean; amountRub: number; tokenAmount: number } | null>(null)
   const pack = getTokenPurchaseQuote(tokenAmount)
+
+  useEffect(() => {
+    const initData = getTelegramInitData()
+    if (!initData) return
+
+    void fetch('/api/payments/tochka/test-access', {
+      headers: { 'X-Telegram-Init-Data': initData },
+      cache: 'no-store',
+    })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (data?.enabled) {
+          setTestCheckout({
+            enabled: true,
+            amountRub: Number(data.amountRub || 100),
+            tokenAmount: Number(data.tokenAmount || 100),
+          })
+        }
+      })
+      .catch(() => undefined)
+  }, [])
 
   return (
     <div className="animate-in fade-in duration-300">
@@ -94,6 +117,28 @@ export function PricingScreen() {
         <Link href={`/pay?tokens=${pack.tokens}`} className="brand-gradient mt-5 flex h-12 w-full items-center justify-center rounded-full text-sm font-semibold text-white">
           {ru ? `Купить за ${pack.priceRub.toLocaleString('ru-RU')} ₽` : `Buy for ${pack.priceRub.toLocaleString('en-US')} RUB`}
         </Link>
+
+        {testCheckout?.enabled && (
+          <div className="mt-4 rounded-2xl border border-dashed border-amber-500/40 bg-amber-500/8 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold">{ru ? 'Тестовый платёж' : 'Test payment'}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {testCheckout.tokenAmount.toLocaleString(ru ? 'ru-RU' : 'en-US')} Tokens · {testCheckout.amountRub.toLocaleString(ru ? 'ru-RU' : 'en-US')} ₽
+                </p>
+              </div>
+              <span className="rounded-full bg-amber-500/12 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-amber-700">
+                {ru ? 'Только для теста' : 'Test only'}
+              </span>
+            </div>
+            <Link
+              href="/pay?test=1"
+              className="mt-3 flex h-11 w-full items-center justify-center rounded-full border border-amber-500/40 bg-card text-sm font-semibold"
+            >
+              {ru ? `Оплатить ${testCheckout.amountRub.toLocaleString('ru-RU')} ₽` : `Pay ${testCheckout.amountRub.toLocaleString('en-US')} RUB`}
+            </Link>
+          </div>
+        )}
       </section>
 
       <div className="mt-4 flex items-start gap-2 rounded-2xl bg-muted/60 p-3 text-xs leading-5 text-muted-foreground">
