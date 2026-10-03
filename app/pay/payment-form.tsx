@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CreditCard, QrCode, ShieldCheck } from 'lucide-react'
 import { TOKEN_PURCHASE_MAX, TOKEN_PURCHASE_MIN, TOKEN_PURCHASE_STEP, getTokenPurchaseQuote, normalizeTokenPurchaseAmount } from '@/lib/public-pricing'
-import { getTelegramInitData, openExternalLink } from '@/lib/telegram'
+import { getTelegramInitData } from '@/lib/telegram'
 
 export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = false }: { enabled: boolean; initialTokens?: number; testModeRequested?: boolean }) {
   const router = useRouter()
@@ -139,7 +139,10 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
         }),
       })
 
-      openExternalLink('https://bananazero.ru/pay/launch?order=' + encodeURIComponent(orderId))
+      // Keep checkout inside the Telegram webview: navigate immediately while the tap
+      // is still active. The launch page waits for Tochka in the background and then
+      // replaces itself with the real payment page.
+      window.location.assign('/pay/launch?order=' + encodeURIComponent(orderId))
 
       const response = await paymentRequest
       const data = await response.json()
