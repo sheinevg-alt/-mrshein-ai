@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CreditCard, QrCode, ShieldCheck } from 'lucide-react'
 import { TOKEN_PURCHASE_MAX, TOKEN_PURCHASE_MIN, TOKEN_PURCHASE_STEP, getTokenPurchaseQuote, normalizeTokenPurchaseAmount } from '@/lib/public-pricing'
-import { getTelegramInitData, openExternalLink } from '@/lib/telegram'
+import { getTelegramInitData } from '@/lib/telegram'
 
 export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = false }: { enabled: boolean; initialTokens?: number; testModeRequested?: boolean }) {
   const router = useRouter()
@@ -178,30 +178,9 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
     }
   }, [router])
 
-  function checkout() {
-    setError('')
-    if (!email.includes('@')) {
-      setError('Укажите email — он нужен для электронного чека.')
-      return
-    }
-    if (!accepted) {
-      setError('Подтвердите согласие с условиями покупки.')
-      return
-    }
-    if (!enabled) {
-      setError('Рублёвая оплата временно недоступна.')
-      return
-    }
-    if (!preparedPayment || preparedPayment.key !== checkoutKey) {
-      setError('Платёж ещё подготавливается. Подождите секунду и нажмите ещё раз.')
-      return
-    }
-
-    // The Tochka link is already prepared before the tap, so Telegram receives
-    // a real external URL directly inside the user gesture. This lets iOS hand
-    // SBP deep links off to Sber/T-Bank instead of trapping them in the Mini App webview.
+  function markPaymentOpened() {
+    if (!preparedPayment || preparedPayment.key !== checkoutKey) return
     window.sessionStorage.setItem('banana-zero.pending-payment', preparedPayment.orderId)
-    openExternalLink(preparedPayment.paymentLink)
   }
 
   return (
@@ -285,16 +264,25 @@ export function PaymentForm({ enabled, initialTokens = 500, testModeRequested = 
         </span>
       </label>
 
-      <button
-        type="button"
-        onClick={checkout}
-        disabled={busy || preparingPayment}
-        className="brand-gradient h-12 w-full rounded-full font-semibold text-white disabled:opacity-50"
-      >
-        {preparingPayment
-          ? 'Подготавливаем оплату…'
-          : 'Оплатить ' + pack.priceRub.toLocaleString('ru-RU') + ' ₽'}
-      </button>
+      {preparedPayment && preparedPayment.key === checkoutKey && !preparingPayment ? (
+        <a
+          href={preparedPayment.paymentLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={markPaymentOpened}
+          className="brand-gradient flex h-12 w-full items-center justify-center rounded-full font-semibold text-white"
+        >
+          {'Оплатить ' + pack.priceRub.toLocaleString('ru-RU') + ' ₽'}
+        </a>
+      ) : (
+        <button
+          type="button"
+          disabled
+          className="brand-gradient h-12 w-full rounded-full font-semibold text-white opacity-50"
+        >
+          {preparingPayment ? 'Подготавливаем оплату…' : 'Готовим оплату…'}
+        </button>
+      )}
 
       {error && <p className="text-center text-sm text-destructive">{error}</p>}
       <p className="text-center text-xs text-muted-foreground">После подтверждения оплаты Tokens зачисляются на баланс Banana Zero.</p>
