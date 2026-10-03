@@ -63,8 +63,25 @@ function InnerApp() {
     const startParam = getTelegramStartParam() || params.get('tgWebAppStartParam') || ''
     if (startParam.startsWith('payment_')) {
       const orderId = startParam.slice('payment_'.length)
+      setTab('profile')
       deepLinkHandled.current = true
       void fetch(`/api/payments/tochka/status?order=${encodeURIComponent(orderId)}`, { cache: 'no-store' })
+        .then(async (response) => (response.ok ? response.json() : null))
+        .then(async (data) => {
+          if (data?.status === 'succeeded' && typeof data?.tokenAmount === 'number') {
+            await refreshUser()
+            setPaymentNotice({ tokens: data.tokenAmount })
+          }
+        })
+        .catch(() => undefined)
+      return
+    }
+
+    const paymentOrderId = params.get('payment')
+    if (paymentOrderId) {
+      setTab('profile')
+      deepLinkHandled.current = true
+      void fetch(`/api/payments/tochka/status?order=${encodeURIComponent(paymentOrderId)}`, { cache: 'no-store' })
         .then(async (response) => (response.ok ? response.json() : null))
         .then(async (data) => {
           if (data?.status === 'succeeded' && typeof data?.tokenAmount === 'number') {
