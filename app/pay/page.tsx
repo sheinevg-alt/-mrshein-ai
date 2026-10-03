@@ -7,7 +7,7 @@ import { hasDatabase, supabaseFetch } from '@/lib/server/supabase'
 
 export const dynamic = 'force-dynamic'
 
-export default async function PayPage({ searchParams }: { searchParams: Promise<{ tokens?: string }> }) {
+export default async function PayPage({ searchParams }: { searchParams: Promise<{ tokens?: string; test?: string }> }) {
   let enabled = false
   if (hasDatabase() && process.env.TOCHKA_JWT) {
     const configResponse = await supabaseFetch(
@@ -18,6 +18,7 @@ export default async function PayPage({ searchParams }: { searchParams: Promise<
   }
 
   const params = await searchParams
+  const testModeRequested = params?.test === '1'
   const initialTokens = normalizeTokenPurchaseAmount(Number(params?.tokens || 500))
 
   return (
@@ -33,7 +34,7 @@ export default async function PayPage({ searchParams }: { searchParams: Promise<
         </header>
 
         <section className="glass mt-6 rounded-4xl p-5 sm:p-7">
-          <PaymentForm enabled={enabled} initialTokens={initialTokens} />
+          <PaymentForm enabled={enabled} initialTokens={initialTokens} testModeRequested={testModeRequested} />
         </section>
 
         <footer className="mt-6 flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
