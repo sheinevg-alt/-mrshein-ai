@@ -35,7 +35,7 @@ export async function POST(request: Request) {
           }
         }
 
-        const appUrl = (process.env.NEXT_PUBLIC_APP_URL || APP_CONFIG.appUrl).replace(/\/$/, '')
+        const appUrl = APP_CONFIG.appUrl.replace(/\/$/, '')
         await telegramApi('sendMessage', {
           chat_id: message.chat.id,
           text: welcomeText(message.from?.language_code),
