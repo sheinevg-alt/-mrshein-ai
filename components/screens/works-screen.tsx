@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, CheckCircle2, Clock3, Download, Expand, FolderOpen, Image as ImageIcon, LoaderCircle, Music2, RefreshCw, RotateCcw, Trash2, Video } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { AlertCircle, CheckCircle2, Clock3, Download, Expand, FolderOpen, Image as ImageIcon, LoaderCircle, Music2, RefreshCw, RotateCcw, Trash2, Video, X } from 'lucide-react'
 import { getTelegramInitData, getWebApp, haptics, openExternalLink } from '@/lib/telegram'
 import { useI18n } from '../i18n-provider'
 import { useUserState, type HistoryItem } from '../user-provider'
@@ -78,7 +78,12 @@ function failureCopy(item: HistoryItem, locale: 'en' | 'ru') {
 
 export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGeneration?: (jobId: string) => void; onUpscale?: (source: UpscaleSource) => void }) {
   const { locale } = useI18n()
-  const { history, refreshUser, markWorksSeen } = useUserState()
+  const { refreshUser, markWorksSeen } = useUserState()
+  const [works, setWorks] = useState<HistoryItem[]>([])
+  const [hasMore, setHasMore] = useState(false)
+  const [nextOffset, setNextOffset] = useState(0)
+  const [loadingPage, setLoadingPage] = useState(false)
+  const [openMedia, setOpenMedia] = useState<HistoryItem | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [downloadErrorId, setDownloadErrorId] = useState<string | null>(null)
@@ -86,17 +91,15 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
   const [retryErrorId, setRetryErrorId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<HistoryItem | null>(null)
   const [workFilter, setWorkFilter] = useState<'all' | 'video' | 'image' | 'audio'>('all')
-  const [visibleLimit, setVisibleLimit] = useState(6)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(false)
-  const [mediaInfo, setMediaInfo] = useState<Record<string, { width: number; height: number; duration: number }>>({})
 
-  const visibleHistory = useMemo(() => history.filter((item) => {
+  const visibleHistory = useMemo(() => works.filter((item) => {
     if (item.status !== 'failed') return true
     const failed = new Date(item.failedAt || item.createdAt).getTime()
     if (!Number.isFinite(failed)) return false
     return Date.now() - failed < 24 * 60 * 60 * 1000
-  }), [history])
+  }), [works])
 
   const mediaKind = (item: HistoryItem): 'video' | 'image' | 'audio' | 'unknown' => {
     if (item.resultUrl) return isAudioUrl(item.resultUrl) ? 'audio' : isVideoUrl(item.resultUrl) ? 'video' : 'image'
@@ -122,19 +125,40 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
     [visibleHistory, workFilter],
   )
 
-  const renderedHistory = useMemo(
-    () => filteredHistory.slice(0, visibleLimit),
-    [filteredHistory, visibleLimit],
-  )
+  const fetchWorksPage = useCallback(async (offset: number, replace: boolean) => {
+    const initData = getTelegramInitData()
+    if (!initData) return
 
-  useEffect(() => {
-    setVisibleLimit(6)
-  }, [workFilter])
+    if (!replace) setLoadingPage(true)
+    try {
+      const response = await fetch(`/api/history?limit=5&offset=${Math.max(0, offset)}`, {
+        headers: { 'X-Telegram-Init-Data': initData },
+        cache: 'no-store',
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok || !Array.isArray(data?.history)) return
+
+      const page = data.history as HistoryItem[]
+      setWorks((current) => {
+        if (replace) return page
+        const seen = new Set(current.map((item) => item.id))
+        return [...current, ...page.filter((item) => !seen.has(item.id))]
+      })
+      setHasMore(Boolean(data?.pagination?.hasMore))
+      setNextOffset(
+        typeof data?.pagination?.nextOffset === 'number'
+          ? data.pagination.nextOffset
+          : offset + page.length,
+      )
+    } finally {
+      if (!replace) setLoadingPage(false)
+    }
+  }, [])
 
   useEffect(() => {
     markWorksSeen()
-    void refreshUser()
-  }, [markWorksSeen, refreshUser])
+    void fetchWorksPage(0, true)
+  }, [markWorksSeen, fetchWorksPage])
 
   async function manualRefresh() {
     haptics.selection()
@@ -142,7 +166,7 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
     try {
       const initData = getTelegramInitData()
       if (initData) {
-        const active = history.filter((item) => item.status === 'queued' || item.status === 'processing')
+        const active = works.filter((item) => item.status === 'queued' || item.status === 'processing')
         await Promise.all(active.map((item) =>
           fetch(`/api/generate/status?jobId=${encodeURIComponent(item.id)}`, {
             headers: { 'X-Telegram-Init-Data': initData },
@@ -150,7 +174,7 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
           }).catch(() => undefined),
         ))
       }
-      await refreshUser()
+      await Promise.all([refreshUser(), fetchWorksPage(0, true)])
     } finally {
       setRefreshing(false)
     }
@@ -173,7 +197,7 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
       const data = await response.json().catch(() => ({}))
       if (!response.ok || !data?.ok) throw new Error('RETRY_FAILED')
       haptics.success()
-      await refreshUser()
+      await Promise.all([refreshUser(), fetchWorksPage(0, true)])
     } catch {
       setRetryErrorId(item.id)
     } finally {
@@ -198,8 +222,9 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
       if (!response.ok || !data?.ok) throw new Error(String(data?.error || 'DELETE_FAILED'))
 
       haptics.success()
+      if (openMedia?.id === deleteTarget.id) setOpenMedia(null)
       setDeleteTarget(null)
-      await refreshUser()
+      await Promise.all([refreshUser(), fetchWorksPage(0, true)])
     } catch {
       haptics.impact('medium')
       setDeleteError(true)
@@ -380,10 +405,21 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
               ? (workFilter === 'video' ? 'Видео пока нет' : workFilter === 'audio' ? 'Аудио пока нет' : 'Изображений пока нет')
               : (workFilter === 'video' ? 'No videos yet' : workFilter === 'audio' ? 'No audio yet' : 'No images yet')}
           </h2>
+          {hasMore && (
+            <button
+              type="button"
+              onClick={() => void fetchWorksPage(nextOffset, false)}
+              disabled={loadingPage}
+              className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-full border bg-card text-sm font-semibold text-brand transition active:scale-[0.98] disabled:opacity-55"
+            >
+              {loadingPage ? <LoaderCircle className="size-4 animate-spin" /> : null}
+              {locale === 'ru' ? 'Показать ещё' : 'Show more'}
+            </button>
+          )}
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {renderedHistory.map((item) => {
+          {filteredHistory.map((item) => {
             const created = new Date(item.createdAt)
             const dateLabel = Number.isNaN(created.getTime())
               ? ''
@@ -452,102 +488,64 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
 
                 {item.status === 'completed' && typeof item.resultUrl === 'string' && item.resultUrl && (
                   <div className="mt-3">
-                    <div className={`overflow-hidden rounded-2xl border ${audio ? 'bg-card p-3' : 'bg-black'}`}>
-                      {audio ? (
-                        <audio
-                          src={item.resultUrl}
-                          controls
-                          preload="none"
-                          className="w-full"
-                          onLoadedMetadata={(event) => {
-                            const el = event.currentTarget
-                            setMediaInfo((current) => ({
-                              ...current,
-                              [item.id]: { width: 0, height: 0, duration: el.duration || 0 },
-                            }))
-                          }}
-                        />
-                      ) : video ? (
-                        <video
-                          src={item.resultUrl}
-                          controls
-                          playsInline
-                          preload="none"
-                          className="max-h-[58dvh] w-full object-contain"
-                          onLoadedMetadata={(event) => {
-                            const el = event.currentTarget
-                            setMediaInfo((current) => ({
-                              ...current,
-                              [item.id]: {
-                                width: el.videoWidth || 0,
-                                height: el.videoHeight || 0,
-                                duration: el.duration || 0,
-                              },
-                            }))
-                          }}
-                        />
-                      ) : (
-                        // eslint-disable-next-line @next/next/no-img-element -- generated remote result
-                        <img
-                          src={item.resultUrl}
-                          alt="Generated result"
-                          className="w-full object-contain"
-                          onLoad={(event) => {
-                            setMediaInfo((current) => ({
-                              ...current,
-                              [item.id]: {
-                                width: event.currentTarget.naturalWidth,
-                                height: event.currentTarget.naturalHeight,
-                                duration: 0,
-                              },
-                            }))
-                          }}
-                        />
-                      )}
-                    </div>
-                    {audio && mediaInfo[item.id]?.duration > 0 ? (
-                      <p className="mt-2 text-center text-[11px] font-medium text-muted-foreground">{mediaInfo[item.id].duration.toFixed(1)} сек</p>
-                    ) : mediaInfo[item.id]?.width > 0 && mediaInfo[item.id]?.height > 0 ? (
-                      <p className="mt-2 text-center text-[11px] font-medium text-muted-foreground">
-                        {mediaInfo[item.id].width}×{mediaInfo[item.id].height}
-                        {video && mediaInfo[item.id].duration > 0 ? ` · ${mediaInfo[item.id].duration.toFixed(1)} сек` : ''}
-                      </p>
-                    ) : null}
-                    <div className={onUpscale && !audio ? "mt-2 grid grid-cols-2 gap-2" : "mt-2"}>
                     <button
                       type="button"
-                      onClick={() => void downloadResult(item)}
-                      disabled={downloadingId === item.id}
-                      className="brand-gradient mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-white transition active:scale-[0.98] disabled:opacity-55"
+                      onClick={() => {
+                        haptics.impact('light')
+                        setOpenMedia(item)
+                      }}
+                      className="flex min-h-20 w-full items-center gap-3 rounded-2xl border bg-card px-4 py-3 text-left transition active:scale-[0.99]"
                     >
-                      {downloadingId === item.id ? <LoaderCircle className="size-4 animate-spin" /> : <Download className="size-4" />}
-                      {downloadingId === item.id
-                        ? (locale === 'ru' ? 'Подготавливаю…' : 'Preparing…')
-                        : audio
-                          ? (locale === 'ru' ? 'Скачать аудио' : 'Download audio')
-                          : video
-                            ? (locale === 'ru' ? 'Скачать видео' : 'Download video')
-                            : (locale === 'ru' ? 'Скачать изображение' : 'Download image')}
+                      <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-tint text-brand">
+                        {audio ? <Music2 className="size-5" /> : video ? <Video className="size-5" /> : <ImageIcon className="size-5" />}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold">
+                          {locale === 'ru'
+                            ? (audio ? 'Открыть аудио' : video ? 'Открыть видео' : 'Открыть изображение')
+                            : (audio ? 'Open audio' : video ? 'Open video' : 'Open image')}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                          {locale === 'ru' ? 'Файл загрузится только после открытия' : 'The file loads only after you open it'}
+                        </span>
+                      </span>
                     </button>
-                    {onUpscale && !audio && (
+
+                    <div className={onUpscale && !audio ? "mt-2 grid grid-cols-2 gap-2" : "mt-2"}>
                       <button
                         type="button"
-                        onClick={() => {
-                          haptics.impact('light')
-                          onUpscale({
-                            mediaType: video ? 'video' : 'image',
-                            jobId: item.id,
-                            url: item.resultUrl || undefined,
-                            duration: mediaInfo[item.id]?.duration || undefined,
-                          })
-                        }}
-                        className="flex h-11 items-center justify-center gap-2 rounded-full border border-brand/25 bg-brand-tint/60 text-sm font-semibold text-brand transition active:scale-[0.98]"
+                        onClick={() => void downloadResult(item)}
+                        disabled={downloadingId === item.id}
+                        className="brand-gradient flex h-11 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-white transition active:scale-[0.98] disabled:opacity-55"
                       >
-                        <Expand className="size-4" />
-                        {locale === 'ru' ? 'Улучшить' : 'Upscale'}
+                        {downloadingId === item.id ? <LoaderCircle className="size-4 animate-spin" /> : <Download className="size-4" />}
+                        {downloadingId === item.id
+                          ? (locale === 'ru' ? 'Подготавливаю…' : 'Preparing…')
+                          : audio
+                            ? (locale === 'ru' ? 'Скачать аудио' : 'Download audio')
+                            : video
+                              ? (locale === 'ru' ? 'Скачать видео' : 'Download video')
+                              : (locale === 'ru' ? 'Скачать изображение' : 'Download image')}
                       </button>
-                    )}
+                      {onUpscale && !audio && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            haptics.impact('light')
+                            onUpscale({
+                              mediaType: video ? 'video' : 'image',
+                              jobId: item.id,
+                              url: item.resultUrl || undefined,
+                            })
+                          }}
+                          className="flex h-11 items-center justify-center gap-2 rounded-full border border-brand/25 bg-brand-tint/60 text-sm font-semibold text-brand transition active:scale-[0.98]"
+                        >
+                          <Expand className="size-4" />
+                          {locale === 'ru' ? 'Улучшить' : 'Upscale'}
+                        </button>
+                      )}
                     </div>
+
                     {item.provider === 'apimodels' && item.model === 'seedance-2.5' && onRepeatGeneration && (
                       <button
                         type="button"
@@ -561,6 +559,7 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
                         {locale === 'ru' ? 'Повторить с теми же настройками' : 'Repeat with same settings'}
                       </button>
                     )}
+
                     <p className="mt-2 text-center text-[11px] text-muted-foreground">
                       {locale === 'ru'
                         ? 'Сохраните результат на устройство. Медиафайл может быть автоматически удалён из Banana Zero через 14 дней.'
@@ -591,18 +590,58 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
               </article>
             )
           })}
-          {visibleLimit < filteredHistory.length && (
+          {hasMore && (
             <button
               type="button"
               onClick={() => {
                 haptics.selection()
-                setVisibleLimit((current) => current + 6)
+                void fetchWorksPage(nextOffset, false)
               }}
-              className="glass mt-1 flex h-11 w-full items-center justify-center rounded-full text-sm font-semibold text-brand transition active:scale-[0.98]"
+              disabled={loadingPage}
+              className="glass mt-1 flex h-11 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-brand transition active:scale-[0.98] disabled:opacity-55"
             >
+              {loadingPage ? <LoaderCircle className="size-4 animate-spin" /> : null}
               {locale === 'ru' ? 'Показать ещё' : 'Show more'}
             </button>
           )}
+        </div>
+      )}
+
+      {openMedia && typeof openMedia.resultUrl === 'string' && openMedia.resultUrl && (
+        <div className="fixed inset-0 z-[85] flex items-end justify-center bg-black/55 px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-16 backdrop-blur-[2px] sm:items-center">
+          <div className="w-full max-w-md overflow-hidden rounded-[28px] bg-background p-3 shadow-2xl">
+            <div className="flex items-center justify-between gap-3 px-2 pb-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{openMedia.title || (locale === 'ru' ? 'Результат' : 'Result')}</p>
+                <p className="text-[11px] text-muted-foreground">{locale === 'ru' ? 'Загружен только один выбранный файл' : 'Only the selected file is loaded'}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpenMedia(null)}
+                className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"
+                aria-label={locale === 'ru' ? 'Закрыть' : 'Close'}
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <div className={`overflow-hidden rounded-2xl border ${isAudioUrl(openMedia.resultUrl) ? 'bg-card p-3' : 'bg-black'}`}>
+              {isAudioUrl(openMedia.resultUrl) ? (
+                <audio src={openMedia.resultUrl} controls preload="metadata" className="w-full" />
+              ) : isVideoUrl(openMedia.resultUrl) ? (
+                <video
+                  src={openMedia.resultUrl}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="max-h-[64dvh] w-full object-contain"
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element -- generated remote result
+                <img src={openMedia.resultUrl} alt="Generated result" className="max-h-[64dvh] w-full object-contain" />
+              )}
+            </div>
+          </div>
         </div>
       )}
 
