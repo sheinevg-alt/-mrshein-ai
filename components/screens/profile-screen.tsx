@@ -399,6 +399,7 @@ type ReferralData = {
 
 function ReferralPanel() {
   const { t, locale } = useI18n()
+  const telegramUser = useTelegramProfile()
   const { refreshUser } = useUserState()
   const [data, setData] = useState<ReferralData | null>(null)
   const [status, setStatus] = useState('')
@@ -408,6 +409,9 @@ function ReferralPanel() {
   const [payoutMethod, setPayoutMethod] = useState<'card' | 'crypto'>('card')
   const [payoutDestination, setPayoutDestination] = useState('')
   const [payoutAmount, setPayoutAmount] = useState('')
+  const [collaborationOpen, setCollaborationOpen] = useState(false)
+  const [collaborationUsername, setCollaborationUsername] = useState('')
+  const [collaborationProposal, setCollaborationProposal] = useState('')
 
   async function load() {
     const initData = getTelegramInitData()
@@ -429,6 +433,11 @@ function ReferralPanel() {
   }
 
   useEffect(() => { void load() }, [])
+  useEffect(() => {
+    if (telegramUser?.username && !collaborationUsername) {
+      setCollaborationUsername(`@${telegramUser.username}`)
+    }
+  }, [telegramUser?.username, collaborationUsername])
 
   async function copyLink() {
     if (!data?.referralLink) return
@@ -529,6 +538,40 @@ function ReferralPanel() {
     }
   }
 
+  async function submitCollaboration() {
+    if (!collaborationUsername.trim() || collaborationProposal.trim().length < 3 || busy) return
+    const initData = getTelegramInitData()
+    if (!initData) return
+    setBusy(true)
+    setStatus('')
+    try {
+      const response = await fetch('/api/support/tickets', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Telegram-Init-Data': initData,
+        },
+        body: JSON.stringify({
+          topic: 'collaboration',
+          message: `Telegram: ${collaborationUsername.trim()}\n\nПредложение по сотрудничеству:\n${collaborationProposal.trim()}`,
+        }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(String(result?.error || 'COLLABORATION_REQUEST_FAILED'))
+      setCollaborationProposal('')
+      setCollaborationOpen(false)
+      setStatus(locale === 'ru'
+        ? 'Предложение отправлено в Службу заботы.'
+        : 'Your partnership proposal was sent to Banana Zero Care.')
+    } catch {
+      setStatus(locale === 'ru'
+        ? 'Не удалось отправить предложение. Попробуйте ещё раз.'
+        : 'Could not send the proposal. Please try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (!data) {
     return <p className="pb-4 text-sm text-muted-foreground">{status || (locale === 'ru' ? 'Загрузка…' : 'Loading…')}</p>
   }
@@ -565,6 +608,57 @@ function ReferralPanel() {
         <button type="button" disabled={!data.referralLink} onClick={() => void copyLink()} className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-foreground text-xs font-semibold text-background disabled:opacity-40">
           <Copy className="size-4" />{t('referral.copy')}
         </button>
+      </div>
+
+      <div className="mt-4 rounded-2xl border p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold">{locale === 'ru' ? 'Ваша реферальная ставка' : 'Your referral rate'}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {locale === 'ru'
+                ? 'Получайте процент с успешных покупок приглашённых пользователей.'
+                : 'Earn a percentage from successful purchases made by referred users.'}
+            </p>
+          </div>
+          <span className="rounded-full bg-brand-tint px-3 py-1.5 text-sm font-bold text-brand">{data.commissionPct}%</span>
+        </div>
+
+        <div className="mt-3 rounded-2xl bg-muted/50 p-3">
+          <p className="text-xs leading-5 text-muted-foreground">
+            {locale === 'ru'
+              ? 'Хотите более выгодные условия? Расскажите о своей аудитории и предложении — мы рассмотрим индивидуальную ставку.'
+              : 'Want better terms? Tell us about your audience and proposal, and we will review an individual rate.'}
+          </p>
+          <button type="button" onClick={() => setCollaborationOpen((value) => !value)} className="mt-3 h-10 w-full rounded-full border text-xs font-semibold">
+            {locale === 'ru' ? 'Напишите нам' : 'Contact us'}
+          </button>
+
+          {collaborationOpen && (
+            <div className="mt-3 space-y-2">
+              <input
+                value={collaborationUsername}
+                onChange={(e) => setCollaborationUsername(e.target.value)}
+                placeholder={locale === 'ru' ? 'Ваш ник в Telegram' : 'Your Telegram username'}
+                className="h-10 w-full rounded-xl border bg-background px-3 text-sm"
+              />
+              <textarea
+                rows={4}
+                value={collaborationProposal}
+                onChange={(e) => setCollaborationProposal(e.target.value)}
+                placeholder={locale === 'ru' ? 'Ваши предложения по сотрудничеству' : 'Your partnership proposal'}
+                className="w-full resize-none rounded-xl border bg-background p-3 text-sm"
+              />
+              <button
+                type="button"
+                disabled={!collaborationUsername.trim() || collaborationProposal.trim().length < 3 || busy}
+                onClick={() => void submitCollaboration()}
+                className="brand-gradient h-10 w-full rounded-full text-xs font-semibold text-white disabled:opacity-40"
+              >
+                {busy ? (locale === 'ru' ? 'Отправляю…' : 'Sending…') : (locale === 'ru' ? 'Отправить предложение' : 'Send proposal')}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="mt-4 rounded-2xl border p-4">
