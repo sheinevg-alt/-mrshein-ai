@@ -48,10 +48,11 @@ export async function GET(request: Request) {
   const limit = Number.isFinite(requestedLimit) ? Math.min(5, Math.max(1, Math.floor(requestedLimit))) : 5
   const offset = Number.isFinite(requestedOffset) ? Math.max(0, Math.floor(requestedOffset)) : 0
 
-  // Fetch one extra lightweight row only to determine whether a next page exists.
-  // Each request returns no more than five works to keep Telegram WebView traffic small.
+  // Fetch at most five works. If a full page is returned, the client may request
+  // the next page; an empty/partial page ends pagination. This remains reliable
+  // even when the REST layer enforces its own maximum row count.
   const response = await supabaseFetch(
-    `generation_history?select=id,type,title,status,created_at,failed_at,result_url,error_code,provider,model,source_id,result_metadata&telegram_id=eq.${user.id}&deleted_at=is.null&order=created_at.desc&limit=${limit + 1}&offset=${offset}`,
+    `generation_history?select=id,type,title,status,created_at,failed_at,result_url,error_code,provider,model,source_id,result_metadata&telegram_id=eq.${user.id}&deleted_at=is.null&order=created_at.desc&limit=${limit}&offset=${offset}`,
   )
   if (!response.ok) {
     return NextResponse.json({
@@ -82,7 +83,7 @@ export async function GET(request: Request) {
       limit,
       offset,
       nextOffset: offset + pageRows.length,
-      hasMore: Array.isArray(rows) && rows.length > limit,
+      hasMore: pageRows.length === limit,
     },
   })
 }
