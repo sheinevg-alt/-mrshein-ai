@@ -44,7 +44,10 @@ async function uploadReferenceForApiModels(file: File, telegramId: number) {
   })
   if (!uploadResponse.ok) throw new Error(`INPUT_UPLOAD_FAILED_${uploadResponse.status}`)
 
-  return createStorageSignedDownloadUrl(INPUT_BUCKET, path, 7200)
+  return {
+    path,
+    url: await createStorageSignedDownloadUrl(INPUT_BUCKET, path, 7200),
+  }
 }
 
 async function rpc(name: string, payload: Record<string, unknown>) {
@@ -140,6 +143,7 @@ export async function POST(request: Request) {
   const inputSchema: InputSchemaItem[] = Array.isArray(trend.input_schema) ? trend.input_schema : []
   const references: string[] = []
   const referenceTags: string[] = []
+  const referencePathsForHistory: string[] = []
 
   try {
     const jsonReferencePaths = body.referencePaths && typeof body.referencePaths === 'object'
@@ -155,15 +159,20 @@ export async function POST(request: Request) {
       if (!id) continue
 
       let uri = ''
+      let storedPathForHistory = ''
 
       if (form) {
         const upload = form.get(id)
         const suppliedUrl = String(form.get(`${id}_url`) || '')
 
         if (upload instanceof File && upload.size > 0) {
-          uri = isApiModels
-            ? await uploadReferenceForApiModels(upload, user.id)
-            : await fileToDataUri(upload)
+          if (isApiModels) {
+            const uploaded = await uploadReferenceForApiModels(upload, user.id)
+            uri = uploaded.url
+            storedPathForHistory = uploaded.path
+          } else {
+            uri = await fileToDataUri(upload)
+          }
         } else if (suppliedUrl.startsWith('https://')) {
           uri = suppliedUrl
         }
@@ -177,6 +186,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: `INVALID_REFERENCE_PATH:${id}` }, { status: 400 })
           }
           uri = await createStorageSignedDownloadUrl(INPUT_BUCKET, storedPath, 7200)
+          storedPathForHistory = storedPath
         } else if (suppliedUrl.startsWith('https://')) {
           uri = suppliedUrl
         }
@@ -190,6 +200,7 @@ export async function POST(request: Request) {
       if (uri) {
         references.push(uri)
         referenceTags.push(String(input.tag || `@image${references.length}`))
+        if (storedPathForHistory) referencePathsForHistory.push(storedPathForHistory)
       }
     }
   } catch (error) {
@@ -229,6 +240,7 @@ export async function POST(request: Request) {
       input_payload: {
         reference_count: references.length,
         reference_tags: referenceTags,
+        reference_paths: referencePathsForHistory,
         generate_audio: effectiveGenerateAudio,
         resolution,
       },
@@ -291,6 +303,7 @@ export async function POST(request: Request) {
             prompt: promptText,
             reference_count: references.length,
             reference_tags: referenceTags,
+            reference_paths: referencePathsForHistory,
             generate_audio: effectiveGenerateAudio,
             resolution: apiResolution,
             duration: Math.max(4, Math.min(30, Number(trend.duration_seconds || 12))),
