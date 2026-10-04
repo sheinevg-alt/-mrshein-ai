@@ -95,19 +95,23 @@ export default function AdminPage() {
 
   useEffect(() => {
     const saved = window.sessionStorage.getItem('mrshein.admin.secret')
-    if (saved) setSecret(saved)
+    if (saved) {
+      setSecret(saved)
+      void loadDashboard(saved)
+    }
   }, [])
 
   const authHeaders = useMemo(() => ({ Authorization: `Bearer ${secret}` }), [secret])
 
-  async function loadDashboard() {
+  async function loadDashboard(secretOverride?: string) {
+    const activeSecret = secretOverride || secret
     setBusy(true)
     setStatus('Загрузка…')
     try {
       const [trendsResponse, knowledgeResponse, supportResponse] = await Promise.all([
-        fetch('/api/admin/trends', { headers: authHeaders, cache: 'no-store' }),
-        fetch('/api/admin/knowledge', { headers: authHeaders, cache: 'no-store' }),
-        fetch('/api/admin/support', { headers: authHeaders, cache: 'no-store' }),
+        fetch('/api/admin/trends', { headers: { Authorization: `Bearer ${activeSecret}` }, cache: 'no-store' }),
+        fetch('/api/admin/knowledge', { headers: { Authorization: `Bearer ${activeSecret}` }, cache: 'no-store' }),
+        fetch('/api/admin/support', { headers: { Authorization: `Bearer ${activeSecret}` }, cache: 'no-store' }),
       ])
       const [trendsData, knowledgeData, supportData] = await Promise.all([
         trendsResponse.json(), knowledgeResponse.json(), supportResponse.json(),
@@ -116,7 +120,7 @@ export default function AdminPage() {
       if (!knowledgeResponse.ok) throw new Error(knowledgeData?.error || 'Не загрузилась база знаний')
       if (!supportResponse.ok) throw new Error(supportData?.error || 'Не загрузились обращения')
 
-      window.sessionStorage.setItem('mrshein.admin.secret', secret)
+      window.sessionStorage.setItem('mrshein.admin.secret', activeSecret)
       setAuthorized(true)
       setTrends(trendsData.trends || [])
       setArticles(knowledgeData.articles || [])
@@ -289,7 +293,6 @@ export default function AdminPage() {
         <div className="flex gap-2">
           <Link href="/admin/control" className="rounded-full bg-foreground px-4 py-2 text-xs font-medium text-background">Control Center</Link>
           <Link href="/admin/referrals" className="rounded-full border px-4 py-2 text-xs font-medium">Рефералы</Link>
-          <button type="button" disabled={busy} onClick={() => void setupWebhook()} className="rounded-full border px-4 py-2 text-xs font-medium">Подключить bot</button>
         </div>
       </div>
 
