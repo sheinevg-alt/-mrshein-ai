@@ -56,6 +56,22 @@ export async function createStorageSignedUploadUrl(bucket: string, path: string)
   return { signedUrl, path }
 }
 
+export async function uploadStorageObject(bucket: string, path: string, body: Uint8Array, contentType: string) {
+  const response = await storageFetch(`object/${encodeURIComponent(bucket)}/${path.split('/').map(encodeURIComponent).join('/')}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': contentType || 'application/octet-stream',
+      'x-upsert': 'true',
+    },
+    body: body as unknown as BodyInit,
+  })
+  const text = await response.text()
+  let data: any = {}
+  try { data = text ? JSON.parse(text) : {} } catch { data = { raw: text } }
+  if (!response.ok) throw new Error(String(data?.message || data?.error || `STORAGE_UPLOAD_FAILED_${response.status}`))
+  return { path }
+}
+
 export async function createStorageSignedDownloadUrl(bucket: string, path: string, expiresIn = 7200) {
   const response = await storageFetch(`object/sign/${encodeURIComponent(bucket)}/${path.split('/').map(encodeURIComponent).join('/')}`, {
     method: 'POST',
