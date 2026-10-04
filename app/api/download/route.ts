@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'crypto'
 import { NextResponse } from 'next/server'
-import { hasDatabase, supabaseFetch } from '@/lib/server/supabase'
+import { createStorageSignedDownloadUrl, hasDatabase, supabaseFetch } from '@/lib/server/supabase'
 import { verifyTelegramInitData } from '@/lib/server/telegram-auth'
 
 export const dynamic = 'force-dynamic'
@@ -48,7 +48,7 @@ function verifyDownloadSignature(jobId: string, userId: number, exp: number, sig
 
 async function findJob(jobId: string, userId: number) {
   const historyResponse = await supabaseFetch(
-    `generation_history?select=id,title,status,result_url&telegram_id=eq.${userId}&id=eq.${encodeURIComponent(jobId)}&limit=1`,
+    `generation_history?select=id,title,status,result_url,result_metadata&telegram_id=eq.${userId}&id=eq.${encodeURIComponent(jobId)}&limit=1`,
   )
   const rows = historyResponse.ok ? await historyResponse.json() : []
   return rows?.[0] || null
@@ -115,9 +115,21 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Result is not ready' }, { status: 404 })
   }
 
+  let rawResultUrl = String(job.result_url)
+  if (rawResultUrl.startsWith('storage://')) {
+    try {
+      const stored = new URL(rawResultUrl)
+      const bucket = stored.hostname
+      const path = decodeURIComponent(stored.pathname.replace(/^\/+/, ''))
+      rawResultUrl = await createStorageSignedDownloadUrl(bucket, path, 7200)
+    } catch {
+      return NextResponse.json({ error: 'Stored result is unavailable' }, { status: 502 })
+    }
+  }
+
   let resultUrl: URL
   try {
-    resultUrl = new URL(String(job.result_url))
+    resultUrl = new URL(rawResultUrl)
   } catch {
     return NextResponse.json({ error: 'Invalid result URL' }, { status: 500 })
   }
