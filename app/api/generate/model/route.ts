@@ -12,7 +12,7 @@ import {
   createApiModelsKlingTask,
 } from '@/lib/server/apimodels'
 import { quoteTokens } from '@/lib/server/model-pricing'
-import { createStorageSignedDownloadUrl, hasDatabase, supabaseFetch } from '@/lib/server/supabase'
+import { createStorageSignedDownloadUrl, hasDatabase, supabaseFetch, uploadStorageObject } from '@/lib/server/supabase'
 import { verifyTelegramInitData } from '@/lib/server/telegram-auth'
 import { getModelDefinition } from '@/lib/model-catalog'
 
@@ -90,7 +90,7 @@ export async function POST(request: Request) {
     p_model: tool.model,
     p_input_payload: {
       prompt,
-      settings: { duration, resolution, quality, mode, generateAudio },
+      settings: { duration, resolution, quality, mode, generateAudio, voiceId: toolId === 'elevenlabs-tts' ? String(settings.voiceId || '') : undefined },
       reference_paths: referencePaths,
       source_video_path: sourceVideoPath || null,
       quoted_provider_usd: quote.providerUsd,
@@ -154,16 +154,26 @@ export async function POST(request: Request) {
         voiceId: String(settings.voiceId || 'EXAVITQu4vr4xnSDxMaL'),
         model: 'eleven-tts-v4',
       })
+      const mimeType = result.mimeType || 'audio/mpeg'
+      const extension = mimeType.includes('wav') ? 'wav'
+        : mimeType.includes('ogg') ? 'ogg'
+          : mimeType.includes('mp4') || mimeType.includes('m4a') ? 'm4a'
+            : 'mp3'
+      const storagePath = `${user.id}/audio-results/${jobId}.${extension}`
+      await uploadStorageObject(INPUT_BUCKET, storagePath, new Uint8Array(result.audio), mimeType)
+
       const audioBase64 = result.audio.toString('base64')
       await rpc('complete_generation', {
         p_generation_id: jobId,
-        p_result_url: '',
+        p_result_url: `storage://${INPUT_BUCKET}/${storagePath}`,
         p_result_metadata: {
           apimodels_kind: 'tts',
           apimodels_request_id: result.requestId,
           apimodels_credits_usd: result.creditsUsd,
-          mime_type: result.mimeType,
-          ephemeral_result: true,
+          mime_type: mimeType,
+          storage_bucket: INPUT_BUCKET,
+          storage_path: storagePath,
+          ephemeral_result: false,
         },
       })
       return NextResponse.json({
@@ -171,7 +181,7 @@ export async function POST(request: Request) {
         status: 'completed',
         jobId,
         tokenCost: quote.tokenCost,
-        audioDataUrl: `data:${result.mimeType};base64,${audioBase64}`,
+        audioDataUrl: `data:${mimeType};base64,${audioBase64}`,
         providerCostUsd: result.creditsUsd,
       })
     }
