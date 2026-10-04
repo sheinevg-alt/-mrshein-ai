@@ -1,6 +1,7 @@
 import 'server-only'
 import { fallbackTrends, type CategoryId, type Trend, type TrendInput, type TrendInputKind } from '@/lib/data'
 import { hasDatabase, supabaseFetch } from './supabase'
+import { quoteTrendTokens } from './trend-pricing'
 
 type RawInput = Record<string, unknown>
 
@@ -16,6 +17,9 @@ type TrendRow = {
   token_cost: number
   input_schema?: RawInput[] | null
   generation_config?: Record<string, unknown> | null
+  provider?: string | null
+  model?: string | null
+  duration_seconds?: number | null
 }
 
 function normalizeKind(value: unknown): TrendInputKind {
@@ -50,12 +54,21 @@ function normalizeInput(input: RawInput): TrendInput {
   }
 }
 
-function toPublicTrend(row: TrendRow): Trend {
+async function toPublicTrend(row: TrendRow): Promise<Trend> {
   const config = row.generation_config && typeof row.generation_config === 'object' ? row.generation_config : {}
   const rawResolutions = Array.isArray(config.allowed_resolutions) ? config.allowed_resolutions : []
   const resolutions = rawResolutions
     .map((value) => String(value))
     .filter((value): value is '480p' | '720p' | '1080p' => ['480p', '720p', '1080p'].includes(value))
+
+  const defaultResolution = String(config.default_resolution || resolutions[0] || '480p')
+  const quote = await quoteTrendTokens({
+    provider: row.provider,
+    model: row.model,
+    durationSeconds: row.duration_seconds,
+    resolution: defaultResolution,
+    configuredTokenCost: row.token_cost,
+  })
 
   return {
     id: row.id,
@@ -65,7 +78,7 @@ function toPublicTrend(row: TrendRow): Trend {
     previewVideo: row.preview_video_url || undefined,
     aspectRatio: row.aspect_ratio || undefined,
     uses: row.uses_count || 'New',
-    tokens: row.token_cost,
+    tokens: quote.tokenCost,
     inputs: Array.isArray(row.input_schema) ? row.input_schema.map(normalizeInput) : [],
     resolutions: resolutions.length ? resolutions : undefined,
     executionMode: String(config.execution_mode || '') === 'direct' ? 'direct' : undefined,
@@ -83,9 +96,9 @@ function toPublicTrend(row: TrendRow): Trend {
 export async function getPublicTrends(): Promise<Trend[]> {
   if (!hasDatabase()) return fallbackTrends
   const response = await supabaseFetch(
-    'trends?select=id,title_en,title_ru,category,image_url,preview_video_url,aspect_ratio,uses_count,token_cost,input_schema,generation_config&published=eq.true&order=sort_order.asc,created_at.desc',
+    'trends?select=id,title_en,title_ru,category,image_url,preview_video_url,aspect_ratio,uses_count,token_cost,input_schema,generation_config,provider,model,duration_seconds&published=eq.true&order=sort_order.asc,created_at.desc',
   )
   if (!response.ok) return fallbackTrends
   const rows = (await response.json()) as TrendRow[]
-  return rows.length ? rows.map(toPublicTrend) : fallbackTrends
+  return rows.length ? Promise.all(rows.map(toPublicTrend)) : fallbackTrends
 }
