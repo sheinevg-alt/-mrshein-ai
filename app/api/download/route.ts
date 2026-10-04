@@ -6,12 +6,17 @@ import { verifyTelegramInitData } from '@/lib/server/telegram-auth'
 export const dynamic = 'force-dynamic'
 
 function safeFilename(contentType: string, title: string) {
-  const ext = contentType.includes('video/webm') ? 'webm'
-    : contentType.includes('video/quicktime') ? 'mov'
-      : contentType.includes('image/jpeg') ? 'jpg'
+  const ext = contentType.includes('audio/wav') ? 'wav'
+    : contentType.includes('audio/mp4') || contentType.includes('audio/x-m4a') ? 'm4a'
+      : contentType.includes('audio/ogg') ? 'ogg'
+        : contentType.includes('audio/flac') ? 'flac'
+          : contentType.includes('audio/') ? 'mp3'
+            : contentType.includes('video/webm') ? 'webm'
+              : contentType.includes('video/quicktime') ? 'mov'
+                : contentType.includes('image/jpeg') ? 'jpg'
         : contentType.includes('image/webp') ? 'webp'
-          : contentType.includes('image/') ? 'png'
-            : 'mp4'
+                  : contentType.includes('image/') ? 'png'
+                    : 'mp4'
   const base = (title || 'Banana-Zero-result')
     .replace(/[^\p{L}\p{N}._ -]+/gu, '')
     .trim()
@@ -68,8 +73,11 @@ export async function GET(request: Request) {
     }
 
     const resultUrl = String(job.result_url)
-    const isVideo = /\.(mp4|webm|mov)(\?|$)/i.test(resultUrl) || resultUrl.includes('/videos/')
-    const filename = `Banana-Zero-${isVideo ? 'video' : 'image'}-${jobId.slice(0, 8)}.${isVideo ? 'mp4' : 'png'}`
+    const isAudio = /\.(mp3|wav|m4a|aac|ogg|flac)(\?|$)/i.test(resultUrl) || resultUrl.includes('/audio/')
+    const isVideo = !isAudio && (/\.(mp4|webm|mov)(\?|$)/i.test(resultUrl) || resultUrl.includes('/videos/'))
+    const kind = isAudio ? 'audio' : isVideo ? 'video' : 'image'
+    const ext = isAudio ? (resultUrl.match(/\.wav(\?|$)/i) ? 'wav' : resultUrl.match(/\.m4a(\?|$)/i) ? 'm4a' : resultUrl.match(/\.ogg(\?|$)/i) ? 'ogg' : resultUrl.match(/\.flac(\?|$)/i) ? 'flac' : 'mp3') : isVideo ? 'mp4' : 'png'
+    const filename = `Banana-Zero-${kind}-${jobId.slice(0, 8)}.${ext}`
     const exp = Math.floor(Date.now() / 1000) + 10 * 60
     const sig = signDownload(jobId, user.id, exp)
     if (!sig) return NextResponse.json({ error: 'Download is not configured' }, { status: 503 })
@@ -129,11 +137,14 @@ export async function GET(request: Request) {
   }
 
   const resultHref = resultUrl.toString()
-  const isVideoResult = /\.(mp4|webm|mov)(\?|$)/i.test(resultHref) || resultHref.includes('/videos/')
+  const isAudioResult = /\.(mp3|wav|m4a|aac|ogg|flac)(\?|$)/i.test(resultHref) || resultHref.includes('/audio/')
+  const isVideoResult = !isAudioResult && (/\.(mp4|webm|mov)(\?|$)/i.test(resultHref) || resultHref.includes('/videos/'))
   const upstreamContentType = upstream.headers.get('content-type') || ''
-  const contentType = isVideoResult
-    ? (resultHref.match(/\.webm(\?|$)/i) ? 'video/webm' : resultHref.match(/\.mov(\?|$)/i) ? 'video/quicktime' : 'video/mp4')
-    : (upstreamContentType.startsWith('image/') ? upstreamContentType : 'image/png')
+  const contentType = isAudioResult
+    ? (upstreamContentType.startsWith('audio/') ? upstreamContentType : resultHref.match(/\.wav(\?|$)/i) ? 'audio/wav' : resultHref.match(/\.m4a(\?|$)/i) ? 'audio/mp4' : resultHref.match(/\.ogg(\?|$)/i) ? 'audio/ogg' : resultHref.match(/\.flac(\?|$)/i) ? 'audio/flac' : 'audio/mpeg')
+    : isVideoResult
+      ? (resultHref.match(/\.webm(\?|$)/i) ? 'video/webm' : resultHref.match(/\.mov(\?|$)/i) ? 'video/quicktime' : 'video/mp4')
+      : (upstreamContentType.startsWith('image/') ? upstreamContentType : 'image/png')
   const filename = safeFilename(contentType, String(job.title || 'Banana-Zero-result'))
   const headers = new Headers()
   headers.set('Content-Type', contentType)
