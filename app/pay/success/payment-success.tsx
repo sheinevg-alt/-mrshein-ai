@@ -9,7 +9,15 @@ type PaymentState = {
   amountRub: number
 }
 
-export function PaymentSuccess({ orderId }: { orderId: string }) {
+export function PaymentSuccess({
+  orderId,
+  webMode = false,
+  failedRedirect = false,
+}: {
+  orderId: string
+  webMode?: boolean
+  failedRedirect?: boolean
+}) {
   const [state, setState] = useState<PaymentState | null>(null)
   const [error, setError] = useState('')
   const telegramUrl = useMemo(
@@ -18,7 +26,7 @@ export function PaymentSuccess({ orderId }: { orderId: string }) {
   )
 
   useEffect(() => {
-    if (!orderId) return
+    if (!orderId || failedRedirect) return
     let cancelled = false
     let timer: number | undefined
 
@@ -32,7 +40,7 @@ export function PaymentSuccess({ orderId }: { orderId: string }) {
         setError('')
 
         if (data.status === 'succeeded') {
-          window.location.replace(telegramUrl)
+          if (!webMode) window.location.replace(telegramUrl)
         } else if (data.status === 'pending' || data.status === 'waiting_for_capture') {
           timer = window.setTimeout(() => void sync(), 1500)
         }
@@ -49,10 +57,10 @@ export function PaymentSuccess({ orderId }: { orderId: string }) {
       cancelled = true
       if (timer) window.clearTimeout(timer)
     }
-  }, [orderId, telegramUrl])
+  }, [failedRedirect, orderId, telegramUrl, webMode])
 
   const succeeded = state?.status === 'succeeded'
-  const failed = state && ['failed', 'canceled', 'refunded'].includes(state.status)
+  const failed = failedRedirect || Boolean(state && ['failed', 'canceled', 'refunded'].includes(state.status))
 
   return (
     <main className="flex min-h-dvh items-center justify-center px-4 py-10">
@@ -62,12 +70,25 @@ export function PaymentSuccess({ orderId }: { orderId: string }) {
             <CheckCircle2 className="mx-auto size-14 text-emerald-600" />
             <h1 className="mt-4 text-3xl font-bold">Оплата прошла</h1>
             <p className="mt-3 text-lg font-semibold">+{state.tokenAmount.toLocaleString('ru-RU')} Tokens</p>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              Tokens уже зачислены. Открываем Banana Zero в Telegram.
-            </p>
-            <a href={telegramUrl} className="brand-gradient mt-6 inline-flex h-11 items-center rounded-full px-5 font-semibold text-white">
-              Открыть Banana Zero
-            </a>
+            {webMode ? (
+              <>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Tokens уже зачислены. Вы вернулись в Banana Zero.
+                </p>
+                <a href="/app?tab=profile" className="brand-gradient mt-6 inline-flex h-11 items-center rounded-full px-5 font-semibold text-white">
+                  Вернуться в Banana Zero
+                </a>
+              </>
+            ) : (
+              <>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Tokens уже зачислены. Открываем Banana Zero в Telegram.
+                </p>
+                <a href={telegramUrl} className="brand-gradient mt-6 inline-flex h-11 items-center rounded-full px-5 font-semibold text-white">
+                  Открыть Banana Zero
+                </a>
+              </>
+            )}
           </>
         ) : failed ? (
           <>
@@ -76,8 +97,11 @@ export function PaymentSuccess({ orderId }: { orderId: string }) {
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               Оплата не была подтверждена. Можно вернуться в Banana Zero и повторить попытку.
             </p>
-            <a href="tg://resolve?domain=BananaZeroBot&startapp&mode=fullscreen" className="brand-gradient mt-6 inline-flex h-11 items-center rounded-full px-5 font-semibold text-white">
-              Открыть Banana Zero
+            <a
+              href={webMode ? '/app?tab=profile' : 'tg://resolve?domain=BananaZeroBot&startapp&mode=fullscreen'}
+              className="brand-gradient mt-6 inline-flex h-11 items-center rounded-full px-5 font-semibold text-white"
+            >
+              Вернуться в Banana Zero
             </a>
           </>
         ) : (
