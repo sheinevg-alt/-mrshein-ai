@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, CheckCircle2, Clock3, Download, Expand, ExternalLink, FolderOpen, Image as ImageIcon, LoaderCircle, RefreshCw, RotateCcw, Trash2, Video } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Clock3, Download, Expand, FolderOpen, Image as ImageIcon, LoaderCircle, RefreshCw, RotateCcw, Trash2, Video } from 'lucide-react'
 import { getTelegramInitData, getWebApp, haptics, openExternalLink } from '@/lib/telegram'
 import { useI18n } from '../i18n-provider'
 import { useUserState, type HistoryItem } from '../user-provider'
@@ -503,15 +503,6 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
                       </button>
                     )}
                     </div>
-                    <a
-                      href={item.resultUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-full border bg-card text-sm font-semibold text-brand transition active:scale-[0.98]"
-                    >
-                      <ExternalLink className="size-4" />
-                      {locale === 'ru' ? 'Открыть результат' : 'Open result'}
-                    </a>
                     {item.provider === 'apimodels' && item.model === 'seedance-2.5' && onRepeatGeneration && (
                       <button
                         type="button"
