@@ -11,6 +11,7 @@ import {
   supabaseFetch,
 } from '@/lib/server/supabase'
 import { verifyTelegramInitData } from '@/lib/server/telegram-auth'
+import { quoteTrendTokens } from '@/lib/server/trend-pricing'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,7 +86,14 @@ export async function POST(request: Request) {
 
   const duration = Math.max(4, Math.min(30, Math.round(Number(trend.duration_seconds || 12))))
   const ratio = String(trend.aspect_ratio || '9:16')
-  const tokenCost = Math.max(0, Number(trend.token_cost || 0))
+  const customerQuote = await quoteTrendTokens({
+    provider: trend.provider,
+    model: trend.model,
+    durationSeconds: duration,
+    resolution,
+    configuredTokenCost: trend.token_cost,
+  })
+  const tokenCost = customerQuote.tokenCost
   let newBalance: number | null = null
 
   if (tokenCost > 0) {
