@@ -49,6 +49,8 @@ export default function ReferralAdminPage() {
   const [status, setStatus] = useState('')
   const [search, setSearch] = useState('')
   const [rateDrafts, setRateDrafts] = useState<Record<number, string>>({})
+  const [savingRateFor, setSavingRateFor] = useState<number | null>(null)
+  const [savedRateFor, setSavedRateFor] = useState<number | null>(null)
 
   useEffect(() => {
     const saved = window.sessionStorage.getItem('mrshein.admin.secret')
@@ -97,7 +99,9 @@ export default function ReferralAdminPage() {
       setStatus('Ставка должна быть от 0% до 30%.')
       return
     }
-    setStatus('Сохраняю индивидуальную ставку…')
+    setSavingRateFor(telegramId)
+    setSavedRateFor(null)
+    setStatus('')
     const response = await fetch('/api/admin/referrals', {
       method: 'POST',
       headers: {
@@ -108,6 +112,7 @@ export default function ReferralAdminPage() {
     })
     const data = await response.json().catch(() => ({}))
     if (!response.ok) {
+      setSavingRateFor(null)
       setStatus(data?.error || 'Не удалось изменить ставку')
       return
     }
@@ -116,8 +121,13 @@ export default function ReferralAdminPage() {
       delete next[telegramId]
       return next
     })
-    setStatus(`Ставка сохранена: ${Number(data.commissionPct).toFixed(0)}%`)
-    await load()
+    setRows((current) => current.map((row) =>
+      row.telegramId === telegramId ? { ...row, commissionPct: Number(data.commissionPct) } : row
+    ))
+    setSavingRateFor(null)
+    setSavedRateFor(telegramId)
+    setStatus('')
+    window.setTimeout(() => setSavedRateFor((current) => current === telegramId ? null : current), 2500)
   }
 
   async function updatePayout(requestId: string, nextStatus: 'approved' | 'paid' | 'rejected') {
@@ -242,33 +252,52 @@ export default function ReferralAdminPage() {
                   </td>
                   <td className="px-4 py-3 font-mono text-xs">{row.referralCode}</td>
                   <td className="px-4 py-3">
-                    <div className="flex min-w-[150px] items-center gap-2">
-                      <div className="relative">
-                        <input
-                          type="number"
-                          min="0"
-                          max="30"
-                          step="1"
-                          value={rateDrafts[row.telegramId] ?? String(row.commissionPct)}
-                          onChange={(e) => {
-                            const value = e.target.value
-                            if (value === '' || Number(value) <= 30) {
-                              setRateDrafts((current) => ({ ...current, [row.telegramId]: value }))
-                            }
-                          }}
-                          className="h-9 w-20 rounded-xl border bg-background px-3 pr-7 text-sm font-semibold"
-                        />
-                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                    <div className="min-w-[250px]">
+                      <div className="flex flex-wrap gap-1.5">
+                        {[15, 20, 25, 30].map((pct) => {
+                          const active = Number(rateDrafts[row.telegramId] ?? row.commissionPct) === pct
+                          return (
+                            <button
+                              key={pct}
+                              type="button"
+                              onClick={() => setRateDrafts((current) => ({ ...current, [row.telegramId]: String(pct) }))}
+                              className={`h-8 rounded-full border px-3 text-xs font-semibold ${active ? 'bg-foreground text-background' : 'bg-background'}`}
+                            >
+                              {pct}%
+                            </button>
+                          )
+                        })}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => void updateReferralRate(row.telegramId, row.commissionPct)}
-                        className="h-9 rounded-xl border px-3 text-xs font-semibold"
-                      >
-                        Сохранить
-                      </button>
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="relative">
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            max="30"
+                            step="1"
+                            value={rateDrafts[row.telegramId] ?? String(row.commissionPct)}
+                            onChange={(e) => {
+                              const value = e.target.value
+                              if (value === '' || (Number(value) >= 0 && Number(value) <= 30)) {
+                                setRateDrafts((current) => ({ ...current, [row.telegramId]: value }))
+                              }
+                            }}
+                            className="h-9 w-20 rounded-xl border bg-background px-3 pr-7 text-sm font-semibold"
+                          />
+                          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={savingRateFor === row.telegramId}
+                          onClick={() => void updateReferralRate(row.telegramId, row.commissionPct)}
+                          className="h-9 min-w-[94px] rounded-xl bg-foreground px-3 text-xs font-semibold text-background disabled:opacity-50"
+                        >
+                          {savingRateFor === row.telegramId ? 'Сохраняю…' : savedRateFor === row.telegramId ? 'Сохранено ✓' : 'Сохранить'}
+                        </button>
+                      </div>
+                      <p className="mt-1 text-[10px] text-muted-foreground">Индивидуальная ставка · максимум 30%</p>
                     </div>
-                    <p className="mt-1 text-[10px] text-muted-foreground">Максимум 30%</p>
                   </td>
                   <td className="px-4 py-3 font-semibold">{row.invitedCount}</td>
                   <td className="px-4 py-3">{row.salesRub.toFixed(2)} ₽</td>
