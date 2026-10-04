@@ -28,7 +28,8 @@ type RepeatTemplate = {
     path: string
     url: string
     label: string
-  }
+    persistent?: boolean
+  } | null
   references: RepeatReference[]
 }
 
@@ -199,7 +200,7 @@ export function RepeatGenerationSheet({
     try {
       const sourceVideoPath = sourceVideoReplacement
         ? await uploadInputFile(sourceVideoReplacement.file, initData)
-        : template.sourceVideo.path
+        : template.sourceVideo?.path || ''
 
       const referencePaths = await Promise.all(
         template.references.map(async (reference, index) => {
@@ -266,28 +267,34 @@ export function RepeatGenerationSheet({
             </p>
           </div>
 
-          <section className="mt-4 rounded-2xl border bg-card p-3">
-            <div className="flex items-center gap-2">
-              <Video className="size-4 text-brand" />
-              <p className="text-sm font-semibold">{template.sourceVideo.label} · {template.inputsExpired ? (locale === 'ru' ? 'загрузите заново' : 're-upload required') : (locale === 'ru' ? 'тот же исходник' : 'same source')}</p>
-            </div>
-            {(sourceVideoReplacement?.url || template.sourceVideo.url) ? (
-              <video src={sourceVideoReplacement?.url || template.sourceVideo.url} controls muted playsInline preload="metadata" className="mt-3 max-h-64 w-full rounded-xl bg-black object-contain" />
-            ) : (
-              <div className="mt-3 flex min-h-36 items-center justify-center rounded-xl border border-dashed bg-muted/30 text-xs text-muted-foreground">
-                {locale === 'ru' ? 'Исходное видео удалено из временного хранилища' : 'Source video removed from temporary storage'}
+          {template.sourceVideo && (
+            <section className="mt-4 rounded-2xl border bg-card p-3">
+              <div className="flex items-center gap-2">
+                <Video className="size-4 text-brand" />
+                <p className="text-sm font-semibold">
+                  {template.sourceVideo.label} · {(template.inputsExpired && !template.sourceVideo.persistent)
+                    ? (locale === 'ru' ? 'загрузите заново' : 're-upload required')
+                    : (locale === 'ru' ? 'тот же исходник' : 'same source')}
+                </p>
               </div>
-            )}
-            <input id="repeat-source-video" type="file" accept="video/mp4,video/quicktime" className="sr-only" onChange={handleSourceVideoReplacement} />
-            <label htmlFor="repeat-source-video" className="mt-3 flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border bg-background px-3 text-xs font-semibold text-brand transition active:scale-[0.98]">
-              <Video className="size-3.5" />
-              {sourceVideoReplacement
-                ? (locale === 'ru' ? 'Заменить видео' : 'Replace video')
-                : template.inputsExpired
-                  ? (locale === 'ru' ? 'Загрузить исходное видео' : 'Upload source video')
-                  : (locale === 'ru' ? 'Заменить исходное видео' : 'Replace source video')}
-            </label>
-          </section>
+              {(sourceVideoReplacement?.url || template.sourceVideo.url) ? (
+                <video src={sourceVideoReplacement?.url || template.sourceVideo.url} controls muted playsInline preload="metadata" className="mt-3 max-h-64 w-full rounded-xl bg-black object-contain" />
+              ) : (
+                <div className="mt-3 flex min-h-36 items-center justify-center rounded-xl border border-dashed bg-muted/30 text-xs text-muted-foreground">
+                  {locale === 'ru' ? 'Исходное видео удалено из временного хранилища' : 'Source video removed from temporary storage'}
+                </div>
+              )}
+              <input id="repeat-source-video" type="file" accept="video/mp4,video/quicktime" className="sr-only" onChange={handleSourceVideoReplacement} />
+              <label htmlFor="repeat-source-video" className="mt-3 flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border bg-background px-3 text-xs font-semibold text-brand transition active:scale-[0.98]">
+                <Video className="size-3.5" />
+                {sourceVideoReplacement
+                  ? (locale === 'ru' ? 'Заменить видео' : 'Replace video')
+                  : (template.inputsExpired && !template.sourceVideo.persistent)
+                    ? (locale === 'ru' ? 'Загрузить исходное видео' : 'Upload source video')
+                    : (locale === 'ru' ? 'Заменить исходное видео' : 'Replace source video')}
+              </label>
+            </section>
+          )}
 
           <section className="mt-5">
             <div className="flex items-center justify-between gap-3">
@@ -416,7 +423,7 @@ export function RepeatGenerationSheet({
           <button
             type="button"
             onClick={() => void generate()}
-            disabled={generating || prompt.trim().length < 5 || (template.inputsExpired && (!sourceVideoReplacement || changedCount !== template.references.length))}
+            disabled={generating || prompt.trim().length < 5 || (template.inputsExpired && (((template.sourceVideo && !template.sourceVideo.persistent) ? !sourceVideoReplacement : false) || changedCount !== template.references.length))}
             className="brand-gradient mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-white transition active:scale-[0.98] disabled:opacity-45"
           >
             {generating ? <LoaderCircle className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
