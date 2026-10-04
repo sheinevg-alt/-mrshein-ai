@@ -12,6 +12,7 @@ import {
   supabaseFetch,
 } from '@/lib/server/supabase'
 import { verifyTelegramInitData } from '@/lib/server/telegram-auth'
+import { quoteTrendTokens } from '@/lib/server/trend-pricing'
 
 export const dynamic = 'force-dynamic'
 
@@ -209,7 +210,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: code }, { status })
   }
 
-  const tokenCost = Math.max(0, Number(trend.token_cost || 0))
+  const customerQuote = await quoteTrendTokens({
+    provider: trend.provider,
+    model: trend.model,
+    durationSeconds: Math.max(4, Math.min(30, Number(trend.duration_seconds || 12))),
+    resolution,
+    configuredTokenCost: trend.token_cost,
+  })
+  const tokenCost = customerQuote.tokenCost
   let newBalance: number | null = null
   if (tokenCost > 0) {
     const reserve = await rpc('reserve_tokens', {
