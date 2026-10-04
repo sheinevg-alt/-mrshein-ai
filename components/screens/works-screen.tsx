@@ -94,12 +94,8 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(false)
 
-  const visibleHistory = useMemo(() => works.filter((item) => {
-    if (item.status !== 'failed') return true
-    const failed = new Date(item.failedAt || item.createdAt).getTime()
-    if (!Number.isFinite(failed)) return false
-    return Date.now() - failed < 24 * 60 * 60 * 1000
-  }), [works])
+  // A work stays in My Works until the user deletes it.
+  const visibleHistory = works
 
   const mediaKind = (item: HistoryItem): 'video' | 'image' | 'audio' | 'unknown' => {
     if (item.resultUrl) return isAudioUrl(item.resultUrl) ? 'audio' : isVideoUrl(item.resultUrl) ? 'video' : 'image'
@@ -144,7 +140,7 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
         const seen = new Set(current.map((item) => item.id))
         return [...current, ...page.filter((item) => !seen.has(item.id))]
       })
-      setHasMore(Boolean(data?.pagination?.hasMore))
+      setHasMore(Boolean(data?.pagination?.hasMore) || page.length === 5)
       setNextOffset(
         typeof data?.pagination?.nextOffset === 'number'
           ? data.pagination.nextOffset
@@ -339,8 +335,8 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
           <h1 className="text-xl font-semibold tracking-tight">{locale === 'ru' ? 'Мои работы' : 'My works'}</h1>
           <p className="mt-1 text-xs text-muted-foreground">
             {locale === 'ru'
-              ? 'Здесь появляются активные, готовые и недавние неудачные генерации. Готовые медиа храните у себя: срок доступности в сервисе ограничен 14 днями.'
-              : 'Active, completed, and recent failed generations appear here. Save completed media to your device: in-service availability is limited to 14 days.'}
+              ? 'Здесь сохраняются ваши генерации, пока вы сами их не удалите. Готовые медиа лучше также сохранять на устройство.'
+              : 'Your generations stay here until you delete them. We also recommend saving completed media to your device.'}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -481,7 +477,7 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
                       </p>
                     )}
                     <p className="mt-2 text-center text-[11px] text-muted-foreground">
-                      {locale === 'ru' ? 'Запись об ошибке хранится здесь 24 часа.' : 'This failed item stays here for 24 hours.'}
+                      {locale === 'ru' ? 'Запись останется в «Моих работах», пока вы сами её не удалите.' : 'This item stays in My Works until you delete it.'}
                     </p>
                   </div>
                 )}
