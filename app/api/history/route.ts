@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { deleteStorageObjects, hasDatabase, supabaseFetch } from '@/lib/server/supabase'
+import { createStorageSignedDownloadUrl, deleteStorageObjects, hasDatabase, supabaseFetch } from '@/lib/server/supabase'
 import { verifyTelegramInitData } from '@/lib/server/telegram-auth'
 
 export const dynamic = 'force-dynamic'
@@ -32,13 +32,26 @@ function collectOwnedInputPaths(value: unknown, telegramId: number, out = new Se
   return out
 }
 
+function parseStorageResult(value: unknown) {
+  if (typeof value !== 'string' || !value.startsWith('storage://')) return null
+  try {
+    const parsed = new URL(value)
+    const bucket = parsed.hostname
+    const path = decodeURIComponent(parsed.pathname.replace(/^\/+/, ''))
+    if (!bucket || !path) return null
+    return { bucket, path }
+  } catch {
+    return null
+  }
+}
+
 export async function GET(request: Request) {
   const user = verifyTelegramInitData(request.headers.get('x-telegram-init-data') || '')
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!hasDatabase()) {
     return NextResponse.json({
       history: [],
-      pagination: { limit: 5, offset: 0, nextOffset: 0, hasMore: false },
+      pagination: { limit: 5, offset: 0, nextOffset: 0, hasMore: false, total: 0 },
     })
   }
 
@@ -53,37 +66,57 @@ export async function GET(request: Request) {
   // even when the REST layer enforces its own maximum row count.
   const response = await supabaseFetch(
     `generation_history?select=id,type,title,status,created_at,failed_at,result_url,error_code,provider,model,source_id,result_metadata&telegram_id=eq.${user.id}&deleted_at=is.null&order=created_at.desc&limit=${limit}&offset=${offset}`,
+    { headers: { Prefer: 'count=exact' } },
   )
   if (!response.ok) {
     return NextResponse.json({
       history: [],
-      pagination: { limit, offset, nextOffset: offset, hasMore: false },
+      pagination: { limit, offset, nextOffset: offset, hasMore: false, total: 0 },
     })
   }
 
   const rows = await response.json()
   const pageRows = Array.isArray(rows) ? rows.slice(0, limit) : []
-  return NextResponse.json({
-    history: pageRows.map((row: any) => ({
+  const contentRange = response.headers.get('content-range') || ''
+  const parsedTotal = Number(contentRange.split('/')[1])
+  const total = Number.isFinite(parsedTotal) ? parsedTotal : null
+
+  const history = await Promise.all(pageRows.map(async (row: any) => {
+    let resultUrl = row.result_url || null
+    const stored = parseStorageResult(resultUrl)
+    if (stored) {
+      try {
+        resultUrl = await createStorageSignedDownloadUrl(stored.bucket, stored.path, 7200)
+      } catch {
+        resultUrl = null
+      }
+    }
+
+    return {
       id: String(row.id),
       type: row.type,
       title: row.title,
       status: row.status,
       createdAt: row.created_at,
       failedAt: row.failed_at || null,
-      resultUrl: row.result_url || null,
+      resultUrl,
       error: row.status === 'failed' ? 'GENERATION_FAILED' : null,
       failureType: row.status === 'failed' ? failureType(row) : null,
       retryable: row.status === 'failed' ? row?.result_metadata?.apimodels_retryable === true : false,
       provider: row.provider || null,
       model: row.model || null,
       sourceId: row.source_id || null,
-    })),
+    }
+  }))
+
+  return NextResponse.json({
+    history,
     pagination: {
       limit,
       offset,
       nextOffset: offset + pageRows.length,
-      hasMore: pageRows.length === limit,
+      hasMore: total == null ? pageRows.length === limit : offset + pageRows.length < total,
+      total,
     },
   })
 }
@@ -102,7 +135,7 @@ export async function DELETE(request: Request) {
   }
 
   const targetQuery = deleteAll
-    ? `generation_history?select=id,status,input_payload&telegram_id=eq.${user.id}&deleted_at=is.null&status=in.(completed,failed)`
+    ? `generation_history?select=id,status,input_payload,result_url&telegram_id=eq.${user.id}&deleted_at=is.null&status=in.(completed,failed)`
     : `generation_history?select=id,status,input_payload&telegram_id=eq.${user.id}&id=eq.${encodeURIComponent(jobId)}&deleted_at=is.null&limit=1`
 
   const targetResponse = await supabaseFetch(targetQuery)
@@ -121,6 +154,10 @@ export async function DELETE(request: Request) {
   const candidatePaths = new Set<string>()
   targets.forEach((row: any) => {
     collectOwnedInputPaths(row.input_payload, user.id).forEach((path) => candidatePaths.add(path))
+    const stored = parseStorageResult(row.result_url)
+    if (stored?.bucket === 'generation-inputs' && stored.path.startsWith(`${user.id}/`)) {
+      candidatePaths.add(stored.path)
+    }
   })
 
   // A repeated generation can reuse the same uploaded input. Keep any file that is still
