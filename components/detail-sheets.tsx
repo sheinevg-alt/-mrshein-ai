@@ -837,6 +837,7 @@ function TrendFlow({ trend, onGenerationStarted }: { trend: Trend; onGenerationS
   ))
   const [generateAudio, setGenerateAudio] = useState(trend.generateAudioDefault ?? true)
   const [resolution, setResolution] = useState<'480p' | '720p' | '1080p'>('480p')
+  const [trendTokens, setTrendTokens] = useState(Math.max(0, Number(trend.tokens || 0)))
   const resolutionOptions: Array<'480p' | '720p' | '1080p'> = trend.resolutions?.length
     ? trend.resolutions
     : ['480p', '720p', '1080p']
@@ -845,8 +846,26 @@ function TrendFlow({ trend, onGenerationStarted }: { trend: Trend; onGenerationS
   const [resultMessage, setResultMessage] = useState('')
   const title = localize(trend.title, locale)
   const category = localize(getCategory(trend.category).name, locale)
-  const canAfford = tokenBalance >= trend.tokens
+  const canAfford = tokenBalance >= trendTokens
   const ready = trend.inputs.every((input) => !input.required || (typeof values[input.id] === 'string' ? Boolean((values[input.id] as string).trim()) : Boolean(values[input.id])))
+
+  useEffect(() => {
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      void fetch(`/api/trends/quote?trendId=${encodeURIComponent(trend.id)}&resolution=${encodeURIComponent(resolution)}`, {
+        cache: 'no-store',
+      }).then(async (response) => {
+        const data = await response.json().catch(() => ({}))
+        if (!cancelled && response.ok && Number.isFinite(Number(data?.tokenCost))) {
+          setTrendTokens(Math.max(0, Number(data.tokenCost)))
+        }
+      }).catch(() => undefined)
+    }, 120)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [trend.id, resolution])
 
   function setValue(id: string, value: InputValue) {
     setSubmitted(false)
@@ -982,7 +1001,7 @@ function TrendFlow({ trend, onGenerationStarted }: { trend: Trend; onGenerationS
       </div>
       <div className="mt-3 flex items-center justify-between gap-3">
         <span className="text-xs text-muted-foreground">{category} · {t('trend.uses', { count: trend.uses })}</span>
-        <TokenCost amount={trend.tokens} />
+        <TokenCost amount={trendTokens} />
       </div>
 
       {trend.inputs.length > 0 ? (
@@ -1102,7 +1121,11 @@ function TrendFlow({ trend, onGenerationStarted }: { trend: Trend; onGenerationS
         className="brand-gradient mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-white shadow-[0_10px_24px_-12px_oklch(0.5_0.21_264/0.8)] transition active:scale-[0.98] disabled:opacity-45 disabled:shadow-none"
       >
         <Sparkles className="size-4" aria-hidden="true" />
-        {generating ? (locale === 'ru' ? 'Запускаю…' : 'Starting…') : canAfford ? t('trend.generate', { count: trend.tokens }) : t('trend.notEnough')}
+        {generating
+          ? (locale === 'ru' ? 'Запускаю…' : 'Starting…')
+          : canAfford
+            ? t('trend.generate', { count: trendTokens })
+            : (locale === 'ru' ? `Нужно ${trendTokens} Tokens` : `Need ${trendTokens} Tokens`)}
       </button>
       <p className="mt-3 text-center text-xs text-muted-foreground" aria-live="polite">
         {submitted || generating ? resultMessage : (locale === 'ru' ? 'После запуска задача сразу появится в «Мои работы».' : 'After launch, the job will appear in My works immediately.')}
