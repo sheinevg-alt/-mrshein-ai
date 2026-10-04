@@ -66,7 +66,9 @@ export async function POST(request: Request) {
 
   const duration = Math.round(clampNumber(settings.duration, 3, 30, 5))
   const resolution = String(settings.resolution || (tool.category === 'video' ? '720p' : '2k')).toLowerCase()
-  const quality = String(settings.quality || 'medium').toLowerCase()
+  const quality = toolId === 'gpt-image-2-5'
+    ? 'max'
+    : String(settings.quality || 'medium').toLowerCase()
   const mode = String(settings.mode || 'std').toLowerCase()
   const generateAudio = settings.generateAudio === true
 
