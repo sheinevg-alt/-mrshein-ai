@@ -7,11 +7,13 @@ import { useI18n } from '../i18n-provider'
 import { useUserState, type HistoryItem } from '../user-provider'
 import type { UpscaleSource } from '../upscale-sheet'
 
-function isVideoUrl(url: string) {
+function isVideoUrl(url: unknown) {
+  if (typeof url !== 'string') return false
   return /\.(mp4|webm|mov)(\?|$)/i.test(url) || url.includes('/Video/') || url.includes('cloudfront.net') || url.includes('/videos/')
 }
 
-function isAudioUrl(url: string) {
+function isAudioUrl(url: unknown) {
+  if (typeof url !== 'string') return false
   return /\.(mp3|wav|m4a|aac|ogg|flac)(\?|$)/i.test(url) || url.includes('/audio/')
 }
 
@@ -84,6 +86,7 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
   const [retryErrorId, setRetryErrorId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<HistoryItem | null>(null)
   const [workFilter, setWorkFilter] = useState<'all' | 'video' | 'image' | 'audio'>('all')
+  const [visibleLimit, setVisibleLimit] = useState(6)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(false)
   const [mediaInfo, setMediaInfo] = useState<Record<string, { width: number; height: number; duration: number }>>({})
@@ -118,6 +121,15 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
       : visibleHistory.filter((item) => mediaKind(item) === workFilter),
     [visibleHistory, workFilter],
   )
+
+  const renderedHistory = useMemo(
+    () => filteredHistory.slice(0, visibleLimit),
+    [filteredHistory, visibleLimit],
+  )
+
+  useEffect(() => {
+    setVisibleLimit(6)
+  }, [workFilter])
 
   useEffect(() => {
     markWorksSeen()
@@ -198,7 +210,7 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
 
   async function downloadResult(item: HistoryItem) {
     const initData = getTelegramInitData()
-    if (!initData || !item.resultUrl) return
+    if (!initData || typeof item.resultUrl !== 'string' || !item.resultUrl) return
     setDownloadingId(item.id)
     setDownloadErrorId(null)
 
@@ -371,7 +383,7 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {filteredHistory.map((item) => {
+          {renderedHistory.map((item) => {
             const created = new Date(item.createdAt)
             const dateLabel = Number.isNaN(created.getTime())
               ? ''
@@ -438,14 +450,14 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
                   </div>
                 )}
 
-                {item.status === 'completed' && item.resultUrl && (
+                {item.status === 'completed' && typeof item.resultUrl === 'string' && item.resultUrl && (
                   <div className="mt-3">
                     <div className={`overflow-hidden rounded-2xl border ${audio ? 'bg-card p-3' : 'bg-black'}`}>
                       {audio ? (
                         <audio
                           src={item.resultUrl}
                           controls
-                          preload="metadata"
+                          preload="none"
                           className="w-full"
                           onLoadedMetadata={(event) => {
                             const el = event.currentTarget
@@ -460,7 +472,7 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
                           src={item.resultUrl}
                           controls
                           playsInline
-                          preload="metadata"
+                          preload="none"
                           className="max-h-[58dvh] w-full object-contain"
                           onLoadedMetadata={(event) => {
                             const el = event.currentTarget
@@ -579,6 +591,18 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
               </article>
             )
           })}
+          {visibleLimit < filteredHistory.length && (
+            <button
+              type="button"
+              onClick={() => {
+                haptics.selection()
+                setVisibleLimit((current) => current + 6)
+              }}
+              className="glass mt-1 flex h-11 w-full items-center justify-center rounded-full text-sm font-semibold text-brand transition active:scale-[0.98]"
+            >
+              {locale === 'ru' ? 'Показать ещё' : 'Show more'}
+            </button>
+          )}
         </div>
       )}
 
