@@ -47,6 +47,7 @@ export async function GET(request: Request) {
       earnedRub: Number(earnedRub.toFixed(2)),
       availableRub: Number(balance.available_rub || 0),
       pendingRub: Number(balance.pending_rub || 0),
+      commissionPct: Number((Number(profile.referral_rate || 0.15) * 100).toFixed(2)),
       referredBy: profile.referred_by ? Number(profile.referred_by) : null,
       createdAt: profile.created_at,
       lastSeenAt: user.last_seen_at || null,
@@ -79,6 +80,44 @@ export async function POST(request: Request) {
   if (!hasDatabase()) return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
 
   const body = await request.json().catch(() => ({}))
+  const action = String(body?.action || '')
+
+  if (action === 'set_referral_rate') {
+    const telegramId = Number(body?.telegramId)
+    const commissionPct = Number(body?.commissionPct)
+
+    if (!Number.isSafeInteger(telegramId) || telegramId <= 0) {
+      return NextResponse.json({ error: 'Invalid Telegram ID' }, { status: 400 })
+    }
+    if (!Number.isFinite(commissionPct) || commissionPct < 0 || commissionPct > 30) {
+      return NextResponse.json({ error: 'Referral rate must be between 0% and 30%' }, { status: 400 })
+    }
+
+    const response = await supabaseFetch(`referral_profiles?telegram_id=eq.${telegramId}`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({
+        referral_rate: Number((commissionPct / 100).toFixed(4)),
+        updated_at: new Date().toISOString(),
+      }),
+    })
+    const raw = await response.text()
+    if (!response.ok) {
+      return NextResponse.json({ error: raw || 'Could not update referral rate' }, { status: 500 })
+    }
+    let updated: any[] = []
+    try { updated = raw ? JSON.parse(raw) : [] } catch { updated = [] }
+    if (!Array.isArray(updated) || updated.length === 0) {
+      return NextResponse.json({ error: 'Referral profile not found' }, { status: 404 })
+    }
+
+    return NextResponse.json({
+      ok: true,
+      telegramId,
+      commissionPct: Number((Number(updated[0]?.referral_rate || 0) * 100).toFixed(2)),
+    })
+  }
+
   const requestId = String(body?.requestId || '')
   const nextStatus = String(body?.status || '')
   const note = String(body?.note || '').trim().slice(0, 500)
