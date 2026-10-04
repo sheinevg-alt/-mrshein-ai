@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!hasDatabase()) return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
 
-  await rpc('ensure_referral_profile', { p_telegram_id: user.id, p_preferred_code: null })
+  await rpc('ensure_referral_profile', { p_telegram_id: user.id, p_preferred_code: user.username || null })
   await rpc('release_due_referral_commissions', {})
 
   const [profileResponse, balanceResponse, referredResponse, commissionsResponse, usersResponse, payoutsResponse] = await Promise.all([
@@ -62,7 +62,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     referralCode,
     referralLink,
-    commissionPct: Math.round(Number(profile?.referral_rate || 0.2) * 100),
+    commissionPct: Math.round(Number(profile?.referral_rate || 0.15) * 100),
     invitedCount: Array.isArray(referred) ? referred.length : 0,
     availableRub: Math.max(0, Number(balance?.available_rub || 0) - reservedPayoutRub),
     reservedPayoutRub: Number(reservedPayoutRub.toFixed(2)),
