@@ -90,6 +90,7 @@ export default function AdminPage() {
   const [editingArticleId, setEditingArticleId] = useState<string | null>(null)
 
   const [tickets, setTickets] = useState<TicketRow[]>([])
+  const [supportFilter, setSupportFilter] = useState<'all' | 'collaboration'>('all')
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({})
 
   useEffect(() => {
@@ -383,18 +384,26 @@ export default function AdminPage() {
       {tab === 'support' && (
         <section className="mt-6">
           <div className="mb-4"><h2 className="text-lg font-semibold">Служба заботы</h2><p className="text-xs text-muted-foreground">Пользователь сначала видит базу знаний. Если она не помогла — обращение появляется здесь.</p></div>
+          <div className="mb-4 flex gap-2">
+            <button type="button" onClick={() => setSupportFilter('all')} className={`rounded-full border px-3 py-2 text-xs font-medium ${supportFilter === 'all' ? 'bg-foreground text-background' : ''}`}>
+              Все · {tickets.length}
+            </button>
+            <button type="button" onClick={() => setSupportFilter('collaboration')} className={`rounded-full border px-3 py-2 text-xs font-medium ${supportFilter === 'collaboration' ? 'bg-foreground text-background' : ''}`}>
+              Сотрудничество · {tickets.filter((ticket) => ticket.topic === 'collaboration').length}
+            </button>
+          </div>
           <div className="space-y-3">
-            {tickets.map((ticket) => {
+            {tickets.filter((ticket) => supportFilter === 'all' || ticket.topic === 'collaboration').map((ticket) => {
               const name = [ticket.first_name, ticket.last_name].filter(Boolean).join(' ') || ticket.username || String(ticket.telegram_id)
               return <article key={ticket.id} className="glass rounded-2xl p-4">
-                <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-semibold">{name}</p><p className="text-[11px] text-muted-foreground">{ticket.topic} · {new Date(ticket.created_at).toLocaleString('ru-RU')}</p></div><span className="rounded-full bg-muted px-2 py-1 text-[10px]">{ticket.status}</span></div>
+                <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-semibold">{name}</p><p className="text-[11px] text-muted-foreground">{ticket.topic === 'collaboration' ? 'Сотрудничество' : ticket.topic} · {new Date(ticket.created_at).toLocaleString('ru-RU')}</p></div><span className="rounded-full bg-muted px-2 py-1 text-[10px]">{ticket.status}</span></div>
                 <p className="mt-3 text-sm leading-relaxed">{ticket.message}</p>
                 {ticket.admin_reply && <div className="mt-3 rounded-xl bg-brand-tint/60 p-3"><p className="text-[10px] font-semibold text-brand">Последний ответ</p><p className="mt-1 text-xs">{ticket.admin_reply}</p></div>}
                 <textarea rows={3} value={replyDrafts[ticket.id] ?? ticket.admin_reply ?? ''} onChange={(e) => setReplyDrafts((current) => ({ ...current, [ticket.id]: e.target.value }))} placeholder="Ответ от Службы заботы" className="mt-3 w-full resize-none rounded-2xl border bg-card p-3 text-sm" />
                 <div className="mt-2 flex gap-2"><button type="button" disabled={busy} onClick={() => void answerTicket(ticket, 'answered')} className="brand-gradient flex-1 rounded-full px-3 py-2 text-xs font-semibold text-white">Ответить в Telegram</button><button type="button" disabled={busy} onClick={() => void answerTicket(ticket, 'closed')} className="rounded-full border px-3 py-2 text-xs">Закрыть</button></div>
               </article>
             })}
-            {tickets.length === 0 && <p className="rounded-2xl border p-5 text-center text-sm text-muted-foreground">Новых обращений пока нет.</p>}
+            {tickets.filter((ticket) => supportFilter === 'all' || ticket.topic === 'collaboration').length === 0 && <p className="rounded-2xl border p-5 text-center text-sm text-muted-foreground">{supportFilter === 'collaboration' ? 'Предложений о сотрудничестве пока нет.' : 'Новых обращений пока нет.'}</p>}
           </div>
         </section>
       )}
