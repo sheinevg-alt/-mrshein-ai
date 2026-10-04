@@ -124,7 +124,7 @@ export const en = {
   'generation.backendNeeded': 'Connect the backend to test the full generation flow.',
 
   'referral.title': 'Referral program',
-  'referral.intro': 'Invite friends and earn 20% from their purchases.',
+  'referral.intro': 'Invite friends and earn 15% from their purchases.',
   'referral.balance': 'Available',
   'referral.pending': 'Pending',
   'referral.invited': 'Invited',
@@ -273,7 +273,7 @@ const ru: Record<MessageKey, string> = {
   'generation.backendNeeded': 'Подключи backend, чтобы проверить полный цикл генерации.',
 
   'referral.title': 'Реферальная программа',
-  'referral.intro': 'Приглашай друзей и получай 20% с их покупок.',
+  'referral.intro': 'Приглашай друзей и получай 15% с их покупок.',
   'referral.balance': 'Доступно',
   'referral.pending': 'Ожидает',
   'referral.invited': 'Приглашено',
