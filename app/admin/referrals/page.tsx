@@ -52,13 +52,17 @@ export default function ReferralAdminPage() {
 
   useEffect(() => {
     const saved = window.sessionStorage.getItem('mrshein.admin.secret')
-    if (saved) setSecret(saved)
+    if (saved) {
+      setSecret(saved)
+      void load(saved)
+    }
   }, [])
 
-  async function load() {
+  async function load(secretOverride?: string) {
+    const activeSecret = secretOverride || secret
     setStatus('Загрузка…')
     const response = await fetch('/api/admin/referrals', {
-      headers: { Authorization: `Bearer ${secret}` },
+      headers: { Authorization: `Bearer ${activeSecret}` },
       cache: 'no-store',
     })
     const data = await response.json().catch(() => ({}))
@@ -67,7 +71,7 @@ export default function ReferralAdminPage() {
       setStatus(data?.error || 'Ошибка')
       return
     }
-    window.sessionStorage.setItem('mrshein.admin.secret', secret)
+    window.sessionStorage.setItem('mrshein.admin.secret', activeSecret)
     setAuthorized(true)
     setSummary(data.summary || null)
     setRows(data.referrals || [])
