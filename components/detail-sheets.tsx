@@ -576,14 +576,7 @@ function ModelToolFlow({
               {['1:1','9:16','16:9','4:3','3:4'].map((value) => <option key={value}>{value}</option>)}
             </select>
           </label>
-          {tool.id === 'gpt-image-2-5' && (
-            <label className="col-span-2 rounded-2xl border bg-card p-3 text-xs text-muted-foreground">
-              <span>{locale === 'ru' ? 'Детализация' : 'Detail quality'}</span>
-              <select value={quality} onChange={(e) => setQuality(e.target.value)} className="mt-2 h-10 w-full rounded-xl border bg-background px-2 text-sm font-semibold text-foreground">
-                {['low','medium','high','xhigh','max'].map((value) => <option key={value}>{value}</option>)}
-              </select>
-            </label>
-          )}
+
         </div>
       )}
 
