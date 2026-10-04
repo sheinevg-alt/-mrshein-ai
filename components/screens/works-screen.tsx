@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, CheckCircle2, Clock3, Download, Expand, ExternalLink, FolderOpen, LoaderCircle, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Clock3, Download, Expand, ExternalLink, FolderOpen, Image as ImageIcon, LoaderCircle, RefreshCw, RotateCcw, Trash2, Video } from 'lucide-react'
 import { getTelegramInitData, getWebApp, haptics, openExternalLink } from '@/lib/telegram'
 import { useI18n } from '../i18n-provider'
 import { useUserState, type HistoryItem } from '../user-provider'
@@ -73,7 +73,8 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
   const [downloadErrorId, setDownloadErrorId] = useState<string | null>(null)
   const [retryingId, setRetryingId] = useState<string | null>(null)
   const [retryErrorId, setRetryErrorId] = useState<string | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<HistoryItem | 'all' | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<HistoryItem | null>(null)
+  const [workFilter, setWorkFilter] = useState<'all' | 'video' | 'image'>('all')
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(false)
   const [mediaInfo, setMediaInfo] = useState<Record<string, { width: number; height: number; duration: number }>>({})
@@ -85,9 +86,26 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
     return Date.now() - failed < 24 * 60 * 60 * 1000
   }), [history])
 
-  const deletableCount = useMemo(
-    () => visibleHistory.filter((item) => item.status === 'completed' || item.status === 'failed').length,
-    [visibleHistory],
+  const mediaKind = (item: HistoryItem): 'video' | 'image' | 'unknown' => {
+    if (item.resultUrl) return isVideoUrl(item.resultUrl) ? 'video' : 'image'
+    const title = String(item.title || '').toLowerCase()
+    const model = String(item.model || '').toLowerCase()
+    if (title.includes('video') || /seedance|veo|runway|kling.*video/.test(model)) return 'video'
+    if (title.includes('image') || /nano|gpt-image|midjourney|flux|image/.test(model)) return 'image'
+    return 'unknown'
+  }
+
+  const workCounts = useMemo(() => ({
+    all: visibleHistory.length,
+    video: visibleHistory.filter((item) => mediaKind(item) === 'video').length,
+    image: visibleHistory.filter((item) => mediaKind(item) === 'image').length,
+  }), [visibleHistory])
+
+  const filteredHistory = useMemo(
+    () => workFilter === 'all'
+      ? visibleHistory
+      : visibleHistory.filter((item) => mediaKind(item) === workFilter),
+    [visibleHistory, workFilter],
   )
 
   useEffect(() => {
@@ -147,9 +165,7 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
     setDeleting(true)
     setDeleteError(false)
     try {
-      const endpoint = deleteTarget === 'all'
-        ? '/api/history?all=1'
-        : `/api/history?jobId=${encodeURIComponent(deleteTarget.id)}`
+      const endpoint = `/api/history?jobId=${encodeURIComponent(deleteTarget.id)}`
       const response = await fetch(endpoint, {
         method: 'DELETE',
         headers: { 'X-Telegram-Init-Data': initData },
@@ -278,20 +294,6 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {deletableCount > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                haptics.impact('light')
-                setDeleteError(false)
-                setDeleteTarget('all')
-              }}
-              className="glass flex h-10 items-center justify-center gap-1.5 rounded-full px-3 text-xs font-semibold text-destructive transition active:scale-95"
-            >
-              <Trash2 className="size-4" />
-              {locale === 'ru' ? 'Удалить всё' : 'Delete all'}
-            </button>
-          )}
           <button
             type="button"
             onClick={() => void manualRefresh()}
@@ -304,6 +306,34 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
         </div>
       </header>
 
+      {visibleHistory.length > 0 && (
+        <div className="mb-4 grid grid-cols-3 gap-2 rounded-2xl bg-muted/45 p-1.5">
+          {([
+            { key: 'all', icon: FolderOpen, ru: 'Все', en: 'All', count: workCounts.all },
+            { key: 'video', icon: Video, ru: 'Видео', en: 'Video', count: workCounts.video },
+            { key: 'image', icon: ImageIcon, ru: 'Изображения', en: 'Images', count: workCounts.image },
+          ] as const).map((filter) => {
+            const Icon = filter.icon
+            const active = workFilter === filter.key
+            return (
+              <button
+                key={filter.key}
+                type="button"
+                onClick={() => {
+                  haptics.selection()
+                  setWorkFilter(filter.key)
+                }}
+                className={`flex h-10 min-w-0 items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-semibold transition active:scale-[0.98] ${active ? 'bg-background text-brand shadow-sm' : 'text-muted-foreground'}`}
+              >
+                <Icon className="size-3.5 shrink-0" />
+                <span className="truncate">{locale === 'ru' ? filter.ru : filter.en}</span>
+                <span className={`shrink-0 text-[10px] ${active ? 'text-brand' : 'text-muted-foreground/70'}`}>{filter.count}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       {visibleHistory.length === 0 ? (
         <div className="glass flex flex-col items-center rounded-3xl px-6 py-12 text-center">
           <span className="flex size-12 items-center justify-center rounded-2xl bg-brand-tint text-brand">
@@ -314,9 +344,20 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
             {locale === 'ru' ? 'После запуска генерации задача сразу появится здесь.' : 'A new job appears here as soon as generation starts.'}
           </p>
         </div>
+      ) : filteredHistory.length === 0 ? (
+        <div className="glass flex flex-col items-center rounded-3xl px-6 py-10 text-center">
+          <span className="flex size-12 items-center justify-center rounded-2xl bg-brand-tint text-brand">
+            {workFilter === 'video' ? <Video className="size-6" /> : <ImageIcon className="size-6" />}
+          </span>
+          <h2 className="mt-4 text-base font-semibold">
+            {locale === 'ru'
+              ? (workFilter === 'video' ? 'Видео пока нет' : 'Изображений пока нет')
+              : (workFilter === 'video' ? 'No videos yet' : 'No images yet')}
+          </h2>
+        </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {visibleHistory.map((item) => {
+          {filteredHistory.map((item) => {
             const created = new Date(item.createdAt)
             const dateLabel = Number.isNaN(created.getTime())
               ? ''
@@ -524,18 +565,12 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
               <Trash2 className="size-6" />
             </div>
             <h2 className="mt-4 text-center text-lg font-semibold">
-              {deleteTarget === 'all'
-                ? (locale === 'ru' ? 'Удалить все работы?' : 'Delete all works?')
-                : (locale === 'ru' ? 'Удалить эту работу?' : 'Delete this work?')}
+              {locale === 'ru' ? 'Удалить эту работу?' : 'Delete this work?'}
             </h2>
             <p className="mt-2 text-center text-sm leading-5 text-muted-foreground">
-              {deleteTarget === 'all'
-                ? (locale === 'ru'
-                    ? `Будут навсегда удалены все готовые и неудачные работы (${deletableCount}), а также их загруженные исходники из хранилища Banana Zero. Активные генерации останутся. Восстановить удалённое нельзя.`
-                    : `All completed and failed works (${deletableCount}) and their uploaded source files will be permanently removed from Banana Zero storage. Active generations will remain. This cannot be undone.`)
-                : (locale === 'ru'
-                    ? 'Результат исчезнет из «Моих работ», а связанные загруженные исходники будут удалены из хранилища Banana Zero. Восстановить работу нельзя.'
-                    : 'The result will disappear from My works and related uploaded source files will be removed from Banana Zero storage. This cannot be undone.')}
+              {locale === 'ru'
+                ? 'Результат исчезнет из «Моих работ», а связанные загруженные исходники будут удалены из хранилища Banana Zero. Восстановить работу нельзя.'
+                : 'The result will disappear from My works and related uploaded source files will be removed from Banana Zero storage. This cannot be undone.'}
             </p>
 
             {deleteError && (
