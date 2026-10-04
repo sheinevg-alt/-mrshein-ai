@@ -35,15 +35,35 @@ function collectOwnedInputPaths(value: unknown, telegramId: number, out = new Se
 export async function GET(request: Request) {
   const user = verifyTelegramInitData(request.headers.get('x-telegram-init-data') || '')
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!hasDatabase()) return NextResponse.json({ history: [] })
+  if (!hasDatabase()) {
+    return NextResponse.json({
+      history: [],
+      pagination: { limit: 5, offset: 0, nextOffset: 0, hasMore: false },
+    })
+  }
 
+  const url = new URL(request.url)
+  const requestedLimit = Number(url.searchParams.get('limit') || '5')
+  const requestedOffset = Number(url.searchParams.get('offset') || '0')
+  const limit = Number.isFinite(requestedLimit) ? Math.min(5, Math.max(1, Math.floor(requestedLimit))) : 5
+  const offset = Number.isFinite(requestedOffset) ? Math.max(0, Math.floor(requestedOffset)) : 0
+
+  // Fetch one extra lightweight row only to determine whether a next page exists.
+  // Each request returns no more than five works to keep Telegram WebView traffic small.
   const response = await supabaseFetch(
-    `generation_history?select=id,type,title,status,created_at,failed_at,result_url,error_code,provider,model,source_id,result_metadata&telegram_id=eq.${user.id}&deleted_at=is.null&order=created_at.desc&limit=50`,
+    `generation_history?select=id,type,title,status,created_at,failed_at,result_url,error_code,provider,model,source_id,result_metadata&telegram_id=eq.${user.id}&deleted_at=is.null&order=created_at.desc&limit=${limit + 1}&offset=${offset}`,
   )
-  if (!response.ok) return NextResponse.json({ history: [] })
+  if (!response.ok) {
+    return NextResponse.json({
+      history: [],
+      pagination: { limit, offset, nextOffset: offset, hasMore: false },
+    })
+  }
+
   const rows = await response.json()
+  const pageRows = Array.isArray(rows) ? rows.slice(0, limit) : []
   return NextResponse.json({
-    history: rows.map((row: any) => ({
+    history: pageRows.map((row: any) => ({
       id: String(row.id),
       type: row.type,
       title: row.title,
@@ -58,6 +78,12 @@ export async function GET(request: Request) {
       model: row.model || null,
       sourceId: row.source_id || null,
     })),
+    pagination: {
+      limit,
+      offset,
+      nextOffset: offset + pageRows.length,
+      hasMore: Array.isArray(rows) && rows.length > limit,
+    },
   })
 }
 
