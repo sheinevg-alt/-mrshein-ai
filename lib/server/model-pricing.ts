@@ -59,12 +59,14 @@ export function estimateProviderUsd(input: ToolQuoteInput) {
     case 'nano-banana-pro':
       return resolution === '4k' ? 0.15 : 0.10
     case 'gpt-image-2-5': {
-      const table: Record<string, Record<string, number>> = {
-        '1k': { low: 0.008, medium: 0.025, high: 0.045, xhigh: 0.08, max: 0.18 },
-        '2k': { low: 0.012, medium: 0.028, high: 0.09, xhigh: 0.16, max: 0.35 },
-        '4k': { low: 0.020, medium: 0.045, high: 0.15, xhigh: 0.26, max: 0.58 },
+      // Banana Zero always uses maximum image detail for GPT Image 2.5.
+      // Customer pricing therefore depends only on output resolution.
+      const table: Record<string, number> = {
+        '1k': 0.18,
+        '2k': 0.35,
+        '4k': 0.58,
       }
-      return table[resolution || '2k']?.[quality] ?? 0.028
+      return table[resolution || '2k'] ?? table['2k']
     }
     case 'suno-v5':
       return 0.26
