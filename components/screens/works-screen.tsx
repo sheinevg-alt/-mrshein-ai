@@ -81,6 +81,7 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
   const { refreshUser, markWorksSeen } = useUserState()
   const [works, setWorks] = useState<HistoryItem[]>([])
   const [hasMore, setHasMore] = useState(false)
+  const [totalWorks, setTotalWorks] = useState<number | null>(null)
   const [nextOffset, setNextOffset] = useState(0)
   const [loadingPage, setLoadingPage] = useState(false)
   const [openMedia, setOpenMedia] = useState<HistoryItem | null>(null)
@@ -108,11 +109,11 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
   }
 
   const workCounts = useMemo(() => ({
-    all: visibleHistory.length,
+    all: totalWorks ?? visibleHistory.length,
     video: visibleHistory.filter((item) => mediaKind(item) === 'video').length,
     image: visibleHistory.filter((item) => mediaKind(item) === 'image').length,
     audio: visibleHistory.filter((item) => mediaKind(item) === 'audio').length,
-  }), [visibleHistory])
+  }), [visibleHistory, totalWorks])
 
   const filteredHistory = useMemo(
     () => workFilter === 'all'
@@ -140,7 +141,15 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
         const seen = new Set(current.map((item) => item.id))
         return [...current, ...page.filter((item) => !seen.has(item.id))]
       })
-      setHasMore(Boolean(data?.pagination?.hasMore) || page.length === 5)
+      const reportedTotal = Number(data?.pagination?.total)
+      const safeTotal = Number.isFinite(reportedTotal) && reportedTotal >= 0 ? reportedTotal : null
+      setTotalWorks(safeTotal)
+      const loadedCount = replace ? page.length : Math.max(works.length, offset) + page.length
+      setHasMore(
+        safeTotal == null
+          ? (Boolean(data?.pagination?.hasMore) || page.length === 5)
+          : loadedCount < safeTotal,
+      )
       setNextOffset(
         typeof data?.pagination?.nextOffset === 'number'
           ? data.pagination.nextOffset
@@ -149,7 +158,7 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
     } finally {
       if (!replace) setLoadingPage(false)
     }
-  }, [])
+  }, [works.length])
 
   useEffect(() => {
     markWorksSeen()
@@ -381,6 +390,31 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
         </div>
       )}
 
+      {visibleHistory.length > 0 && totalWorks != null && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border bg-card px-4 py-3">
+          <p className="text-xs text-muted-foreground">
+            {locale === 'ru'
+              ? `Показано ${visibleHistory.length} из ${totalWorks} работ`
+              : `Showing ${visibleHistory.length} of ${totalWorks} works`}
+          </p>
+          {hasMore && (
+            <button
+              type="button"
+              onClick={() => {
+                haptics.selection()
+                void fetchWorksPage(nextOffset, false)
+              }}
+              disabled={loadingPage}
+              className="shrink-0 text-xs font-semibold text-brand disabled:opacity-55"
+            >
+              {loadingPage
+                ? (locale === 'ru' ? 'Загружаю…' : 'Loading…')
+                : (locale === 'ru' ? 'Показать ещё' : 'Show more')}
+            </button>
+          )}
+        </div>
+      )}
+
       {visibleHistory.length === 0 ? (
         <div className="glass flex flex-col items-center rounded-3xl px-6 py-12 text-center">
           <span className="flex size-12 items-center justify-center rounded-2xl bg-brand-tint text-brand">
@@ -566,6 +600,19 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
                         {locale === 'ru' ? 'Не удалось скачать файл. Попробуйте ещё раз.' : 'Could not download the file. Please try again.'}
                       </p>
                     )}
+                  </div>
+                )}
+
+                {item.status === 'completed' && !item.resultUrl && item.sourceId === 'elevenlabs-tts' && (
+                  <div className="mt-3 rounded-2xl border bg-card px-4 py-3">
+                    <p className="text-sm font-semibold">
+                      {locale === 'ru' ? 'Аудиофайл не был сохранён' : 'Audio file was not saved'}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      {locale === 'ru'
+                        ? 'Эта озвучка создана до обновления хранения TTS. Новые озвучки будут сохраняться в «Моих работах» и открываться отсюда.'
+                        : 'This voice-over was created before TTS storage was enabled. New voice-overs will be saved in My Works and playable here.'}
+                    </p>
                   </div>
                 )}
 
