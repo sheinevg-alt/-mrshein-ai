@@ -13,6 +13,13 @@ import { KlingMotionFlow, KlingOmniFlow, OmniFlashFlow } from './video-model-flo
 type FileUpload = { url: string; isVideo: boolean; isAudio: boolean; name: string; isDefault?: boolean; file?: File }
 type InputValue = FileUpload | string
 
+const TTS_VOICES = {
+  female: { id: 'EXAVITQu4vr4xnSDxMaL', ru: 'Женский', en: 'Female' },
+  male: { id: 'JBFqnCBsd6RMkjVDRZzb', ru: 'Мужской', en: 'Male' },
+} as const
+
+type TtsVoice = keyof typeof TTS_VOICES
+
 const QUICK_TOOL_CONFIG: Record<string, {
   targetId: string
   presetRu?: string
@@ -167,6 +174,7 @@ function ModelToolFlow({
   const [mode, setMode] = useState('std')
   const [generationMode, setGenerationMode] = useState<'text' | 'image'>(initialGenerationMode)
   const [sunoVersion, setSunoVersion] = useState('chirp-v5-5')
+  const [ttsVoice, setTtsVoice] = useState<TtsVoice>('female')
   const [generateAudio, setGenerateAudio] = useState(false)
   const [reasoningEffort, setReasoningEffort] = useState('medium')
   const [quotedTokens, setQuotedTokens] = useState<number | null>(null)
@@ -174,6 +182,8 @@ function ModelToolFlow({
   const [message, setMessage] = useState('')
   const [textResult, setTextResult] = useState('')
   const [audioDataUrl, setAudioDataUrl] = useState('')
+  const [savingAudio, setSavingAudio] = useState(false)
+  const [audioSaveError, setAudioSaveError] = useState('')
 
   const isVideo = tool.category === 'video'
   const isImage = tool.category === 'image'
@@ -191,7 +201,7 @@ function ModelToolFlow({
         body: JSON.stringify({
           toolId: tool.id,
           promptLength: prompt.length,
-          settings: { duration, resolution, ratio, quality, mode, generateAudio, reasoningEffort, sunoVersion },
+          settings: { duration, resolution, ratio, quality, mode, generateAudio, reasoningEffort, sunoVersion, voiceId: TTS_VOICES[ttsVoice].id },
         }),
       }).then(async (response) => {
         const data = await response.json().catch(() => ({}))
@@ -201,7 +211,7 @@ function ModelToolFlow({
       }).catch(() => undefined)
     }, 200)
     return () => { cancelled = true; window.clearTimeout(timer) }
-  }, [tool.id, prompt.length, duration, resolution, ratio, quality, mode, generateAudio, reasoningEffort, sunoVersion])
+  }, [tool.id, prompt.length, duration, resolution, ratio, quality, mode, generateAudio, reasoningEffort, sunoVersion, ttsVoice])
 
   useEffect(() => () => {
     if (reference?.url) URL.revokeObjectURL(reference.url)
@@ -259,7 +269,7 @@ function ModelToolFlow({
           prompt: prompt.trim(),
           referencePaths,
           sourceVideoPath,
-          settings: { duration, resolution, ratio, quality, mode, generateAudio, reasoningEffort, sunoVersion },
+          settings: { duration, resolution, ratio, quality, mode, generateAudio, reasoningEffort, sunoVersion, voiceId: TTS_VOICES[ttsVoice].id },
         }),
       })
       const data = await response.json().catch(() => ({}))
@@ -297,6 +307,84 @@ function ModelToolFlow({
       setMessage(locale === 'ru' ? 'Не удалось запустить генерацию.' : 'Could not start generation.')
     } finally {
       setGenerating(false)
+    }
+  }
+
+  async function saveTtsAudio() {
+    if (!audioDataUrl || savingAudio) return
+
+    setSavingAudio(true)
+    setAudioSaveError('')
+    try {
+      const match = audioDataUrl.match(/^data:([^;,]+)?(?:;charset=[^;,]+)?(;base64)?,(.*)$/s)
+      if (!match) throw new Error('INVALID_AUDIO_DATA')
+
+      const mimeType = match[1] || 'audio/mpeg'
+      const encoded = match[3] || ''
+      let bytes: Uint8Array
+
+      if (match[2]) {
+        const binary = atob(encoded)
+        bytes = new Uint8Array(binary.length)
+        for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
+      } else {
+        bytes = new TextEncoder().encode(decodeURIComponent(encoded))
+      }
+
+      const extension = mimeType.includes('wav') ? 'wav'
+        : mimeType.includes('ogg') ? 'ogg'
+          : mimeType.includes('mp4') || mimeType.includes('m4a') ? 'm4a'
+            : 'mp3'
+      const filename = `Banana-Zero-voice.${extension}`
+      const blob = new Blob([bytes], { type: mimeType })
+      const file = new File([blob], filename, { type: mimeType })
+      const shareNavigator = navigator as Navigator & {
+        canShare?: (data?: ShareData) => boolean
+        share?: (data: ShareData) => Promise<void>
+      }
+
+      // Telegram on iPhone does not reliably honor <a download> for data: URLs.
+      // The native iOS share sheet reliably offers "Save to Files".
+      if (shareNavigator.share && (!shareNavigator.canShare || shareNavigator.canShare({ files: [file] }))) {
+        try {
+          await shareNavigator.share({ files: [file], title: filename })
+          haptics.success()
+          return
+        } catch (error) {
+          if (error instanceof DOMException && error.name === 'AbortError') return
+        }
+      }
+
+      const objectUrl = URL.createObjectURL(blob)
+      try {
+        const anchor = document.createElement('a')
+        anchor.href = objectUrl
+        anchor.download = filename
+        anchor.rel = 'noopener'
+        document.body.appendChild(anchor)
+        anchor.click()
+        anchor.remove()
+
+        // iOS WebViews may ignore the download attribute. Opening the Blob gives
+        // the user a native preview/share fallback instead of a dead button.
+        if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
+          window.setTimeout(() => window.open(objectUrl, '_blank'), 150)
+          window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+        } else {
+          window.setTimeout(() => URL.revokeObjectURL(objectUrl), 2_000)
+        }
+      } catch {
+        URL.revokeObjectURL(objectUrl)
+        throw new Error('AUDIO_SAVE_FAILED')
+      }
+
+      haptics.success()
+    } catch {
+      setAudioSaveError(locale === 'ru'
+        ? 'Не удалось сохранить MP3. Попробуйте ещё раз.'
+        : 'Could not save the MP3. Please try again.')
+    } finally {
+      setSavingAudio(false)
     }
   }
 
@@ -350,14 +438,50 @@ function ModelToolFlow({
         </label>
       )}
 
+      {tool.id === 'elevenlabs-tts' && (
+        <div className="mt-4">
+          <p className="text-xs font-medium text-muted-foreground">
+            {locale === 'ru' ? 'Голос' : 'Voice'}
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-2 rounded-2xl bg-muted/60 p-1">
+            {(['female', 'male'] as TtsVoice[]).map((voice) => (
+              <button
+                key={voice}
+                type="button"
+                onClick={() => {
+                  haptics.selection()
+                  setTtsVoice(voice)
+                }}
+                className={'h-10 rounded-xl px-3 text-sm font-semibold transition ' + (ttsVoice === voice ? 'bg-background text-brand shadow-sm' : 'text-muted-foreground')}
+              >
+                {locale === 'ru' ? TTS_VOICES[voice].ru : TTS_VOICES[voice].en}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] leading-4 text-muted-foreground">
+            {locale === 'ru'
+              ? 'Введите текст ниже и выберите мужской или женский голос.'
+              : 'Enter the text below and choose a male or female voice.'}
+          </p>
+        </div>
+      )}
+
       <label className="mt-5 block text-xs font-medium text-muted-foreground">
-        {isText ? (locale === 'ru' ? 'Задача / текст' : 'Task / text') : isAudio ? (locale === 'ru' ? 'Описание / текст' : 'Description / text') : (locale === 'ru' ? 'Промпт' : 'Prompt')}
+        {tool.id === 'elevenlabs-tts'
+          ? (locale === 'ru' ? 'Текст для озвучки' : 'Text to speak')
+          : isText
+            ? (locale === 'ru' ? 'Задача / текст' : 'Task / text')
+            : isAudio
+              ? (locale === 'ru' ? 'Описание / текст' : 'Description / text')
+              : (locale === 'ru' ? 'Промпт' : 'Prompt')}
       </label>
       <textarea
         rows={5}
         value={prompt}
         onChange={(event) => setPrompt(event.target.value)}
-        placeholder={locale === 'ru' ? 'Опишите, что нужно создать…' : 'Describe what you want to create…'}
+        placeholder={tool.id === 'elevenlabs-tts'
+          ? (locale === 'ru' ? 'Напишите текст, который хотите озвучить…' : 'Enter the text you want to turn into speech…')
+          : (locale === 'ru' ? 'Опишите, что нужно создать…' : 'Describe what you want to create…')}
         className="mt-2 w-full resize-none rounded-2xl border bg-card p-4 text-sm"
       />
 
@@ -510,9 +634,17 @@ function ModelToolFlow({
       {audioDataUrl && (
         <div className="mt-4 rounded-2xl border bg-card p-4">
           <audio src={audioDataUrl} controls className="w-full" />
-          <a href={audioDataUrl} download="Banana-Zero-voice.mp3" className="mt-3 flex h-10 items-center justify-center rounded-full border text-xs font-semibold">
-            {locale === 'ru' ? 'Скачать MP3' : 'Download MP3'}
-          </a>
+          <button
+            type="button"
+            onClick={() => void saveTtsAudio()}
+            disabled={savingAudio}
+            className="mt-3 flex h-10 w-full items-center justify-center rounded-full border text-xs font-semibold transition active:scale-[0.98] disabled:opacity-55"
+          >
+            {savingAudio
+              ? (locale === 'ru' ? 'Подготавливаю…' : 'Preparing…')
+              : (locale === 'ru' ? 'Скачать MP3' : 'Download MP3')}
+          </button>
+          {audioSaveError && <p className="mt-2 text-center text-xs text-destructive">{audioSaveError}</p>}
         </div>
       )}
     </div>
