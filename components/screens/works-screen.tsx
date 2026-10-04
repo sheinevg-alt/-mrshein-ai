@@ -144,7 +144,7 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
       const reportedTotal = Number(data?.pagination?.total)
       const safeTotal = Number.isFinite(reportedTotal) && reportedTotal >= 0 ? reportedTotal : null
       setTotalWorks(safeTotal)
-      const loadedCount = replace ? page.length : Math.max(works.length, offset) + page.length
+      const loadedCount = offset + page.length
       setHasMore(
         safeTotal == null
           ? (Boolean(data?.pagination?.hasMore) || page.length === 5)
@@ -158,7 +158,7 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
     } finally {
       if (!replace) setLoadingPage(false)
     }
-  }, [works.length])
+  }, [])
 
   useEffect(() => {
     markWorksSeen()
