@@ -34,6 +34,7 @@ type ReferralRow = {
   earnedRub: number
   availableRub: number
   pendingRub: number
+  commissionPct: number
   referredBy?: number | null
   createdAt: string
   lastSeenAt?: string | null
@@ -47,6 +48,7 @@ export default function ReferralAdminPage() {
   const [payouts, setPayouts] = useState<PayoutRow[]>([])
   const [status, setStatus] = useState('')
   const [search, setSearch] = useState('')
+  const [rateDrafts, setRateDrafts] = useState<Record<number, string>>({})
 
   useEffect(() => {
     const saved = window.sessionStorage.getItem('mrshein.admin.secret')
@@ -83,6 +85,36 @@ export default function ReferralAdminPage() {
       String(row.telegramId).includes(q),
     )
   }, [rows, search])
+
+  async function updateReferralRate(telegramId: number, currentPct: number) {
+    const raw = rateDrafts[telegramId] ?? String(currentPct)
+    const commissionPct = Number(raw)
+    if (!Number.isFinite(commissionPct) || commissionPct < 0 || commissionPct > 30) {
+      setStatus('Ставка должна быть от 0% до 30%.')
+      return
+    }
+    setStatus('Сохраняю индивидуальную ставку…')
+    const response = await fetch('/api/admin/referrals', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${secret}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ action: 'set_referral_rate', telegramId, commissionPct }),
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      setStatus(data?.error || 'Не удалось изменить ставку')
+      return
+    }
+    setRateDrafts((current) => {
+      const next = { ...current }
+      delete next[telegramId]
+      return next
+    })
+    setStatus(`Ставка сохранена: ${Number(data.commissionPct).toFixed(0)}%`)
+    await load()
+  }
 
   async function updatePayout(requestId: string, nextStatus: 'approved' | 'paid' | 'rejected') {
     setStatus('Обновляю заявку…')
@@ -187,6 +219,7 @@ export default function ReferralAdminPage() {
               <tr>
                 <th className="px-4 py-3">Участник</th>
                 <th className="px-4 py-3">Код</th>
+                <th className="px-4 py-3">Ставка</th>
                 <th className="px-4 py-3">Привёл</th>
                 <th className="px-4 py-3">Продажи</th>
                 <th className="px-4 py-3">Начислено</th>
@@ -204,6 +237,35 @@ export default function ReferralAdminPage() {
                     <p className="text-xs text-muted-foreground">{row.username ? `@${row.username} · ` : ''}{row.telegramId}</p>
                   </td>
                   <td className="px-4 py-3 font-mono text-xs">{row.referralCode}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex min-w-[150px] items-center gap-2">
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          max="30"
+                          step="1"
+                          value={rateDrafts[row.telegramId] ?? String(row.commissionPct)}
+                          onChange={(e) => {
+                            const value = e.target.value
+                            if (value === '' || Number(value) <= 30) {
+                              setRateDrafts((current) => ({ ...current, [row.telegramId]: value }))
+                            }
+                          }}
+                          className="h-9 w-20 rounded-xl border bg-background px-3 pr-7 text-sm font-semibold"
+                        />
+                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void updateReferralRate(row.telegramId, row.commissionPct)}
+                        className="h-9 rounded-xl border px-3 text-xs font-semibold"
+                      >
+                        Сохранить
+                      </button>
+                    </div>
+                    <p className="mt-1 text-[10px] text-muted-foreground">Максимум 30%</p>
+                  </td>
                   <td className="px-4 py-3 font-semibold">{row.invitedCount}</td>
                   <td className="px-4 py-3">{row.salesRub.toFixed(2)} ₽</td>
                   <td className="px-4 py-3">{row.earnedRub.toFixed(2)} ₽</td>
@@ -214,7 +276,7 @@ export default function ReferralAdminPage() {
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={9} className="px-4 py-10 text-center text-sm text-muted-foreground">Нет данных</td></tr>
+                <tr><td colSpan={10} className="px-4 py-10 text-center text-sm text-muted-foreground">Нет данных</td></tr>
               )}
             </tbody>
           </table>
