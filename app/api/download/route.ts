@@ -117,8 +117,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unsupported result URL' }, { status: 400 })
   }
 
+  const range = request.headers.get('range')
   const upstream = await fetch(resultUrl, {
     cache: 'no-store',
+    headers: range ? { Range: range } : undefined,
     signal: AbortSignal.timeout(60_000),
   }).catch(() => null)
 
@@ -141,6 +143,13 @@ export async function GET(request: Request) {
   headers.set('X-Download-Filename', filename)
   const contentLength = upstream.headers.get('content-length')
   if (contentLength) headers.set('Content-Length', contentLength)
+  const contentRange = upstream.headers.get('content-range')
+  if (contentRange) headers.set('Content-Range', contentRange)
+  headers.set('Accept-Ranges', upstream.headers.get('accept-ranges') || 'bytes')
 
-  return new Response(upstream.body, { status: 200, headers })
+  // Telegram/iOS may request video files in byte ranges. Returning 200 for a
+  // Range request makes the native downloader report a failed download even
+  // though the server itself successfully streamed bytes.
+  const status = upstream.status === 206 ? 206 : 200
+  return new Response(upstream.body, { status, headers })
 }
