@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, CheckCircle2, Clock3, Download, Expand, FolderOpen, Image as ImageIcon, LoaderCircle, RefreshCw, RotateCcw, Trash2, Video } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Clock3, Download, Expand, FolderOpen, Image as ImageIcon, LoaderCircle, Music2, RefreshCw, RotateCcw, Trash2, Video } from 'lucide-react'
 import { getTelegramInitData, getWebApp, haptics, openExternalLink } from '@/lib/telegram'
 import { useI18n } from '../i18n-provider'
 import { useUserState, type HistoryItem } from '../user-provider'
@@ -11,13 +11,22 @@ function isVideoUrl(url: string) {
   return /\.(mp4|webm|mov)(\?|$)/i.test(url) || url.includes('/Video/') || url.includes('cloudfront.net') || url.includes('/videos/')
 }
 
-function extensionForType(contentType: string, video: boolean) {
+function isAudioUrl(url: string) {
+  return /\.(mp3|wav|m4a|aac|ogg|flac)(\?|$)/i.test(url) || url.includes('/audio/')
+}
+
+function extensionForType(contentType: string, kind: 'video' | 'image' | 'audio') {
+  if (contentType.includes('audio/wav')) return 'wav'
+  if (contentType.includes('audio/mp4') || contentType.includes('audio/x-m4a')) return 'm4a'
+  if (contentType.includes('audio/ogg')) return 'ogg'
+  if (contentType.includes('audio/flac')) return 'flac'
+  if (contentType.includes('audio/')) return 'mp3'
   if (contentType.includes('video/webm')) return 'webm'
   if (contentType.includes('video/quicktime')) return 'mov'
   if (contentType.includes('image/jpeg')) return 'jpg'
   if (contentType.includes('image/webp')) return 'webp'
   if (contentType.includes('image/png')) return 'png'
-  return video ? 'mp4' : 'png'
+  return kind === 'audio' ? 'mp3' : kind === 'video' ? 'mp4' : 'png'
 }
 
 function StatusPill({ item, locale }: { item: HistoryItem; locale: 'en' | 'ru' }) {
@@ -74,7 +83,7 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
   const [retryingId, setRetryingId] = useState<string | null>(null)
   const [retryErrorId, setRetryErrorId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<HistoryItem | null>(null)
-  const [workFilter, setWorkFilter] = useState<'all' | 'video' | 'image'>('all')
+  const [workFilter, setWorkFilter] = useState<'all' | 'video' | 'image' | 'audio'>('all')
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(false)
   const [mediaInfo, setMediaInfo] = useState<Record<string, { width: number; height: number; duration: number }>>({})
@@ -86,10 +95,11 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
     return Date.now() - failed < 24 * 60 * 60 * 1000
   }), [history])
 
-  const mediaKind = (item: HistoryItem): 'video' | 'image' | 'unknown' => {
-    if (item.resultUrl) return isVideoUrl(item.resultUrl) ? 'video' : 'image'
+  const mediaKind = (item: HistoryItem): 'video' | 'image' | 'audio' | 'unknown' => {
+    if (item.resultUrl) return isAudioUrl(item.resultUrl) ? 'audio' : isVideoUrl(item.resultUrl) ? 'video' : 'image'
     const title = String(item.title || '').toLowerCase()
     const model = String(item.model || '').toLowerCase()
+    if (title.includes('audio') || /audio|sound|music|tts/.test(model)) return 'audio'
     if (title.includes('video') || /seedance|veo|runway|kling.*video/.test(model)) return 'video'
     if (title.includes('image') || /nano|gpt-image|midjourney|flux|image/.test(model)) return 'image'
     return 'unknown'
@@ -99,6 +109,7 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
     all: visibleHistory.length,
     video: visibleHistory.filter((item) => mediaKind(item) === 'video').length,
     image: visibleHistory.filter((item) => mediaKind(item) === 'image').length,
+    audio: visibleHistory.filter((item) => mediaKind(item) === 'audio').length,
   }), [visibleHistory])
 
   const filteredHistory = useMemo(
@@ -192,7 +203,9 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
     setDownloadErrorId(null)
 
     try {
-      const video = isVideoUrl(item.resultUrl)
+      const audio = isAudioUrl(item.resultUrl)
+      const video = !audio && isVideoUrl(item.resultUrl)
+      const kind: 'video' | 'image' | 'audio' = audio ? 'audio' : video ? 'video' : 'image'
       const prepare = await fetch(`/api/download?prepare=1&jobId=${encodeURIComponent(item.id)}`, {
         headers: { 'X-Telegram-Init-Data': initData },
         cache: 'no-store',
@@ -244,9 +257,9 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
         if (!response.ok) throw new Error(`DOWNLOAD_${response.status}`)
 
         const blob = await response.blob()
-        const mimeType = video ? 'video/mp4' : (blob.type || response.headers.get('content-type') || 'image/png')
-        const ext = extensionForType(mimeType, video)
-        const filename = `Banana-Zero-${video ? 'video' : 'image'}-${item.id.slice(0, 8)}.${ext}`
+        const mimeType = audio ? (blob.type || response.headers.get('content-type') || 'audio/mpeg') : video ? 'video/mp4' : (blob.type || response.headers.get('content-type') || 'image/png')
+        const ext = extensionForType(mimeType, kind)
+        const filename = `Banana-Zero-${kind}-${item.id.slice(0, 8)}.${ext}`
         const file = new File([blob], filename, { type: mimeType })
         const shareNavigator = navigator as Navigator & {
           canShare?: (data?: ShareData) => boolean
@@ -307,11 +320,12 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
       </header>
 
       {visibleHistory.length > 0 && (
-        <div className="mb-4 grid grid-cols-3 gap-2 rounded-2xl bg-muted/45 p-1.5">
+        <div className="mb-4 grid grid-cols-4 gap-2 rounded-2xl bg-muted/45 p-1.5">
           {([
             { key: 'all', icon: FolderOpen, ru: 'Все', en: 'All', count: workCounts.all },
             { key: 'video', icon: Video, ru: 'Видео', en: 'Video', count: workCounts.video },
-            { key: 'image', icon: ImageIcon, ru: 'Изображения', en: 'Images', count: workCounts.image },
+            { key: 'image', icon: ImageIcon, ru: 'Фото', en: 'Images', count: workCounts.image },
+            { key: 'audio', icon: Music2, ru: 'Аудио', en: 'Audio', count: workCounts.audio },
           ] as const).map((filter) => {
             const Icon = filter.icon
             const active = workFilter === filter.key
@@ -347,12 +361,12 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
       ) : filteredHistory.length === 0 ? (
         <div className="glass flex flex-col items-center rounded-3xl px-6 py-10 text-center">
           <span className="flex size-12 items-center justify-center rounded-2xl bg-brand-tint text-brand">
-            {workFilter === 'video' ? <Video className="size-6" /> : <ImageIcon className="size-6" />}
+{workFilter === 'video' ? <Video className="size-6" /> : workFilter === 'audio' ? <Music2 className="size-6" /> : <ImageIcon className="size-6" />}
           </span>
           <h2 className="mt-4 text-base font-semibold">
             {locale === 'ru'
-              ? (workFilter === 'video' ? 'Видео пока нет' : 'Изображений пока нет')
-              : (workFilter === 'video' ? 'No videos yet' : 'No images yet')}
+              ? (workFilter === 'video' ? 'Видео пока нет' : workFilter === 'audio' ? 'Аудио пока нет' : 'Изображений пока нет')
+              : (workFilter === 'video' ? 'No videos yet' : workFilter === 'audio' ? 'No audio yet' : 'No images yet')}
           </h2>
         </div>
       ) : (
@@ -366,7 +380,8 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
                 }).format(created)
             const elapsedMinutes = Math.max(0, Math.floor((Date.now() - created.getTime()) / 60000))
             const takingLonger = (item.status === 'queued' || item.status === 'processing') && elapsedMinutes >= 25
-            const video = Boolean(item.resultUrl && isVideoUrl(item.resultUrl))
+            const audio = Boolean(item.resultUrl && isAudioUrl(item.resultUrl))
+            const video = Boolean(item.resultUrl && !audio && isVideoUrl(item.resultUrl))
 
             return (
               <article key={item.id} className="glass overflow-hidden rounded-3xl p-3">
@@ -425,8 +440,22 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
 
                 {item.status === 'completed' && item.resultUrl && (
                   <div className="mt-3">
-                    <div className="overflow-hidden rounded-2xl border bg-black">
-                      {video ? (
+                    <div className={`overflow-hidden rounded-2xl border ${audio ? 'bg-card p-3' : 'bg-black'}`}>
+                      {audio ? (
+                        <audio
+                          src={item.resultUrl}
+                          controls
+                          preload="metadata"
+                          className="w-full"
+                          onLoadedMetadata={(event) => {
+                            const el = event.currentTarget
+                            setMediaInfo((current) => ({
+                              ...current,
+                              [item.id]: { width: 0, height: 0, duration: el.duration || 0 },
+                            }))
+                          }}
+                        />
+                      ) : video ? (
                         <video
                           src={item.resultUrl}
                           controls
@@ -464,13 +493,15 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
                         />
                       )}
                     </div>
-                    {mediaInfo[item.id]?.width > 0 && mediaInfo[item.id]?.height > 0 && (
+                    {audio && mediaInfo[item.id]?.duration > 0 ? (
+                      <p className="mt-2 text-center text-[11px] font-medium text-muted-foreground">{mediaInfo[item.id].duration.toFixed(1)} сек</p>
+                    ) : mediaInfo[item.id]?.width > 0 && mediaInfo[item.id]?.height > 0 ? (
                       <p className="mt-2 text-center text-[11px] font-medium text-muted-foreground">
                         {mediaInfo[item.id].width}×{mediaInfo[item.id].height}
                         {video && mediaInfo[item.id].duration > 0 ? ` · ${mediaInfo[item.id].duration.toFixed(1)} сек` : ''}
                       </p>
-                    )}
-                    <div className={onUpscale ? "mt-2 grid grid-cols-2 gap-2" : "mt-2"}>
+                    ) : null}
+                    <div className={onUpscale && !audio ? "mt-2 grid grid-cols-2 gap-2" : "mt-2"}>
                     <button
                       type="button"
                       onClick={() => void downloadResult(item)}
@@ -480,11 +511,13 @@ export function WorksScreen({ onRepeatGeneration, onUpscale }: { onRepeatGenerat
                       {downloadingId === item.id ? <LoaderCircle className="size-4 animate-spin" /> : <Download className="size-4" />}
                       {downloadingId === item.id
                         ? (locale === 'ru' ? 'Подготавливаю…' : 'Preparing…')
-                        : video
-                          ? (locale === 'ru' ? 'Скачать видео' : 'Download video')
-                          : (locale === 'ru' ? 'Скачать изображение' : 'Download image')}
+                        : audio
+                          ? (locale === 'ru' ? 'Скачать аудио' : 'Download audio')
+                          : video
+                            ? (locale === 'ru' ? 'Скачать видео' : 'Download video')
+                            : (locale === 'ru' ? 'Скачать изображение' : 'Download image')}
                     </button>
-                    {onUpscale && (
+                    {onUpscale && !audio && (
                       <button
                         type="button"
                         onClick={() => {
